@@ -37,6 +37,19 @@
     "snow_shot/rust/snow-shot-updater/src/gitee.rs",
     "snow_shot/i18n/settings/*.ts",
     "snow_shot/i18n/core/*.ts",
-    "snow_shot/tests/baidu_paddleocr_client_tests.cpp"
+    "snow_shot/tests/baidu_paddleocr_client_tests.cpp",
+    "README.md",
+    "README.zh-CN.md",
+    "snow_shot/src/presentation/components/aboutpagewidget.cpp",
+    "snow_shot/tests/about_page_tests.cpp",
+    "snow_shot/packaging/README.txt",
+    "snow_shot/include/snow_shot/app/distribution.h",
+    "docs/community-changelog.md",
+    "docs/community-privacy.md",
+    "scripts/paddleocr_live_e2e.py",
+    "scripts/package-snow-shot.ps1",
+    ".github/workflows/community-ocr-license-audit.yml",
+    ".github/workflows/community-live-paddleocr.yml",
+    "snow_shot/tests/image_conversion_tests.cpp"
   ]
 }

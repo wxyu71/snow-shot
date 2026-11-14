@@ -93,14 +93,8 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Current version: %1</source>
             <translation>目前版本：%1</translation>
         </message>
-        <message>
-            <source>Discover more features and ways to use it</source>
-            <translation>探索更多功能與使用方式</translation>
-        </message>
-        <message>
-            <source>Discussion and support · group no. %1</source>
-            <translation>交流與答疑 · 群號 %1</translation>
-        </message>
+        
+        
         <message>
             <source>Download from GitHub</source>
             <translation>從 GitHub 下載</translation>
@@ -157,10 +151,7 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Make the next experience better</source>
             <translation>讓下一次體驗更好</translation>
         </message>
-        <message>
-            <source>Official website</source>
-            <translation>官方網站</translation>
-        </message>
+        
         <message>
             <source>Open Microsoft Store</source>
             <translation>開啟 Microsoft Store</translation>
@@ -181,10 +172,7 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Privacy policy</source>
             <translation>隱私權政策</translation>
         </message>
-        <message>
-            <source>QQ group 4</source>
-            <translation>QQ 群組 4</translation>
-        </message>
+        
         <message>
             <source>Ready to install %1</source>
             <translation>已準備好安裝 %1</translation>

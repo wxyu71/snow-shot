@@ -93,14 +93,8 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Current version: %1</source>
             <translation>Current version: %1</translation>
         </message>
-        <message>
-            <source>Discover more features and ways to use it</source>
-            <translation>Discover more features and ways to use it</translation>
-        </message>
-        <message>
-            <source>Discussion and support · group no. %1</source>
-            <translation>Discussion and support · group no. %1</translation>
-        </message>
+        
+        
         <message>
             <source>Download from GitHub</source>
             <translation>Download from GitHub</translation>
@@ -157,10 +151,7 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Make the next experience better</source>
             <translation>Make the next experience better</translation>
         </message>
-        <message>
-            <source>Official website</source>
-            <translation>Official website</translation>
-        </message>
+        
         <message>
             <source>Open Microsoft Store</source>
             <translation>Open Microsoft Store</translation>
@@ -181,10 +172,7 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Privacy policy</source>
             <translation>Privacy policy</translation>
         </message>
-        <message>
-            <source>QQ group 4</source>
-            <translation>QQ group 4</translation>
-        </message>
+        
         <message>
             <source>Ready to install %1</source>
             <translation>Ready to install %1</translation>

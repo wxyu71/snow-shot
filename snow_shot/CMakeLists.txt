@@ -106,7 +106,6 @@ option(SNOW_SHOT_RELEASE_STATIC "Prefer static Snow Shot release linkage." OFF)
 option(SNOW_SHOT_QT_STATIC "Link Snow Shot against a static Qt build." OFF)
 set(SNOW_SHOT_PROJECT_URL "https://github.com/wxyu71/snow-shot" CACHE STRING
     "Public Snow Shot source repository URL.")
-    "QQ group 4 join URL.")
 unset(SNOW_SHOT_CAMERA_SHUTTER_AUDIO_SOURCE CACHE)
 set(
     SNOW_SHOT_CAMERA_SHUTTER_AUDIO_SOURCE
@@ -249,18 +248,11 @@ if(SNOW_SHOT_QT_STATIC)
     endif()
 endif()
 
-if(NOT DEFINED SNOW_SHOT_API_BASE_URL OR SNOW_SHOT_API_BASE_URL STREQUAL "")
-    if(CMAKE_CONFIGURATION_TYPES)
-        set(SNOW_SHOT_API_BASE_URL "https://snowshot.top" CACHE STRING
-            "Snow Shot API base URL." FORCE)
-    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(SNOW_SHOT_API_BASE_URL "https://test.snowshot.top" CACHE STRING
-            "Snow Shot API base URL." FORCE)
-    else()
-        set(SNOW_SHOT_API_BASE_URL "https://snowshot.top" CACHE STRING
-            "Snow Shot API base URL." FORCE)
-    endif()
-endif()
+# No built-in account, membership, payment or original-author API endpoints.
+# Cloud OCR uses its own user-supplied AI Studio host and bearer token.
+set(SNOW_SHOT_API_BASE_URL "" CACHE STRING
+    "Deliberately disabled default legacy Snow Shot service endpoint." FORCE)
+
 snow_find_qt_private(Gui)
 set(SNOW_SHOT_DRAW_ENGINE_QT_DIR
     "${SNOW_DRAW_ENGINE_SOURCE_DIR}"
