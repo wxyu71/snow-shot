@@ -26,6 +26,7 @@
 #include <QContextMenuEvent>
 #include <QEventLoop>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTextBrowser>
@@ -1602,6 +1603,29 @@ void renderingCopyAndPersistence() {
     require(view.copyToClipboard() &&
                 QApplication::clipboard()->text() == QStringLiteral("Heading"),
             "selected preview text copies as ordinary text");
+    auto* edit = view.findChild<adqt::widgets::AdButton*>(
+        QStringLiteral("screenshotMarkdownEditToggle"));
+    auto* raw = view.findChild<QPlainTextEdit*>(
+        QStringLiteral("screenshotMarkdownRawEditor"));
+    require(edit && raw && !raw->isVisible(), "Markdown offers a raw source editor");
+    edit->click();
+    require(raw->isVisible() && raw->toPlainText() == markdown,
+            "editing opens with complete unaltered Markdown source");
+    const QString revised = markdown + QStringLiteral("\n$E=mc^2$");
+    raw->setPlainText(revised);
+    QTextCursor selected(raw->document());
+    selected.setPosition(markdown.size() + 1);
+    selected.setPosition(revised.size(), QTextCursor::KeepAnchor);
+    raw->setTextCursor(selected);
+    require(view.copyToClipboard() &&
+                QApplication::clipboard()->text() == QStringLiteral("$E=mc^2$"),
+            "copy selected raw Markdown without losing formula delimiters");
+    raw->moveCursor(QTextCursor::End);
+    require(view.copyToClipboard() && QApplication::clipboard()->text() == revised,
+            "copy edited entire Markdown when no local selection is active");
+    edit->click();
+    require(!raw->isVisible() && browser->isVisible(),
+            "switch back to formatted preview without discarding edits");
     view.setContent(Format::Markdown, markdown + QStringLiteral("\nMore"), true, {});
     require(browser->textCursor().selectedText() == QStringLiteral("Heading"),
             "streaming preserves text selection");
