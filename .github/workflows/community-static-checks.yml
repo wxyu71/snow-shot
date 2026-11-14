@@ -1,0 +1,24 @@
+name: Community fork safety checks
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  policy-and-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Validate upstream sync protection
+        run: |
+          python3 scripts/test-upstream-sync.py
+          python3 scripts/upstream_sync.py verify-deletions
+      - name: Validate OCR distribution and Qt build contracts
+        run: |
+          python3 scripts/test-snow-shot-ocr-license-features.py
+          python3 scripts/test-qt-cmake-contract.py
