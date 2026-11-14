@@ -6,7 +6,13 @@ The official upstream is `mg-chao/snow-shot` (`main`).
 A change is auto-merged **only** when the incoming paths do not overlap the
 fork's changes since the shared merge base, do not touch protected or deleted
 files, and do not contain newly added known commercial account/payment code.
-After a clean merge, the deletion guard and regression tests run again.
+The available sync runner currently runs the policy and source-contract tests,
+not the full Qt/Windows test suite. Therefore, it **auto-merges documentation-only
+changes** when those checks pass; executable code, workflows, resource manifests,
+build files, and installers are always routed to a draft review PR until native
+regression tests can run as a mandatory gate. This conservative restriction
+prevents silently merging untested binaries or reintroducing commercial code.
+After a clean documentation merge, the deletion guard and policy tests run again.
 Any conflict or failed guard aborts the merge.
 
 Protected changes produce a **draft review PR containing a pending report**,

@@ -53,6 +53,14 @@ def decide(incoming: set[str], fork_changes: set[str], policy: dict,
     overlap = sorted(incoming & fork_changes)
     danger = sorted(p for p in incoming if p in protected or is_protected(p, patterns))
     commercial = sorted(p for p in incoming if COMMERCIAL_PATH.search(p))
+    # The current CI only runs policy and source-contract tests. Until the
+    # complete Qt/Windows tests run successfully in the sync workflow, source,
+    # build, installer and executable changes MUST go through manual review.
+    # Documentation-only updates can be verified by the available CI tests.
+    requires_native_tests = sorted(
+        p for p in incoming
+        if not p.lower().endswith((".md", ".markdown", ".rst", ".txt"))
+    )
     reasons = []
     if overlap:
         reasons.append("Fork and upstream both changed: " + ", ".join(overlap[:20]))
@@ -62,12 +70,16 @@ def decide(incoming: set[str], fork_changes: set[str], policy: dict,
     if commercial or suspicious_patch:
         reasons.append("Potential commercial code in incoming upstream changes: " +
                        ", ".join(commercial[:20]))
+    if requires_native_tests:
+        reasons.append("Native Qt/Windows regression tests are not available in sync CI: " +
+                       ", ".join(requires_native_tests[:20]))
     return {
         "mode": "review" if reasons else "auto",
         "reasons": reasons,
         "upstream_paths": sorted(incoming),
         "overlap": overlap,
         "protected": danger,
+        "native_test_required": requires_native_tests,
     }
 
 

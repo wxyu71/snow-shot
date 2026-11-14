@@ -21,10 +21,20 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_empty_upstream_is_noop(self):
         self.assertEqual(self.decision([])["mode"], "noop")
 
-    def test_unrelated_safe_file_is_auto(self):
+    def test_unrelated_safe_documentation_is_auto(self):
         self.assertEqual(
-            self.decision(["snow_shot/src/presentation/selection/safe_selection.cpp"])["mode"],
+            self.decision(["docs/upstream-release-notes.md"])["mode"],
             "auto"
+        )
+
+    def test_unrelated_source_without_native_tests_requires_review(self):
+        result = self.decision(["snow_shot/src/presentation/selection/safe_selection.cpp"])
+        self.assertEqual(result["mode"], "review")
+        self.assertEqual(len(result["native_test_required"]), 1)
+
+    def test_build_workflow_cannot_silently_auto_merge(self):
+        self.assertEqual(
+            self.decision([".github/workflows/release.yml"])["mode"], "review"
         )
 
     def test_overlapping_modifications_require_review(self):
