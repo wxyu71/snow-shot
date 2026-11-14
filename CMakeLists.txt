@@ -50,7 +50,7 @@ else()
 endif()
 set(SNOW_SHOT_PRODUCT_NAME "Snow Shot")
 set(SNOW_SHOT_EXECUTABLE_NAME "snow_shot")
-set(SNOW_SHOT_VENDOR "Snow Apps")
+set(SNOW_SHOT_VENDOR "Snow Shot Community")
 set(SNOW_SHOT_DESCRIPTION
     "A screenshot utility for capturing, annotating, pinning, and recognizing screen content.")
 set(SNOW_SHOT_HOMEPAGE_URL "https://github.com/wxyu71/snow-shot")

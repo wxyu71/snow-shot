@@ -91,3 +91,8 @@ installs nightly-2026-09-08, fetches the exact locked dependency trees for
 Windows x64 and macOS x64/arm64, then runs the original offline audit.
 Neither audit should be marked green merely because build dependencies were
 missing.
+
+The NSIS CompanyName metadata identifies **Snow Shot Community** rather
+than the upstream vendor; the executable, registry key and installation
+directory stay identical for upgrade compatibility. Original license and
+copyright attributions remain in the bundled notices.

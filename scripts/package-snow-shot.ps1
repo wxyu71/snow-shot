@@ -532,7 +532,7 @@ if (-not (Test-Path -LiteralPath $mainExecutable)) {
 
 $versionInfo = (Get-Item -LiteralPath $mainExecutable).VersionInfo
 $expectedBinaryMetadata = @{
-    CompanyName = "Snow Apps"
+    CompanyName = "Snow Shot Community"
     FileDescription = "Snow Shot screenshot utility"
     InternalName = "snow_shot"
     LegalCopyright = "Copyright (C) 2025-2026 mg-chao"
