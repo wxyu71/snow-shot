@@ -1,0 +1,32 @@
+{
+  "upstream": "mg-chao/snow-shot",
+  "deleted_files": [
+    "snow_shot/include/snow_shot/app/accountsessionservice.h",
+    "snow_shot/src/app/accountsessionservice.cpp",
+    "snow_shot/include/snow_shot/storage/accountsecretstore.h",
+    "snow_shot/src/storage/accountsecretstore.cpp",
+    "snow_shot/src/platform/macos/accountsecretstore.mm",
+    "snow_shot/include/snow_shot/presentation/components/accountpagewidget.h",
+    "snow_shot/src/presentation/components/accountpagewidget.cpp",
+    "snow_shot/tests/account_tests.cpp",
+    "snow_shot/tests/macos_account_secret_store_tests.mm"
+  ],
+  "protected_globs": [
+    "CMakeLists.txt",
+    "snow_shot/CMakeLists.txt",
+    ".github/workflows/*",
+    ".github/upstream-*",
+    "scripts/upstream_sync.py",
+    "scripts/test-upstream-sync.py",
+    "docs/community-*",
+    "snow_shot/src/network/baidupaddleocrclient.cpp",
+    "snow_shot/include/snow_shot/network/baidupaddleocrclient.h",
+    "snow_shot/src/presentation/ocr/screenshotimageconversioncontroller.cpp",
+    "snow_shot/include/snow_shot/presentation/screenshotimageconversioncontroller.h",
+    "snow_shot/src/presentation/ocr/screenshotrecognitionsessioncontroller.cpp",
+    "snow_shot/src/presentation/components/contentcardwidget.cpp",
+    "snow_shot/src/presentation/settings/settingscatalog.cpp",
+    "snow_shot/src/app/applicationcontroller.cpp",
+    "snow_shot/tests/settings_catalog_tests.cpp"
+  ]
+}
