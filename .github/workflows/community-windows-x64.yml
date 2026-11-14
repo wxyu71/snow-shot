@@ -1,0 +1,62 @@
+name: Community Windows x64 installer
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - CMakeLists.txt
+      - CMakePresets.json
+      - snow_shot/**
+      - cmake/**
+      - scripts/**
+      - .github/workflows/community-windows-x64.yml
+
+permissions:
+  contents: read
+
+jobs:
+  build-full-installer:
+    # Uses the existing project toolchain: VS 2026, CMake >=4.2, static Qt and NSIS.
+    # This runner label is used by the upstream project's Windows workflows.
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Verify upstream-sync and OCR distribution policy
+        shell: pwsh
+        run: |
+          python scripts/test-upstream-sync.py
+          python scripts/upstream_sync.py verify-deletions
+          python scripts/test-snow-shot-ocr-license-features.py
+      - name: Build full x64 release
+        shell: pwsh
+        run: ./scripts/build.ps1 -Preset snow-shot-msvc-release
+      - name: Run OCR and API unit tests
+        shell: pwsh
+        run: |
+          ctest --test-dir build/snow-shot-msvc-release -C Release --output-on-failure -R 'snow-shot-(paddleocr-client|api-client|settings-catalog|ocr)-tests'
+      - name: Package complete Windows x64 NSIS installers
+        shell: pwsh
+        run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild
+      - name: Validate release metadata and upgrade identity
+        shell: pwsh
+        run: |
+          $files = @(Get-ChildItem 'build/snow-shot-msvc-release' -File -Filter 'snow-shot-1.5.8-windows-x64-*.exe')
+          if ($files.Count -lt 2) { throw 'Expected both online and offline full x64 installers' }
+          foreach ($file in $files) {
+            if ($file.VersionInfo.ProductVersion -notmatch '^1\.5\.8') {
+              throw "Wrong installer version: $($file.Name)"
+            }
+            Write-Output "Verified $($file.Name) SHA256: $((Get-FileHash $file.FullName -Algorithm SHA256).Hash)"
+          }
+      - uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: snow-shot-community-1.5.8-windows-x64
+          path: |
+            build/snow-shot-msvc-release/snow-shot-1.5.8-windows-x64-*.exe
+            build/snow-shot-msvc-release/snow-shot-1.5.8-windows-x64-*.exe.sha256
+          if-no-files-found: error

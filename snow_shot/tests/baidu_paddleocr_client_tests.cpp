@@ -9,6 +9,7 @@
 #include <QTimer>
 
 #include <memory>
+#include <utility>
 
 namespace {
 void require(bool condition, const char* message) {
@@ -35,16 +36,16 @@ void directPaddleOcrMarkdownContract() {
                 if (divider < 0)
                     return;
                 const auto header = data->left(divider);
-                const auto lengthStart = header.indexOf("content-length:");
+                const auto lower = header.toLower();
+                const auto lengthStart = lower.indexOf("content-length:");
                 qsizetype expected = 0;
                 if (lengthStart >= 0) {
-                    const auto line = header.mid(lengthStart).split('\n').first().trimmed();
+                    const auto line = lower.mid(lengthStart).split('\n').first().trimmed();
                     expected = line.mid(QByteArray("content-length:").size()).trimmed().toLongLong();
                 }
                 if (data->size() - divider - 4 < expected)
                     return;
                 ++requests;
-                const auto lower = header.toLower();
                 QByteArray payload;
                 if (header.startsWith("POST /api/v2/ocr/jobs ")) {
                     authenticatedPost = lower.contains("authorization: bearer test-token") &&
