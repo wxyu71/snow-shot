@@ -14,59 +14,93 @@
 namespace {
 void require(bool condition, const char* message) {
     if (!condition)
-        qFatal("PaddleOCR contract failure: %s", message);
+        qFatal("PaddleOCR API contract failure: %s", message);
 }
 
-void directPaddleOcrMarkdownContract() {
+enum class ReplyMode { Success, Unauthorized, RateLimited, FailedJob, InvalidJsonl };
+
+struct RunResult {
+    QString markdown;
+    QString error;
+    bool finished = false;
+    bool submitAuthenticated = false;
+    bool pollAuthenticated = false;
+    bool downloadIsAnonymous = false;
+    int polls = 0;
+};
+
+RunResult runCase(const QString& model, ReplyMode mode) {
     QTcpServer server;
-    require(server.listen(QHostAddress::LocalHost), "localhost mock server listens");
-    const QString address = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
-    int requests = 0;
-    bool authenticatedPost = false;
-    bool authenticatedPoll = false;
-    bool signedDownloadWithoutBearer = false;
+    require(server.listen(QHostAddress::LocalHost), "local fake AI Studio server listens");
+    const QString root = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
+    RunResult outcome;
     QObject::connect(&server, &QTcpServer::newConnection, &server, [&] {
         while (auto* socket = server.nextPendingConnection()) {
-            auto data = std::make_shared<QByteArray>();
+            auto payload = std::make_shared<QByteArray>();
             QObject::connect(socket, &QTcpSocket::readyRead, socket,
-                             [socket, data, &requests, &authenticatedPost,
-                              &authenticatedPoll, &signedDownloadWithoutBearer, address] {
-                data->append(socket->readAll());
-                const auto divider = data->indexOf("\r\n\r\n");
-                if (divider < 0)
+                    [&, socket, payload, root] {
+                payload->append(socket->readAll());
+                const qsizetype divide = payload->indexOf("\r\n\r\n");
+                if (divide < 0)
                     return;
-                const auto header = data->left(divider);
-                const auto lower = header.toLower();
-                const auto lengthStart = lower.indexOf("content-length:");
+                const QByteArray headers = payload->left(divide);
+                const QByteArray lower = headers.toLower();
                 qsizetype expected = 0;
-                if (lengthStart >= 0) {
-                    const auto line = lower.mid(lengthStart).split('\n').first().trimmed();
-                    expected = line.mid(QByteArray("content-length:").size()).trimmed().toLongLong();
+                const qsizetype lengthPos = lower.indexOf("content-length:");
+                if (lengthPos >= 0) {
+                    const QByteArray length = lower.mid(lengthPos).split('\n').first()
+                                              .mid(QByteArray("content-length:").size()).trimmed();
+                    expected = length.toLongLong();
                 }
-                if (data->size() - divider - 4 < expected)
+                if (payload->size() - divide - 4 < expected)
                     return;
-                ++requests;
-                QByteArray payload;
-                if (header.startsWith("POST /api/v2/ocr/jobs ")) {
-                    authenticatedPost = lower.contains("authorization: bearer test-token") &&
-                                        data->contains("name=\"model\"") &&
-                                        data->contains("PaddleOCR-VL-1.6") &&
-                                        data->contains("name=\"file\"");
-                    payload = R"({"code":0,"data":{"jobId":"job-one"}})";
-                } else if (header.startsWith("GET /api/v2/ocr/jobs/job-one ")) {
-                    authenticatedPoll = lower.contains("authorization: bearer test-token");
-                    payload = (QStringLiteral(
-                        R"({"code":0,"data":{"state":"done","resultUrl":{"markdownUrl":"%1/markdown"}}})")
-                        .arg(address)).toUtf8();
-                } else if (header.startsWith("GET /markdown ")) {
-                    signedDownloadWithoutBearer = !lower.contains("authorization:");
-                    payload = "# Summary\n\n| A | B |\n| --- | --- |\n| 1 | 2 |\n";
+                const bool bearer = lower.contains("authorization: bearer test-token");
+                QByteArray body;
+                QByteArray status = "200 OK";
+                if (headers.startsWith("POST /api/v2/ocr/jobs ")) {
+                    outcome.submitAuthenticated = bearer &&
+                        payload->contains("name=\"model\"") &&
+                        payload->contains(model.toUtf8()) &&
+                        payload->contains("name=\"file\"");
+                    if (mode == ReplyMode::Unauthorized) {
+                        status = "401 Unauthorized";
+                        body = R"({"code":401,"msg":"token invalid"})";
+                    } else if (mode == ReplyMode::RateLimited) {
+                        status = "429 Too Many Requests";
+                        body = R"({"code":12002,"msg":"frequency too high"})";
+                    } else {
+                        body = R"({"code":0,"data":{"jobId":"job-123"}})";
+                    }
+                } else if (headers.startsWith("GET /api/v2/ocr/jobs/job-123 ")) {
+                    outcome.pollAuthenticated = bearer;
+                    ++outcome.polls;
+                    if (outcome.polls == 1) {
+                        body = R"({"code":0,"data":{"state":"running"}})";
+                    } else if (mode == ReplyMode::FailedJob) {
+                        body = R"({"code":0,"data":{"state":"failed","errorMsg":"unreadable image"}})";
+                    } else {
+                        body = QStringLiteral(
+                            R"({"code":0,"data":{"state":"done","resultUrl":{"jsonUrl":"%1/result"}}})")
+                            .arg(root).toUtf8();
+                    }
+                } else if (headers.startsWith("GET /result ")) {
+                    outcome.downloadIsAnonymous = !lower.contains("authorization:");
+                    if (mode == ReplyMode::InvalidJsonl) {
+                        body = "{not-valid-json}";
+                    } else if (model == QStringLiteral("PP-OCRv6")) {
+                        body = R"({"result":{"ocrResults":[{"prunedResult":{"rec_texts":["Hello OCR","Total 42"]}}]}})";
+                    } else if (model == QStringLiteral("PP-StructureV3")) {
+                        body = R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Invoice\n\n| Item | Price |\n| --- | --- |\n| Book | 42 |\n\n$$E=mc^2$$"}}]}})";
+                    } else {
+                        body = R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Mixed Layout\n\nChinese and English\n\n| X | Y |\n| --- | --- |\n| 3 | 4 |\n\n$\\frac{a}{b}$"}}]}})";
+                    }
                 } else {
-                    payload = R"({"code":500,"message":"unexpected request"})";
+                    status = "404 Not Found";
+                    body = R"({"code":11001,"msg":"missing job"})";
                 }
-                const auto response = "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\n"
-                                      "Connection: close\r\nContent-Length: " +
-                                      QByteArray::number(payload.size()) + "\r\n\r\n" + payload;
+                const QByteArray response = "HTTP/1.1 " + status +
+                    "\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " +
+                    QByteArray::number(body.size()) + "\r\n\r\n" + body;
                 socket->write(response);
                 socket->flush();
                 socket->disconnectFromHost();
@@ -75,53 +109,88 @@ void directPaddleOcrMarkdownContract() {
     });
 
     snow_shot::network::BaiduPaddleOcrClient client;
-    QImage image(32, 16, QImage::Format_RGBA8888);
+    QImage image(48, 32, QImage::Format_RGBA8888);
     image.fill(Qt::white);
     QEventLoop loop;
     QTimer deadline;
     deadline.setSingleShot(true);
     QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
-    bool finished = false;
-    QString markdown;
-    QString error;
-    client.recognize(image, {address, QStringLiteral("test-token"),
-                             QStringLiteral("PaddleOCR-VL-1.6")},
-                     [&](QString result, QString failure) {
-        finished = true;
-        markdown = std::move(result);
-        error = std::move(failure);
+    client.recognize(image, {root, QStringLiteral("test-token"), model},
+                     [&](QString markdown, QString error) {
+        outcome.finished = true;
+        outcome.markdown = std::move(markdown);
+        outcome.error = std::move(error);
         loop.quit();
     });
-    deadline.start(8000);
-    loop.exec();
-    require(finished && error.isEmpty(), "cloud OCR request completes");
-    require(requests == 3, "submit, poll, and Markdown download each occurred once");
-    require(authenticatedPost && authenticatedPoll, "token sent to AI Studio API");
-    require(signedDownloadWithoutBearer, "no token disclosed to Markdown download host");
-    require(markdown.startsWith(QStringLiteral("# Summary")) &&
-            markdown.contains(QStringLiteral("| 1 | 2 |")),
-            "Markdown preserves headings and tables");
+    if (!outcome.finished) {
+        deadline.start(4000);
+        loop.exec();
+    }
+    require(outcome.finished, "OCR request completes, never hangs");
+    require(outcome.submitAuthenticated, "POST uses the configured token and model");
+    return outcome;
 }
 
-void invalidUrlIsRejected() {
+void checkSuccessfulModels() {
+    auto ocr = runCase(QStringLiteral("PP-OCRv6"), ReplyMode::Success);
+    require(ocr.error.isEmpty() && ocr.pollAuthenticated && ocr.downloadIsAnonymous,
+            "PP-OCRv6 job authenticates poll but not result download");
+    require(ocr.markdown == QStringLiteral("Hello OCR\nTotal 42"),
+            "PP-OCRv6 JSONL rec_texts become complete plain Markdown text");
+
+    auto structure = runCase(QStringLiteral("PP-StructureV3"), ReplyMode::Success);
+    require(structure.error.isEmpty() && structure.downloadIsAnonymous &&
+            structure.markdown.contains(QStringLiteral("| Book | 42 |")) &&
+            structure.markdown.contains(QStringLiteral("$$E=mc^2$$")),
+            "PP-StructureV3 JSONL preserves Markdown tables and formulas");
+
+    auto mixed = runCase(QStringLiteral("PaddleOCR-VL-1.6"), ReplyMode::Success);
+    require(mixed.error.isEmpty() && mixed.downloadIsAnonymous &&
+            mixed.markdown.startsWith(QStringLiteral("# Mixed Layout")) &&
+            mixed.markdown.contains(QStringLiteral("| 3 | 4 |")) &&
+            mixed.markdown.contains(QStringLiteral("\\frac{a}{b}")),
+            "PaddleOCR-VL-1.6 JSONL preserves mixed text/table/formula");
+}
+
+void checkErrors() {
+    const QString model = QStringLiteral("PP-OCRv6");
+    auto auth = runCase(model, ReplyMode::Unauthorized);
+    require(auth.markdown.isEmpty() && auth.error.contains(QStringLiteral("401")),
+            "invalid Access Token is reported as HTTP 401");
+    auto throttle = runCase(model, ReplyMode::RateLimited);
+    require(throttle.markdown.isEmpty() &&
+            throttle.error.contains(QStringLiteral("12002")),
+            "rate-limit HTTP 429 and vendor code 12002 are actionable");
+    auto failed = runCase(model, ReplyMode::FailedJob);
+    require(failed.markdown.isEmpty() &&
+            failed.error.contains(QStringLiteral("unreadable image")),
+            "failed job propagates data.errorMsg");
+    auto invalid = runCase(model, ReplyMode::InvalidJsonl);
+    require(invalid.markdown.isEmpty() &&
+            invalid.error.contains(QStringLiteral("JSONL")),
+            "malformed result never copies partial output");
+}
+
+void checkUnsafeUrl() {
     snow_shot::network::BaiduPaddleOcrClient client;
-    QImage image(8, 8, QImage::Format_RGBA8888);
+    QImage image(10, 10, QImage::Format_RGBA8888);
     image.fill(Qt::white);
     bool finished = false;
     client.recognize(image, {QStringLiteral("http://example.com"),
                              QStringLiteral("token"), QStringLiteral("PP-OCRv6")},
-                     [&](QString content, QString error) {
+                     [&](QString data, QString error) {
         finished = true;
-        require(content.isEmpty() && error.contains(QStringLiteral("HTTPS")),
-                "unsafe remote HTTP is rejected");
+        require(data.isEmpty() && error.contains(QStringLiteral("HTTPS")),
+                "non-local HTTP is rejected without sending credentials");
     });
-    require(finished, "unsafe URL reports an immediate error");
+    require(finished, "unsafe URL reports a synchronous validation error");
 }
 } // namespace
 
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
-    directPaddleOcrMarkdownContract();
-    invalidUrlIsRejected();
+    checkSuccessfulModels();
+    checkErrors();
+    checkUnsafeUrl();
     return 0;
 }

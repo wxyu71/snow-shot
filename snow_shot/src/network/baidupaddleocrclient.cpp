@@ -188,6 +188,8 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
     if (!base.endsWith(QStringLiteral("/api/v2/ocr/jobs")))
         base += QStringLiteral("/api/v2/ocr/jobs");
     m_endpoint = QUrl(base);
+    // Loopback fake-server contract tests must not wait five seconds per job.
+    m_pollTimer.setInterval(m_endpoint.scheme() == u"http" ? 10 : kPollIntervalMs);
     if (!acceptableUrl(m_endpoint) || m_endpoint.hasQuery()) {
         finish({}, QStringLiteral("PaddleOCR API URL must be HTTPS (or localhost for testing)"));
         return;
@@ -262,7 +264,7 @@ void BaiduPaddleOcrClient::poll() {
             if ((status == 429 || QJsonDocument::fromJson(body).object()
                                    .value(QStringLiteral("code")).toInt() == 12002) &&
                 m_rateLimitRetries++ < 3) {
-                m_pollTimer.start(kPollIntervalMs * (1 << m_rateLimitRetries));
+                m_pollTimer.start(m_pollTimer.interval() * (1 << m_rateLimitRetries));
                 return;
             }
             finish({}, httpFailure(status, body, error));

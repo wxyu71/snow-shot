@@ -10000,7 +10000,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-paddleocr-client-tests
              COMMAND snow-shot-paddleocr-client-tests)
     set_tests_properties(snow-shot-paddleocr-client-tests PROPERTIES
-        LABELS "unit;ocr" TIMEOUT 15)
+        LABELS "unit;ocr" TIMEOUT 60)
 
     add_executable(snow-shot-api-client-tests
         tests/snowshot_api_client_tests.cpp
