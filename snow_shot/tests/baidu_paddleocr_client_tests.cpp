@@ -17,7 +17,7 @@ void require(bool condition, const char* message) {
         qFatal("PaddleOCR API contract failure: %s", message);
 }
 
-enum class ReplyMode { Success, Unauthorized, RateLimited, FailedJob, InvalidJsonl };
+enum class ReplyMode { Success, Unauthorized, RateLimited, VendorQuota, FailedJob, InvalidJsonl };
 
 struct RunResult {
     QString markdown;
@@ -74,6 +74,10 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                     } else if (mode == ReplyMode::RateLimited) {
                         status = "429 Too Many Requests";
                         body = R"({"code":12002,"msg":"frequency too high"})";
+                    } else if (mode == ReplyMode::VendorQuota) {
+                        // The service sometimes encodes a quota error in a
+                        // syntactically successful HTTP 200 JSON envelope.
+                        body = R"({"code":12001,"msg":"daily quota exhausted"})";
                     } else {
                         body = R"({"code":0,"data":{"jobId":"job-123"}})";
                     }
@@ -167,6 +171,10 @@ void checkErrors() {
     require(throttle.markdown.isEmpty() &&
             throttle.error.contains(QStringLiteral("12002")),
             "rate-limit HTTP 429 and vendor code 12002 are actionable");
+    auto quota = runCase(model, ReplyMode::VendorQuota);
+    require(quota.markdown.isEmpty() &&
+            quota.error.contains(QStringLiteral("12001")),
+            "provider code 12001 is an actionable exhausted quota error");
     auto failed = runCase(model, ReplyMode::FailedJob);
     require(failed.markdown.isEmpty() &&
             failed.error.contains(QStringLiteral("unreadable image")),

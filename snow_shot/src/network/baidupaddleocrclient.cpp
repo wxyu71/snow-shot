@@ -251,7 +251,7 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
         const QJsonDocument json = QJsonDocument::fromJson(body);
         const QJsonObject object = json.object();
         if (!json.isObject() || object.value(QStringLiteral("code")).toInt(-1) != 0) {
-            finish({}, responseError(object));
+            finish({}, httpFailure(status, body, {}));
             return;
         }
         m_jobId = object.value(QStringLiteral("data")).toObject()
@@ -292,7 +292,12 @@ void BaiduPaddleOcrClient::poll() {
         const QJsonDocument json = QJsonDocument::fromJson(body);
         const QJsonObject object = json.object();
         if (!json.isObject() || object.value(QStringLiteral("code")).toInt(-1) != 0) {
-            finish({}, responseError(object));
+            if (object.value(QStringLiteral("code")).toInt() == 12002 &&
+                m_rateLimitRetries++ < 3) {
+                m_pollTimer.start(m_pollTimer.interval() * (1 << m_rateLimitRetries));
+                return;
+            }
+            finish({}, httpFailure(status, body, {}));
             return;
         }
         const QJsonObject data = object.value(QStringLiteral("data")).toObject();
@@ -325,10 +330,11 @@ void BaiduPaddleOcrClient::poll() {
 }
 
 void BaiduPaddleOcrClient::downloadResult(const QUrl& url, bool jsonl) {
-    // Result is a signed download URL; never send the AI Studio Access Token to it.
+    // The signed result download never carries Authorization. Allow only
+    // HTTPS->HTTPS redirects used by object storage, never downgrade to HTTP.
     QNetworkRequest request(url);
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
-                         QNetworkRequest::ManualRedirectPolicy);
+                         QNetworkRequest::NoLessSafeRedirectPolicy);
     request.setTransferTimeout(kTimeoutMs);
     requestFinished(m_network.get(request), [this, jsonl](int status, QByteArray body, QString error) {
         if (status < 200 || status >= 300 || !error.isEmpty()) {
