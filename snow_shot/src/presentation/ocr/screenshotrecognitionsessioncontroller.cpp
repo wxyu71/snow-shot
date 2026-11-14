@@ -1611,7 +1611,7 @@ void ScreenshotRecognitionSessionController::activate(Mode mode) {
         if (!notify(&ScreenshotRecognitionSessionController::setPendingTextRecognitionRendering,
                     false))
             return;
-        if (m_actions.setRecognitionModelState &&
+        if (mode != Mode::Markdown && m_actions.setRecognitionModelState &&
             !notify(&ScreenshotRecognitionSessionController::loadRecognitionModels, false))
             return;
         m_conversion->activate(m_target.key, m_target.image,
@@ -1930,7 +1930,8 @@ bool ScreenshotRecognitionSessionController::updateConversionState() const {
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
     if (!notify(&ScreenshotRecognitionSessionController::workflowStateChanged))
         return false;
-    if (conversionModeActive() && m_conversion->active() && !updateRecognitionModels())
+    if (conversionModeActive() && m_mode != Mode::Markdown && m_conversion->active() &&
+        !updateRecognitionModels())
         return false;
     if (conversionModeActive() && m_conversion->active() && content() != nullptr) {
         content()->showImageConversion(m_conversion->format(), m_conversion->source(),

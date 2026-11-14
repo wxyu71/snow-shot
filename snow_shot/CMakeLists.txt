@@ -9999,6 +9999,15 @@ if(SNOW_SHOT_BUILD_TESTS)
             snow_shot_image_codec)
     endif()
 
+    add_executable(snow-shot-paddleocr-client-tests
+        tests/baidu_paddleocr_client_tests.cpp)
+    target_link_libraries(snow-shot-paddleocr-client-tests PRIVATE
+        snow_shot_translation Qt6::Network Qt6::Core Qt6::Gui)
+    add_test(NAME snow-shot-paddleocr-client-tests
+             COMMAND snow-shot-paddleocr-client-tests)
+    set_tests_properties(snow-shot-paddleocr-client-tests PROPERTIES
+        LABELS "unit;ocr" TIMEOUT 15)
+
     add_executable(snow-shot-api-client-tests
         tests/snowshot_api_client_tests.cpp
     )
