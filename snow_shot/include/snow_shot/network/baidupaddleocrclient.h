@@ -32,7 +32,7 @@ class BaiduPaddleOcrClient final : public QObject {
 
   private:
     void poll();
-    void downloadMarkdown(const QUrl& url);
+    void downloadResult(const QUrl& url, bool jsonl);
     void requestFinished(QNetworkReply* reply,
                          std::function<void(int status, QByteArray body, QString error)> handler);
     void finish(QString markdown, QString error);
@@ -47,6 +47,7 @@ class BaiduPaddleOcrClient final : public QObject {
     Completion m_completion;
     quint64 m_generation = 0;
     int m_attempts = 0;
+    int m_rateLimitRetries = 0;
 };
 
 } // namespace snow_shot::network
