@@ -49,8 +49,13 @@ ctest --test-dir build/snow-shot-msvc-release -C Release --output-on-failure
 The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
 `.github/workflows/community-windows-x64.yml` validates the build and
-uploads both installers as artifacts **on successful completion**. It does not
-publish a release or replace an official installer automatically.
+uploads both installers as artifacts **on successful completion**. Only a beta tag pushed from the reviewed `main` history (for example,
+`v1.5.8-beta.1_snow-shot`) triggers automatic publication to this fork's
+GitHub Releases **after** the Windows build, native packaging checks and
+SHA-256/manifest verification pass. PR and manual CI runs only upload private
+workflow artifacts; they do not publish an installer. Releases contain only
+the x64 Full online/offline NSIS installers, checksums and manifests, never
+Mini, ARM64, macOS or portable builds.
 
 The embedded update-source defaults and Rust origin allowlist now point to
 `wxyu71/snow-shot` (including the fallback release host), preventing the
@@ -77,6 +82,11 @@ required before treating the fork as a completely de-commercialized release.
 See [sync policy](community-upstream-sync.md).
 
 ## Reproducible CI toolchain provisioning
+
+The Windows x64 release preset explicitly disables Snow Shot Mini and the
+upstream Snow Shot account API base URL. `package-snow-shot.ps1 -FullOnly`
+skips Mini packaging; legacy Homebrew, WinGet and Scoop publication workflows
+are not retained in the community fork.
 
 The hosted Windows runner does not preinstall the repository's audited
 Qt 6.12.0 static Release kit. The beta pipeline calls

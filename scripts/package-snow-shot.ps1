@@ -6,6 +6,7 @@ param(
     [string]$OcrRuntimeArchive,
     [ValidateRange(1, 256)][int]$Parallelism = 4,
     [switch]$SkipBuild,
+    [switch]$FullOnly,
     [ValidateSet('standalone', 'store')][string]$DistributionChannel = 'standalone',
     [switch]$StageOnly,
     [switch]$PrepareOcrRuntimeOnly
@@ -1467,7 +1468,7 @@ string(REPLACE "snow-shot-$packageVersion-$ocrPlatform.exe" "$packageBaseName.ex
     }
     $installerVersionInfo = (Get-Item -LiteralPath $packagePath).VersionInfo
     $expectedInstallerMetadata = @{
-        CompanyName = "Snow Apps"
+        CompanyName = "Snow Shot Community"
         FileDescription = "Snow Shot installer"
         FileVersion = "$packageVersionNumeric.0"
         InternalName = "snow-shot-installer"
@@ -1565,7 +1566,11 @@ Write-Output "OCR runtime upload artifact: $runtimeArchivePath"
 Write-Output "OCR runtime checksum: $runtimeArchiveChecksum"
 Write-Output "OCR runtime manifest: $runtimeReleaseManifest"
 
-. (Join-Path $PSScriptRoot "package-snow-shot-mini.ps1")
+# The community beta ships the full x64 product only. Do not compile or
+# package Mini as a side effect of preparing its full installer.
+if (-not $FullOnly) {
+    . (Join-Path $PSScriptRoot "package-snow-shot-mini.ps1")
+}
 
 # Store staging returns above; it must never invoke this release step recursively.
 if (-not $store -and -not $StageOnly -and $Architecture -eq 'x64') {

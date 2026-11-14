@@ -51,6 +51,10 @@
     ".github/workflows/community-ocr-license-audit.yml",
     ".github/workflows/community-live-paddleocr.yml",
     "snow_shot/tests/image_conversion_tests.cpp",
-    "scripts/test-community-branding.py"
+    "scripts/test-community-branding.py",
+    "CMakePresets.json",
+    "scripts/build-static-qt.ps1",
+    "scripts/community_release.py",
+    "docs/community-release-notes.md"
   ]
 }

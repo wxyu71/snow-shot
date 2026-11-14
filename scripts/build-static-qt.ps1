@@ -136,6 +136,12 @@ function Save-RemoteFile {
         [Parameter(Mandatory = $true)][string]$Destination
     )
 
+    # The first hosted runner has no Qt source cache. File.Open does not
+    # create parent directories, so provision the staging directory first.
+    $destinationParent = [System.IO.Path]::GetDirectoryName(
+        [System.IO.Path]::GetFullPath($Destination))
+    [System.IO.Directory]::CreateDirectory($destinationParent) | Out-Null
+
     $client = [System.Net.Http.HttpClient]::new()
     $client.Timeout = [TimeSpan]::FromHours(2)
     $response = $null
