@@ -11,8 +11,8 @@ import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-BETA_VERSION = re.compile(r"^[0-9]+\\.[0-9]+\\.[0-9]+-beta\\.[0-9]+$")
-VERSION_LINE = re.compile(r'^\\s*set\\(SNOW_SHOT_VERSION\\s+"([^"]+)"\\)', re.MULTILINE)
+BETA_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$")
+VERSION_LINE = re.compile(r'^\s*set\(SNOW_SHOT_VERSION\s+"([^"]+)"\)', re.MULTILINE)
 
 
 def source_version(root: Path = ROOT) -> str:
@@ -52,7 +52,7 @@ def verify_assets(directory: Path, version: str) -> None:
         if binary.stat().st_size <= 0:
             raise ValueError(f"Empty installer: {stem}")
         digest = hashlib.sha256(binary.read_bytes()).hexdigest()
-        if not re.fullmatch(r"[0-9a-fA-F]{64}\\s+\\*?" + re.escape(binary.name),
+        if not re.fullmatch(r"[0-9a-fA-F]{64}\s+\*?" + re.escape(binary.name),
                             checksum.read_text(encoding="utf-8").strip()):
             raise ValueError(f"Malformed SHA-256 sidecar: {checksum.name}")
         if checksum.read_text(encoding="utf-8").split()[0].lower() != digest:
@@ -86,7 +86,7 @@ def selftest() -> None:
             binary = directory / f"{stem}.exe"
             binary.write_bytes(("test-only-" + variant).encode("ascii"))
             digest = hashlib.sha256(binary.read_bytes()).hexdigest()
-            (directory / f"{stem}.exe.sha256").write_text(f"{digest}  {binary.name}\\n")
+            (directory / f"{stem}.exe.sha256").write_text(f"{digest}  {binary.name}\n")
             (directory / f"{stem}.manifest.json").write_text(json.dumps({
                 "PackageVersion": version, "Variant": variant, "Architecture": "x64",
                 "Platform": "windows-x64", "StaticCrt": True, "StaticQt": True,
@@ -101,6 +101,8 @@ def selftest() -> None:
             pass
         else:
             raise AssertionError("Tampered binary accepted")
+        fixed = directory / f"snow-shot-{version}-windows-x64-online.exe"
+        fixed.write_bytes(b"test-only-online")
         (directory / f"snow-shot-{version}-windows-arm64-offline.exe").write_bytes(b"forbidden")
         try:
             verify_assets(directory, version)
