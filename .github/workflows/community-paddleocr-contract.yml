@@ -1,0 +1,34 @@
+name: Standalone Qt PaddleOCR API contract
+
+on:
+  pull_request:
+    paths:
+      - snow_shot/src/network/baidupaddleocrclient.cpp
+      - snow_shot/include/snow_shot/network/baidupaddleocrclient.h
+      - snow_shot/tests/baidu_paddleocr_client_tests.cpp
+      - tests/standalone-paddleocr/**
+      - .github/workflows/community-paddleocr-contract.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  compile-and-run-client:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Qt Core/GUI/Network without the full project toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev
+      - name: Compile actual C++ client with Qt
+        run: |
+          cmake -S tests/standalone-paddleocr -B build/community-paddleocr-contract \
+            -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/community-paddleocr-contract --parallel 4
+      - name: Run three-model JSONL, bearer isolation and failure-path tests
+        run: ctest --test-dir build/community-paddleocr-contract --output-on-failure
