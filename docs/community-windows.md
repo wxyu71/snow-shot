@@ -52,6 +52,15 @@ variant includes the packaged OCR runtime and its default local model.
 uploads both installers as artifacts **on successful completion**. It does not
 publish a release or replace an official installer automatically.
 
+The embedded update-source defaults and Rust origin allowlist now point to
+`wxyu71/snow-shot` (including the fallback release host), preventing the
+community fork from silently downloading an upstream official binary that
+could restore removed features. **Signed community update publishing is not
+configured:** an independently trusted signing key and verified fork release
+metadata must be set up before automatic binary updates can function. The
+NSIS upgrade-over-official-installer path is separate from this future update
+channel.
+
 **Verification required before public release:** actual Windows build and
 unit tests; NSIS upgrade over an installed official 1.5.7; preservation of
 user settings and shortcuts; local OCR model bootstrapping and all three

@@ -42,7 +42,7 @@ pub fn asset(files: &Value, tag: &str, name: &str) -> Result<Url> {
     let url = Url::parse(file["browser_download_url"].as_str().ok_or_else(error)?)
         .map_err(|_| error())?;
     let expected = Url::parse(&format!(
-        "https://gitee.com/mg-chao/snow-apps/releases/download/{tag}/{name}"
+        "https://gitee.com/wxyu71/snow-shot/releases/download/{tag}/{name}"
     ))
     .map_err(|_| error())?;
     require(
@@ -58,7 +58,7 @@ pub fn redirect_allowed(origin: &Url, target: &Url) -> bool {
         && origin.host_str() == Some("gitee.com")
         && origin
             .path()
-            .starts_with("/mg-chao/snow-apps/releases/download/")
+            .starts_with("/wxyu71/snow-shot/releases/download/")
         && target.scheme() == "https"
         && target.port_or_known_default() == Some(443)
         && target.username().is_empty()
@@ -76,13 +76,13 @@ mod tests {
         assert!(version(&json!({"tag_name":"v2.0.0-beta_snow-shot"})).is_some());
         assert!(version(&json!({"tag_name":"v2.0.0_snow-shot","draft":true})).is_none());
         let files = json!([{"name":"latest-version.json","browser_download_url":
-            "https://gitee.com/mg-chao/snow-apps/releases/download/v2.0.0_snow-shot/latest-version.json"}]);
+            "https://gitee.com/wxyu71/snow-shot/releases/download/v2.0.0_snow-shot/latest-version.json"}]);
         assert!(asset(&files, "v2.0.0_snow-shot", "latest-version.json").is_ok());
         assert!(asset(&files, "v2.0.0_snow-shot", "missing").is_err());
         for url in [
-            "https://evil.test/mg-chao/snow-apps/releases/download/v2.0.0_snow-shot/latest-version.json",
+            "https://evil.test/wxyu71/snow-shot/releases/download/v2.0.0_snow-shot/latest-version.json",
             "https://gitee.com/other/repo/attach_files/123/download/latest-version.json",
-            "http://gitee.com/mg-chao/snow-apps/releases/download/v2.0.0_snow-shot/latest-version.json",
+            "http://gitee.com/wxyu71/snow-shot/releases/download/v2.0.0_snow-shot/latest-version.json",
         ] {
             let bad = json!([{"name":"latest-version.json","browser_download_url":url}]);
             assert!(asset(&bad, "v2.0.0_snow-shot", "latest-version.json").is_err());
