@@ -1,0 +1,41 @@
+name: Offline Rust OCR license and dependency audit
+
+on:
+  pull_request:
+    paths:
+      - snow-crates/**
+      - scripts/test-snow-shot-ocr-license-features.py
+      - scripts/snow-ocr-toolchain.ps1
+      - .github/workflows/community-ocr-license-audit.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  rust-ocr-license:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Install pinned Rust nightly toolchain
+        run: rustup toolchain install nightly-2026-09-08 --profile minimal
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: community-ocr-license-nightly-2026-09-08-${{ hashFiles('snow-crates/Cargo.lock') }}
+      - name: Prime the offline dependency cache for all three audit targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          manifest=snow-crates/crates/snow-ocr-process/Cargo.toml
+          for target in x86_64-pc-windows-msvc aarch64-apple-darwin x86_64-apple-darwin; do
+            cargo +nightly-2026-09-08 fetch --locked --manifest-path "$manifest" --target "$target"
+          done
+      - name: Run upstream OCR license feature audit fully offline
+        run: python3 scripts/test-snow-shot-ocr-license-features.py

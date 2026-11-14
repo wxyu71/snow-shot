@@ -32,7 +32,7 @@ screenshots must never be committed or included in bug reports.
 
 ## Independent Windows x64 release and compatibility
 
-This branch increments upstream 1.5.7 to **1.5.8**. The full NSIS installer
+This branch increments upstream 1.5.7 to **1.5.8-beta.1**. The full NSIS installer
 continues to use upstream's `snow_shot.exe`, `SnowShot` installer registry
 key, `SnowShot` installation directory, and uninstall-before-install logic.
 These values are required for an in-place upgrade from the official installer.
@@ -75,3 +75,19 @@ still present for existing optional features; full audit of every historic
 paid-service reference, updater/channel behavior and bundled translations is
 required before treating the fork as a completely de-commercialized release.
 See [sync policy](community-upstream-sync.md).
+
+## Reproducible CI toolchain provisioning
+
+The hosted Windows runner does not preinstall the repository's audited
+Qt 6.12.0 static Release kit. The beta pipeline calls
+`bootstrap.ps1 -SkipQtValidation -VcpkgVariants Static` to install pinned
+vcpkg/Rust prerequisites, then `build-static-qt.ps1` to build and validate
+Qt in `.tools/qt/6.12.0/x64-static-release` before the normal build and
+installer steps. A keyed Actions cache can reuse the verified Qt kit.
+Qt compilation is slow on fresh runners, and CI failure remains a release blocker.
+
+The native Rust OCR license dependency audit is an independent CI job. It
+installs nightly-2026-09-08, fetches the exact locked dependency trees for
+Windows x64 and macOS x64/arm64, then runs the original offline audit.
+Neither audit should be marked green merely because build dependencies were
+missing.

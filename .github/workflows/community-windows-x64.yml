@@ -30,6 +30,30 @@ jobs:
         run: |
           python scripts/test-upstream-sync.py
           python scripts/upstream_sync.py verify-deletions
+      - name: Install pinned vcpkg, Rust and OCR build dependencies
+        shell: pwsh
+        run: |
+          # Do this before Qt validation because hosted runners do not ship
+          # the audited static Qt 6.12.0 with the required release features.
+          ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
+      - name: Restore previously built static Qt cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: .tools/qt/6.12.0/x64-static-release
+          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+      - name: Build or validate audited Qt 6.12.0 Release kit
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $PWD '.tools/qt/6.12.0/x64-static-release'
+          ./scripts/build-static-qt.ps1 -InstallPrefix $prefix -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
+          if ($LASTEXITCODE -ne 0) { throw 'Audited static Qt build failed' }
+          $qt6Dir = Join-Path $prefix 'lib/cmake/Qt6'
+          if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) {
+            throw 'Validated Qt6Config.cmake missing'
+          }
+          "SNOW_QT_STATIC_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          "Qt6_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
       - name: Build full x64 release
         shell: pwsh
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release
