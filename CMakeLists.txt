@@ -18,7 +18,7 @@ snow_require_msvc_version()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SnowWindowsArchitecture.cmake")
 snow_configure_windows_architecture()
 
-set(SNOW_SHOT_VERSION "1.5.8")
+set(SNOW_SHOT_VERSION "1.5.8-beta.1")
 if(NOT SNOW_SHOT_VERSION MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9A-Za-z.-]+)?$")
     message(FATAL_ERROR "SNOW_SHOT_VERSION must be a semantic version such as 0.8.0-dev")
 endif()
@@ -26,7 +26,7 @@ set(SNOW_SHOT_VERSION_NUMERIC "${CMAKE_MATCH_1}")
 set(SNOW_SHOT_DISTRIBUTION_CHANNEL "standalone" CACHE STRING
     "Snow Shot Windows distribution channel: standalone or store.")
 set_property(CACHE SNOW_SHOT_DISTRIBUTION_CHANNEL PROPERTY STRINGS standalone store)
-set(SNOW_SHOT_PRIVACY_POLICY_URL "https://snowshot.top/privacy.html" CACHE STRING
+set(SNOW_SHOT_PRIVACY_POLICY_URL "https://github.com/wxyu71/snow-shot/blob/main/docs/community-privacy.md" CACHE STRING
     "Public HTTPS privacy policy URL for Snow Shot.")
 if(NOT SNOW_SHOT_PRIVACY_POLICY_URL MATCHES "^https://[A-Za-z0-9][A-Za-z0-9./_-]*$")
     message(FATAL_ERROR "SNOW_SHOT_PRIVACY_POLICY_URL must be a public HTTPS URL")
@@ -53,8 +53,8 @@ set(SNOW_SHOT_EXECUTABLE_NAME "snow_shot")
 set(SNOW_SHOT_VENDOR "Snow Apps")
 set(SNOW_SHOT_DESCRIPTION
     "A screenshot utility for capturing, annotating, pinning, and recognizing screen content.")
-set(SNOW_SHOT_HOMEPAGE_URL "https://snowshot.top")
-set(SNOW_SHOT_SUPPORT_EMAIL "chao@mgchao.top")
+set(SNOW_SHOT_HOMEPAGE_URL "https://github.com/wxyu71/snow-shot")
+set(SNOW_SHOT_SUPPORT_EMAIL "")
 set(SNOW_SHOT_COPYRIGHT "Copyright (C) 2025-2026 mg-chao")
 
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)

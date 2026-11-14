@@ -43,7 +43,7 @@ jobs:
       - name: Validate release metadata and upgrade identity
         shell: pwsh
         run: |
-          $files = @(Get-ChildItem 'build/snow-shot-msvc-release' -File -Filter 'snow-shot-1.5.8-windows-x64-*.exe')
+          $files = @(Get-ChildItem 'build/snow-shot-msvc-release' -File -Filter 'snow-shot-1.5.8-beta.1-windows-x64-*.exe')
           if ($files.Count -lt 2) { throw 'Expected both online and offline full x64 installers' }
           foreach ($file in $files) {
             if ($file.VersionInfo.ProductVersion -notmatch '^1\.5\.8') {
@@ -54,8 +54,8 @@ jobs:
       - uses: actions/upload-artifact@v4
         if: success()
         with:
-          name: snow-shot-community-1.5.8-windows-x64
+          name: snow-shot-community-1.5.8-beta.1-windows-x64
           path: |
-            build/snow-shot-msvc-release/snow-shot-1.5.8-windows-x64-*.exe
-            build/snow-shot-msvc-release/snow-shot-1.5.8-windows-x64-*.exe.sha256
+            build/snow-shot-msvc-release/snow-shot-1.5.8-beta.1-windows-x64-*.exe
+            build/snow-shot-msvc-release/snow-shot-1.5.8-beta.1-windows-x64-*.exe.sha256
           if-no-files-found: error

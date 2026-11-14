@@ -227,7 +227,7 @@ void projectLinkSurfacesMatchStandardButtons() {
         manager.setThemeAppearance(appearance);
         flushEvents();
         for (const char* name :
-             {"aboutWebsite", "aboutSourceCode", "aboutFeedback", "aboutQqGroup4"}) {
+             {"aboutCommunityChangelog", "aboutSourceCode", "aboutFeedback", "aboutCommunityReleases"}) {
             auto* button = child<AdButton>(page, name);
             require(button->buttonStyle() == AdButton::ButtonStyle::Outline &&
                         button->accentRole() == AdButton::AccentRole::Neutral,
@@ -330,24 +330,25 @@ void projectLinksAreExplicitAccessibleAndRecoverable() {
             "About no longer offers QQ Group 2");
     require(page.findChild<QAbstractButton*>(QStringLiteral("aboutQqGroup3")) == nullptr,
             "About no longer offers QQ Group 3");
-    auto* group4 = child<QAbstractButton>(page, "aboutQqGroup4");
-    auto* website = child<QAbstractButton>(page, "aboutWebsite");
+    auto* group4 = child<QAbstractButton>(page, "aboutCommunityReleases");
+    auto* website = child<QAbstractButton>(page, "aboutCommunityChangelog");
     auto* feedback = child<QAbstractButton>(page, "aboutFeedback");
     require(group4->geometry().left() == website->geometry().left() &&
                 group4->geometry().right() == feedback->geometry().right() &&
                 group4->geometry().top() > website->geometry().bottom(),
-            "QQ Group 4 spans the second project link row");
+            "community releases span the second project link row");
     snapshot(page, QStringLiteral("about-actions"));
-    const QUrl websiteUrl(QStringLiteral(SNOW_SHOT_TEST_WEBSITE_URL));
+    const QUrl websiteUrl(QStringLiteral(SNOW_SHOT_TEST_PROJECT_URL) +
+                          QStringLiteral("/blob/main/docs/community-changelog.md"));
     const QString project = QStringLiteral(SNOW_SHOT_TEST_PROJECT_URL);
     const std::array<std::pair<const char*, QUrl>, 7> links{{
-        {"aboutWebsite", websiteUrl},
+        {"aboutCommunityChangelog", websiteUrl},
         {"aboutSourceCode", QUrl(project)},
         {"aboutFeedback", QUrl(project + QStringLiteral("/issues"))},
-        {"aboutReleaseNotes", websiteUrl.resolved(QUrl(QStringLiteral("/changelog.html")))},
-        {"aboutQqGroup4", QUrl(QStringLiteral(SNOW_SHOT_TEST_QQ_GROUP_4_URL))},
+        {"aboutReleaseNotes", websiteUrl},
+        {"aboutCommunityReleases", QUrl(project + QStringLiteral("/releases"))},
         {"aboutPrivacyPolicy", QUrl(snow_shot::app::distribution::privacyPolicyUrl())},
-        {"aboutUserAgreement", QUrl(QStringLiteral("https://snowshot.top/terms.html"))},
+        {"aboutUserAgreement", QUrl(snow_shot::app::distribution::userAgreementUrl())},
     }};
     for (const auto& [name, url] : links) {
         auto* button = child<QAbstractButton>(page, name);
@@ -369,7 +370,7 @@ void projectLinksAreExplicitAccessibleAndRecoverable() {
     page.resize(360, 240);
     flushEvents();
     canOpen = false;
-    child<QAbstractButton>(page, "aboutWebsite")->click();
+    child<QAbstractButton>(page, "aboutCommunityChangelog")->click();
     flushEvents();
     auto* error = child<QLabel>(page, "aboutLinkError");
     require(!error->isHidden() && error->text().contains(links.front().second.toDisplayString()) &&
@@ -396,7 +397,7 @@ void projectLinksAreExplicitAccessibleAndRecoverable() {
         flushEvents();
     }
     canOpen = true;
-    child<QAbstractButton>(page, "aboutWebsite")->click();
+    child<QAbstractButton>(page, "aboutCommunityChangelog")->click();
     require(error->isHidden() && error->text().isEmpty(), "successful retries clear link errors");
     page.hide();
 }
@@ -430,7 +431,7 @@ void largerTypeKeepsEveryActionReachable() {
             "artwork scales down to the available width with larger fonts");
     for (const char* name :
          {"aboutCopyVersion", "aboutReleaseNotes", "aboutUpdateCheck", "aboutUpdateAction",
-          "aboutWebsite", "aboutSourceCode", "aboutFeedback", "aboutQqGroup4", "aboutPrivacyPolicy",
+          "aboutCommunityChangelog", "aboutSourceCode", "aboutFeedback", "aboutCommunityReleases", "aboutPrivacyPolicy",
           "aboutUserAgreement"}) {
         auto* button = child<QAbstractButton>(page, name);
         scroll->ensureWidgetVisible(button);
@@ -1090,26 +1091,25 @@ void mainNavigationSearchThemesAndLanguages() {
             auto* icon = page->findChild<QLabel*>(QStringLiteral("aboutFeatureIcon%1").arg(i));
             require(icon != nullptr && !icon->pixmap().isNull(), "every feature icon renders");
         }
-        require(child<QAbstractButton>(*page, "aboutWebsite")->accessibleName() ==
+        require(child<QAbstractButton>(*page, "aboutCommunityChangelog")->accessibleName() ==
                         expectedTranslation(translator, locale, "AboutPageWidget",
-                                            "Official website") &&
+                                            "Changelog") &&
                     child<QWidget>(*page, "aboutArtwork")->accessibleName() ==
                         expectedTranslation(
                             translator, locale, "AboutPageWidget",
                             "Screenshot selection, annotation tools, and recognized text"),
                 "resource and illustration accessibility copy follows the active language");
         const QString groupTitle =
-            expectedTranslation(translator, locale, "AboutPageWidget", "QQ group 4");
+            expectedTranslation(translator, locale, "AboutPageWidget", "Download from GitHub");
         const QString groupDescription =
             expectedTranslation(translator, locale, "AboutPageWidget",
-                                "Discussion and support · group no. %1")
-                .arg(QStringLiteral("1131891935"));
-        auto* group = child<QAbstractButton>(*page, "aboutQqGroup4");
+                                "View the source and improve it together");
+        auto* group = child<QAbstractButton>(*page, "aboutCommunityReleases");
         require(group->accessibleName() == groupTitle &&
                     group->accessibleDescription() == groupDescription,
-                "the QQ group card retranslates its title and description");
-        require(child<QLabel>(*group, "aboutQqGroup4Description")->text() == groupDescription,
-                "the QQ group card displays the translated description with the group number");
+                "the community release card retranslates its title and description");
+        require(child<QLabel>(*group, "aboutCommunityReleasesDescription")->text() == groupDescription,
+                "the community release card displays the translated description without unrelated QQ group details");
         require(sidebar->currentRoute() == QStringLiteral("/about"),
                 "translated navigation preserves About selection");
         auto* scroll = page->findChild<adqt::widgets::AdScrollArea*>();
