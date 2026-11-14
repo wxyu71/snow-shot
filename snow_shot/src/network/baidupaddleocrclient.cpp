@@ -210,6 +210,25 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
     modelPart.setBody(options.model.toUtf8());
     multipart->append(modelPart);
 
+    // AI Studio's official optionalPayload enables tables, formula OCR and
+    // layout-preserving Markdown rather than depending on provider defaults.
+    QJsonObject pipeline;
+    if (options.model == QStringLiteral("PP-StructureV3")) {
+        pipeline.insert(QStringLiteral("useTableRecognition"), true);
+        pipeline.insert(QStringLiteral("useFormulaRecognition"), true);
+        pipeline.insert(QStringLiteral("prettifyMarkdown"), true);
+    } else if (options.model == QStringLiteral("PaddleOCR-VL-1.6")) {
+        pipeline.insert(QStringLiteral("useLayoutDetection"), true);
+        pipeline.insert(QStringLiteral("prettifyMarkdown"), true);
+    } else {
+        pipeline.insert(QStringLiteral("useDocOrientationClassify"), false);
+    }
+    QHttpPart payloadPart;
+    payloadPart.setHeader(QNetworkRequest::ContentDispositionHeader,
+                          QVariant(QStringLiteral("form-data; name=\"optionalPayload\"")));
+    payloadPart.setBody(QJsonDocument(pipeline).toJson(QJsonDocument::Compact));
+    multipart->append(payloadPart);
+
     QHttpPart imagePart;
     imagePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                         QVariant(QStringLiteral("form-data; name=\"file\"; filename=\"screenshot.png\"")));

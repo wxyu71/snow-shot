@@ -61,7 +61,13 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                     outcome.submitAuthenticated = bearer &&
                         payload->contains("name=\"model\"") &&
                         payload->contains(model.toUtf8()) &&
-                        payload->contains("name=\"file\"");
+                        payload->contains("name=\"file\"") &&
+                        payload->contains("name=\"optionalPayload\"") &&
+                        (model != QStringLiteral("PP-StructureV3") ||
+                         (payload->contains("useTableRecognition") &&
+                          payload->contains("useFormulaRecognition"))) &&
+                        (model != QStringLiteral("PaddleOCR-VL-1.6") ||
+                         payload->contains("useLayoutDetection"));
                     if (mode == ReplyMode::Unauthorized) {
                         status = "401 Unauthorized";
                         body = R"({"code":401,"msg":"token invalid"})";
