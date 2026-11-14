@@ -31,6 +31,7 @@
 
 #include <QCoreApplication>
 #include <QApplication>
+#include <QClipboard>
 #include <QCryptographicHash>
 #include <QDataStream>
 #include <QThreadPool>
@@ -3744,6 +3745,10 @@ void ScreenshotRecognitionSessionController::handleTextOutput(
         return;
     if (!updateTextState())
         return;
+    // Copy the complete offline OCR result without closing the selectable text overlay.
+    if (m_active && m_mode == Mode::Text && !original.trimmed().isEmpty() &&
+        QApplication::clipboard())
+        QApplication::clipboard()->setText(original);
     notify(&ScreenshotRecognitionSessionController::recognitionResultsChanged);
 }
 

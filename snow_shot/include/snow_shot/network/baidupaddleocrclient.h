@@ -8,6 +8,7 @@
 #include <QPointer>
 #include <QString>
 #include <QTimer>
+#include <QUrl>
 
 #include <functional>
 

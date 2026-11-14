@@ -827,6 +827,8 @@ add_library(snow_shot_translation STATIC
     src/app/translationservice.cpp
     include/snow_shot/presentation/selectedtexttranslationcontroller.h
     src/presentation/services/selectedtexttranslationcontroller.cpp
+    include/snow_shot/network/baidupaddleocrclient.h
+    src/network/baidupaddleocrclient.cpp
     include/snow_shot/network/snowshotapiclient.h
     src/network/boundednetworkresponse.h
     src/network/freetranslationprotocol.h
@@ -838,7 +840,6 @@ add_library(snow_shot_translation STATIC
 )
 if(WIN32)
     target_link_libraries(snow_shot_translation PRIVATE crypt32)
-
 endif()
 snow_enable_unity_build(snow_shot_translation)
 target_include_directories(snow_shot_translation PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")

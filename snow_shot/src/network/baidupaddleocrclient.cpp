@@ -1,10 +1,14 @@
 #include "snow_shot/network/baidupaddleocrclient.h"
 
+#include <QBuffer>
 #include <QHttpMultiPart>
+#include <QIODevice>
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QNetworkRequest>
 #include <QUrl>
+
+#include <utility>
 
 namespace snow_shot::network {
 namespace {

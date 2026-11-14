@@ -6,7 +6,10 @@
 
 #include <QTimer>
 
+#include <memory>
+
 class QWidget;
+namespace snow_shot::network { class BaiduPaddleOcrClient; }
 namespace adqt::widgets {
 class AdModal;
 }
@@ -74,6 +77,7 @@ class ScreenshotImageConversionController final : public QObject {
         ScreenshotImageConversionEntry result;
     };
     QPointer<SnowShotApiClient> m_api;
+    std::unique_ptr<snow_shot::network::BaiduPaddleOcrClient> m_baidu;
     QPointer<adqt::widgets::AdModal> m_modal;
     QVector<CacheEntry> m_cache;
     QTimer m_previewTimer;

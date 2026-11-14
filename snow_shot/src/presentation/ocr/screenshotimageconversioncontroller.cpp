@@ -1,4 +1,5 @@
 #include "snow_shot/presentation/screenshotimageconversioncontroller.h"
+#include "snow_shot/network/baidupaddleocrclient.h"
 
 #include "snow_shot/presentation/languagemanager.h"
 #include "snow_shot/storage/settingsadapters.h"
@@ -8,7 +9,15 @@
 #include "widgets/modal.h"
 #include "widgets/select.h"
 
+#include <QClipboard>
+#include <QComboBox>
+#include <QDialog>
+#include <QDialogButtonBox>
+#include <QFormLayout>
+#include <QGuiApplication>
+#include <QLineEdit>
 #include <QPushButton>
+#include <QSettings>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -262,6 +271,8 @@ void ScreenshotImageConversionController::trimCache() {
 void ScreenshotImageConversionController::cancelRequests() {
     ++m_generation;
     m_previewTimer.stop();
+    if (m_baidu)
+        m_baidu->cancel();
     if (m_api != nullptr) {
         m_api->cancel(m_modelsToken);
         m_api->cancel(m_conversionToken);
@@ -359,6 +370,50 @@ void ScreenshotImageConversionController::start(bool refreshModels) {
     m_error.clear();
     m_refreshConversion = refreshModels;
     m_requestModel = Settings().visionModel();
+    if (m_format == SnowShotImageConversionFormat::Markdown) {
+        // The Markdown tool calls AI Studio directly; no Snow Shot server or model discovery.
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+                           QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+        snow_shot::network::BaiduPaddleOcrClient::Options options;
+        options.apiUrl = settings.value(QStringLiteral("api_url"),
+                                       options.apiUrl).toString();
+        options.accessToken = settings.value(QStringLiteral("access_token")).toString();
+        options.model = settings.value(QStringLiteral("model"), options.model).toString();
+        m_requestModel = QStringLiteral("baidu:") + options.model;
+        if (m_image.isNull() || m_key.isEmpty()) {
+            fail(tr("No screenshot is available for cloud OCR"));
+            return;
+        }
+        if (!m_baidu)
+            m_baidu = std::make_unique<snow_shot::network::BaiduPaddleOcrClient>();
+        m_state = State::Converting;
+        if (!notifyChanged())
+            return;
+        const quint64 generation = m_generation;
+        m_baidu->recognize(m_image, std::move(options),
+                           [this, generation](QString markdown, QString error) {
+            if (generation != m_generation || !m_active)
+                return;
+            if (!error.isEmpty()) {
+                fail(error);
+                return;
+            }
+            m_source = normalizedImageConversionSource(
+                markdown, SnowShotImageConversionFormat::Markdown);
+            if (m_source.trimmed().isEmpty()) {
+                fail(tr("PaddleOCR returned no readable Markdown"));
+                return;
+            }
+            m_state = State::Completed;
+            // Automatic complete-result copy leaves the editor and selection UI open.
+            if (QGuiApplication::clipboard())
+                QGuiApplication::clipboard()->setText(m_source);
+            if (!notifyChanged())
+                return;
+            notifyResultsChanged();
+        });
+        return;
+    }
     if (!refreshModels && restoreCachedResult(m_requestModel))
         return;
     if (m_api == nullptr || m_image.isNull() || m_key.isEmpty()) {
@@ -482,6 +537,55 @@ void ScreenshotImageConversionController::startWithModels(
 }
 
 void ScreenshotImageConversionController::openSettings(QWidget* owner) {
+    if (m_format == SnowShotImageConversionFormat::Markdown) {
+        if (!owner)
+            return;
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope,
+                           QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+        auto* dialog = new QDialog(owner);
+        dialog->setAttribute(Qt::WA_DeleteOnClose);
+        dialog->setWindowTitle(tr("Baidu PaddleOCR settings"));
+        auto* layout = new QVBoxLayout(dialog);
+        auto* form = new QFormLayout();
+        auto* url = new QLineEdit(settings.value(
+            QStringLiteral("api_url"),
+            QStringLiteral("https://paddleocr.aistudio-app.com")).toString(), dialog);
+        url->setObjectName(QStringLiteral("paddleOcrApiUrl"));
+        form->addRow(tr("AI Studio API URL"), url);
+        auto* token = new QLineEdit(settings.value(
+            QStringLiteral("access_token")).toString(), dialog);
+        token->setObjectName(QStringLiteral("paddleOcrAccessToken"));
+        token->setEchoMode(QLineEdit::Password);
+        form->addRow(tr("Access Token"), token);
+        auto* model = new QComboBox(dialog);
+        model->setObjectName(QStringLiteral("paddleOcrModel"));
+        model->addItems({QStringLiteral("PaddleOCR-VL-1.6"),
+                         QStringLiteral("PP-StructureV3"),
+                         QStringLiteral("PP-OCRv6")});
+        model->setCurrentText(settings.value(
+            QStringLiteral("model"), QStringLiteral("PaddleOCR-VL-1.6")).toString());
+        form->addRow(tr("PaddleOCR model"), model);
+        layout->addLayout(form);
+        auto* buttons = new QDialogButtonBox(
+            QDialogButtonBox::Ok | QDialogButtonBox::Cancel, dialog);
+        layout->addWidget(buttons);
+        connect(buttons, &QDialogButtonBox::rejected,
+                dialog, &QDialog::reject);
+        connect(buttons, &QDialogButtonBox::accepted, dialog,
+                [this, dialog, url, token, model] {
+            QSettings updated(QSettings::IniFormat, QSettings::UserScope,
+                              QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+            updated.setValue(QStringLiteral("api_url"), url->text().trimmed());
+            updated.setValue(QStringLiteral("access_token"), token->text().trimmed());
+            updated.setValue(QStringLiteral("model"), model->currentText());
+            updated.sync();
+            dialog->accept();
+            if (m_active)
+                start(false);
+        });
+        dialog->open();
+        return;
+    }
     using namespace adqt::widgets;
     const QPointer<ScreenshotImageConversionController> lifetime(this);
     if (owner == nullptr || m_modal != nullptr) {
