@@ -20,7 +20,8 @@ permissions:
 
 concurrency:
   group: community-windows-x64-${{ github.ref }}
-  cancel-in-progress: false
+  # Supersede outdated PR builds; release tag builds must never be interrupted.
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   build-full-installer:
