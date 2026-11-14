@@ -1802,7 +1802,7 @@ void customServerDefaultsAndValidation() {
     const bool wasSet = qEnvironmentVariableIsSet("SNOW_SHOT_API_BASE_URL");
     qunsetenv("SNOW_SHOT_API_BASE_URL");
     const QString buildDefault = SnowShotApiClient::configuredBaseUrl();
-    require(!buildDefault.isEmpty(), "build provides a server default");
+    require(buildDefault.isEmpty(), "community build never defaults to Snow Shot services");
     qputenv("SNOW_SHOT_API_BASE_URL", " http://localhost:9876/dev/// ");
     require(SnowShotApiClient::configuredBaseUrl() == QStringLiteral("http://localhost:9876/dev"),
             "environment overrides build default and normalizes it");

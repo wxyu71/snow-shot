@@ -5,6 +5,7 @@
 #include <QWidget>
 
 class QLabel;
+class QPlainTextEdit;
 class QTextBrowser;
 class QUrl;
 namespace adqt::widgets {
@@ -35,6 +36,10 @@ class ScreenshotImageConversionView final : public QWidget {
     void retranslate();
     void showContextMenu(const QPoint& globalPosition);
     QTextBrowser* m_browser = nullptr;
+    QPlainTextEdit* m_rawEditor = nullptr;
+    adqt::widgets::AdButton* m_editButton = nullptr;
+    QString m_lastProvidedSource;
+    bool m_editMode = false;
     QWidget* m_status = nullptr;
     QLabel* m_statusText = nullptr;
     adqt::widgets::AdButton* m_retry = nullptr;
