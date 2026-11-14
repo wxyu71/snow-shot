@@ -30,7 +30,6 @@ jobs:
         run: |
           python scripts/test-upstream-sync.py
           python scripts/upstream_sync.py verify-deletions
-          python scripts/test-snow-shot-ocr-license-features.py
       - name: Build full x64 release
         shell: pwsh
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release

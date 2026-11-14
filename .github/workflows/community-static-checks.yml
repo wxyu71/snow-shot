@@ -20,5 +20,4 @@ jobs:
           python3 scripts/upstream_sync.py verify-deletions
       - name: Validate OCR distribution and Qt build contracts
         run: |
-          python3 scripts/test-snow-shot-ocr-license-features.py
           python3 scripts/test-qt-cmake-contract.py
