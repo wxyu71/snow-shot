@@ -9,7 +9,8 @@
     "snow_shot/include/snow_shot/presentation/components/accountpagewidget.h",
     "snow_shot/src/presentation/components/accountpagewidget.cpp",
     "snow_shot/tests/account_tests.cpp",
-    "snow_shot/tests/macos_account_secret_store_tests.mm"
+    "snow_shot/tests/macos_account_secret_store_tests.mm",
+    "snow_shot/src/presentation/components/icons/resources/credits-coin.svg"
   ],
   "protected_globs": [
     "CMakeLists.txt",
@@ -27,6 +28,15 @@
     "snow_shot/src/presentation/components/contentcardwidget.cpp",
     "snow_shot/src/presentation/settings/settingscatalog.cpp",
     "snow_shot/src/app/applicationcontroller.cpp",
-    "snow_shot/tests/settings_catalog_tests.cpp"
+    "snow_shot/tests/settings_catalog_tests.cpp",
+    "snow_shot/resources/icons.manifest.json",
+    "snow_shot/src/presentation/ocr/screenshotimageconversionview.cpp",
+    "snow_shot/include/snow_shot/presentation/screenshotimageconversionview.h",
+    "snow_shot/include/snow_shot/update/updateservice.h",
+    "snow_shot/rust/snow-shot-updater/src/github.rs",
+    "snow_shot/rust/snow-shot-updater/src/gitee.rs",
+    "snow_shot/i18n/settings/*.ts",
+    "snow_shot/i18n/core/*.ts",
+    "snow_shot/tests/baidu_paddleocr_client_tests.cpp"
   ]
 }

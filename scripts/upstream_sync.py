@@ -18,12 +18,12 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / ".github" / "upstream-protection.json"
 COMMERCIAL_PATH = re.compile(
     r"(?:^|[/_-])(account|membership|membercenter|billing|payment|purchase|topup|"
-    r"recharge|credits?|points?|paywall|subscription)(?:[/_.-]|$)", re.I
+    r"recharge|credits?|points?|paywall|subscription|login|signin|signup|register|checkout)(?:[/_.-]|$)", re.I
 )
 COMMERCIAL_CONTENT = re.compile(
     r"AccountSessionService|AccountPageWidget|account_secret|"
     r"insufficient_credits|account_required|purchase.credits|"
-    r"membership.payment|top.up|recharge|会员|充值|支付|积分", re.I
+    r"membership.payment|top.up|recharge|sign.in|sign.up|register|checkout|会员|充值|支付|积分", re.I
 )
 
 
