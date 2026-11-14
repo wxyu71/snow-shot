@@ -83,7 +83,7 @@ jobs:
         run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
       - name: Verify native installer manifests and SHA-256 files
         shell: pwsh
-        run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release
+        run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release --allow-build-intermediates
       - uses: actions/upload-artifact@v4
         if: success()
         with:
@@ -92,13 +92,35 @@ jobs:
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.exe
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.exe
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-*.exe.sha256
-            build/snow-shot-msvc-release/snow-shot-*-windows-x64-*.manifest.json
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.manifest.json
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.manifest.json
           if-no-files-found: error
 
-  # Only a tag on an already-reviewed main commit, after a verified native
-  # installer build, receives contents:write. Never publish directly from a PR.
+  # The separate PR contract workflow does not run for tag pushes. Re-run the
+  # actual Qt C++ client tests here so a release cannot bypass three-model tests.
+  verify-paddleocr-contract:
+    if: startsWith(github.ref, 'refs/tags/')
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Install Qt Core/GUI/Network
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends qt6-base-dev
+      - name: Compile actual PaddleOCR C++ client
+        run: |
+          cmake -S tests/standalone-paddleocr -B build/community-paddleocr-contract -DCMAKE_BUILD_TYPE=Release
+          cmake --build build/community-paddleocr-contract --parallel 4
+      - name: Run three-model contract and Markdown clipboard tests
+        run: ctest --test-dir build/community-paddleocr-contract --output-on-failure
+
+  # Only a tag on an already-reviewed main commit, after verified Windows and
+  # actual PaddleOCR contract tests, may obtain contents:write.
   publish-beta-release:
-    needs: build-full-installer
+    needs: [build-full-installer, verify-paddleocr-contract]
     if: startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:

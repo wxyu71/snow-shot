@@ -23,3 +23,4 @@ jobs:
           python3 scripts/test-qt-cmake-contract.py
           python3 scripts/paddleocr_live_e2e.py --selftest
           python3 scripts/test-community-branding.py
+          python3 scripts/community_release.py selftest

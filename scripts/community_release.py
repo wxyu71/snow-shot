@@ -35,13 +35,18 @@ def filenames(version: str) -> set[str]:
     }
 
 
-def verify_assets(directory: Path, version: str) -> None:
+def verify_assets(directory: Path, version: str, *, allow_build_intermediates: bool = False) -> None:
     expected = filenames(version)
-    # The build directory contains intermediate ZIPs; publish only this exact allowlist.
-    found = {p.name for p in directory.iterdir() if p.is_file()
-             and p.name.startswith(f"snow-shot-{version}-windows-")
-             and (p.name.endswith(".exe") or p.name.endswith(".exe.sha256")
-                  or p.name.endswith(".manifest.json"))}
+    actual = {p.name for p in directory.iterdir() if p.is_file()}
+    # Packaging also generates update/portable ZIPs and manifests in its build
+    # directory. The final upload, in contrast, must have *exactly* six files.
+    if allow_build_intermediates:
+        found = actual & expected
+        if any(p.startswith("snow-shot-mini-") or
+               p.startswith(f"snow-shot-{version}-windows-arm64-") for p in actual):
+            raise ValueError("Mini or ARM64 build artifacts are not allowed")
+    else:
+        found = actual
     if found != expected:
         raise ValueError(f"Release assets differ from the x64 Full allowlist: missing={sorted(expected-found)}, unexpected={sorted(found-expected)}")
     for variant in ("online", "offline"):
@@ -51,7 +56,8 @@ def verify_assets(directory: Path, version: str) -> None:
         manifest = json.loads((directory / f"{stem}.manifest.json").read_text(encoding="utf-8-sig"))
         if binary.stat().st_size <= 0:
             raise ValueError(f"Empty installer: {stem}")
-        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+        with binary.open("rb") as stream:
+            digest = hashlib.file_digest(stream, "sha256").hexdigest()
         if not re.fullmatch(r"[0-9a-fA-F]{64}\s+\*?" + re.escape(binary.name),
                             checksum.read_text(encoding="utf-8").strip()):
             raise ValueError(f"Malformed SHA-256 sidecar: {checksum.name}")
@@ -94,6 +100,16 @@ def selftest() -> None:
                 "Installer": {"Sha256": digest, "Path": binary.name},
             }))
         verify_assets(directory, version)
+        intermediate = directory / f"snow-shot-{version}-windows-x64-offline-update.manifest.json"
+        intermediate.write_text("{}")
+        try:
+            verify_assets(directory, version)
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Extra release attachment accepted")
+        verify_assets(directory, version, allow_build_intermediates=True)
+        intermediate.unlink()
         (directory / f"snow-shot-{version}-windows-x64-online.exe").write_bytes(b"tampered")
         try:
             verify_assets(directory, version)
@@ -126,6 +142,7 @@ def main() -> int:
     parser.add_argument("command", choices=["version", "validate-tag", "verify-assets", "selftest"])
     parser.add_argument("--tag", default="")
     parser.add_argument("--directory", type=Path)
+    parser.add_argument("--allow-build-intermediates", action="store_true")
     args = parser.parse_args()
     try:
         if args.command == "selftest":
@@ -137,7 +154,8 @@ def main() -> int:
         elif args.command == "verify-assets":
             if args.directory is None:
                 parser.error("--directory is required for verify-assets")
-            verify_assets(args.directory, source_version())
+            verify_assets(args.directory, source_version(),
+                          allow_build_intermediates=args.allow_build_intermediates)
     except (OSError, ValueError, AssertionError, KeyError) as error:
         print(f"Community release policy failed: {error}", file=sys.stderr)
         return 1

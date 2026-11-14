@@ -51,8 +51,8 @@ variant includes the packaged OCR runtime and its default local model.
 `.github/workflows/community-windows-x64.yml` validates the build and
 uploads both installers as artifacts **on successful completion**. Only a beta tag pushed from the reviewed `main` history (for example,
 `v1.5.8-beta.1_snow-shot`) triggers automatic publication to this fork's
-GitHub Releases **after** the Windows build, native packaging checks and
-SHA-256/manifest verification pass. PR and manual CI runs only upload private
+GitHub Releases **after** the Windows build, native packaging checks, the three-model
+C++ Qt contract tests and SHA-256/manifest verification pass. PR and manual CI runs only upload private
 workflow artifacts; they do not publish an installer. Releases contain only
 the x64 Full online/offline NSIS installers, checksums and manifests, never
 Mini, ARM64, macOS or portable builds.
