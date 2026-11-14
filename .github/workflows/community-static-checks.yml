@@ -21,3 +21,4 @@ jobs:
       - name: Validate OCR distribution and Qt build contracts
         run: |
           python3 scripts/test-qt-cmake-contract.py
+          python3 scripts/paddleocr_live_e2e.py --selftest
