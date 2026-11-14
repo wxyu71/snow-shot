@@ -17,3 +17,12 @@ target_link_libraries(paddleocr-api-contract PRIVATE
     Qt6::Core Qt6::Gui Qt6::Network)
 add_test(NAME paddleocr-api-contract COMMAND paddleocr-api-contract)
 set_tests_properties(paddleocr-api-contract PROPERTIES TIMEOUT 75)
+
+add_executable(community-markdown-clipboard-contract clipboard_contract.cpp)
+target_include_directories(community-markdown-clipboard-contract PRIVATE
+    "${SNOW_SHOT_REPO_ROOT}/snow_shot/include")
+target_link_libraries(community-markdown-clipboard-contract PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Network)
+add_test(NAME community-markdown-clipboard-contract
+         COMMAND community-markdown-clipboard-contract)
+set_tests_properties(community-markdown-clipboard-contract PROPERTIES TIMEOUT 15)

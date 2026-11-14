@@ -7,6 +7,7 @@ on:
       - snow_shot/include/snow_shot/network/baidupaddleocrclient.h
       - snow_shot/tests/baidu_paddleocr_client_tests.cpp
       - tests/standalone-paddleocr/**
+      - snow_shot/include/snow_shot/presentation/screenshotimageconversionclipboard.h
       - .github/workflows/community-paddleocr-contract.yml
   workflow_dispatch:
 
