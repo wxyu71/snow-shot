@@ -50,6 +50,7 @@
     "scripts/package-snow-shot.ps1",
     ".github/workflows/community-ocr-license-audit.yml",
     ".github/workflows/community-live-paddleocr.yml",
-    "snow_shot/tests/image_conversion_tests.cpp"
+    "snow_shot/tests/image_conversion_tests.cpp",
+    "scripts/test-community-branding.py"
   ]
 }
