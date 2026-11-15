@@ -12,7 +12,7 @@ PACKAGE = ROOT / "scripts/package-snow-shot.ps1"
 class CommunityNsisToolchainContract(unittest.TestCase):
     def test_windows_tooling_smoke_precedes_every_expensive_step(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("needs: [preflight, verify-paddleocr-contract]", workflow)
+        self.assertIn("needs: [changes, preflight, verify-paddleocr-contract]", workflow)
         markers = (
             "Bootstrap pinned NSIS 3.12 and run CPack smoke test",
             "Restore verified vcpkg binary archive cache",
@@ -28,7 +28,7 @@ class CommunityNsisToolchainContract(unittest.TestCase):
         self.assertIn("python3 scripts/test-community-nsis-toolchain.py", workflow)
         # Packaging success must still require complete installer artifact guards.
         self.assertIn("python scripts/community_release.py verify-assets", workflow)
-        self.assertIn("needs: [build-full-installer, verify-paddleocr-contract]", workflow)
+        self.assertIn("needs: [build-full-installer]", workflow)
 
     def test_nsis_installation_and_real_cpack_smoke_are_fail_closed(self):
         script = BOOTSTRAP.read_text(encoding="utf-8")
