@@ -64,7 +64,9 @@ class OfflineReleaseLicensePreflightTests(unittest.TestCase):
             "Package full Windows x64 NSIS installers only",
             "Verify native installer manifests and SHA-256 files",
         )
-        positions = [workflow.index(k) for k in keys]
+        missing = [marker for marker in keys if marker not in workflow]
+        self.assertEqual(missing, [], "Windows release gating steps disappeared: " + ", ".join(missing))
+        positions = [workflow.index(marker) for marker in keys]
         self.assertEqual(positions, sorted(positions))
         self.assertIn("run: ./scripts/preflight-community-release-licenses.ps1", workflow)
         self.assertIn("community-cargo-license-v2-x64-", workflow)

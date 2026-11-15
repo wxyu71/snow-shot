@@ -26,10 +26,16 @@ def packages(target, features):
 @unittest.skipUnless(shutil.which('cargo'), 'Cargo is required to inspect release dependencies')
 class OcrLicenseFeatures(unittest.TestCase):
     def test_pinned_windows_worker_omits_unused_convenience_notices(self):
+        # Release packaging and the early offline-license preflight now
+        # share this manifest/feature plan. Inspect the actual shared plan
+        # rather than the old inline hashtable that was removed.
         packaging = (ROOT / 'scripts/package-snow-shot.ps1').read_text()
+        self.assertIn('Get-SnowShotReleaseCargoLicensePlan', packaging)
+        self.assertIn('-CargoOptions $licensePlan.Options', packaging)
+        plan = (ROOT / 'scripts/snow-community-release-cargo-licenses.ps1').read_text()
         selection = re.search(
-            r"\$ocrCargoManifest\s*=\s*@\('--no-default-features',\s*'--features',\s*'([^']+)'\)",
-            packaging,
+            r"\$ocr\s*=\s*@\('--no-default-features',\s*'--features',\s*'([^']+)'\)",
+            plan,
         )
         self.assertIsNotNone(selection, 'Windows packaging must select the OCR notice features')
         selected = packages('x86_64-pc-windows-msvc', selection.group(1))
