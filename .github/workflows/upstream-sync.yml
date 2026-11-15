@@ -20,7 +20,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Fetch official upstream
+      - name: Fetch and classify official upstream
+        id: classify
         shell: bash
         run: |
           set -euo pipefail
@@ -28,37 +29,41 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/mg-chao/snow-shot.git
           git fetch --no-tags upstream main
-      - name: Test and classify the sync policy
-        id: classify
-        shell: bash
-        run: |
-          set -euo pipefail
           python3 scripts/test-upstream-sync.py
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/upstream_sync.py classify --upstream upstream/main --output "$RUNNER_TEMP/sync.json"
           echo "mode=$(jq -r .mode "$RUNNER_TEMP/sync.json")" >> "$GITHUB_OUTPUT"
-      - name: Merge documentation-only safe updates
-        if: steps.classify.outputs.mode == 'auto'
-        shell: bash
-        run: |
-          set -euo pipefail
-          git merge --no-ff upstream/main -m "chore(sync): integrate upstream main"
-          python3 scripts/upstream_sync.py verify-deletions
-          git push origin HEAD:main
-      - name: Update the real upstream review candidate
-        if: steps.classify.outputs.mode == 'review'
+
+      - name: Apply safe sync or update the review candidate
         env:
           GH_TOKEN: ${{ github.token }}
+          CLASSIFIED_MODE: ${{ steps.classify.outputs.mode }}
         shell: bash
         run: |
           set -euo pipefail
-          branch="automation/upstream-review"
           upstream_sha="$(jq -r .upstream_commit "$RUNNER_TEMP/sync.json")"
-          reasons="$(jq -r '.reasons[] | "- " + .' "$RUNNER_TEMP/sync.json")"
-          git switch -C "$branch" origin/main
+          reasons="$(jq -r '.reasons[]? | "- " + .' "$RUNNER_TEMP/sync.json")"
 
+          if [[ "$CLASSIFIED_MODE" == "auto" ]]; then
+            if git merge --no-commit --no-ff upstream/main; then
+              if python3 scripts/upstream_sync.py verify-deletions; then
+                git commit -m "chore(sync): integrate upstream main"
+                git push origin HEAD:main
+                exit 0
+              fi
+              git reset --hard origin/main
+            else
+              git merge --abort
+            fi
+            reasons="${reasons}
+- Automatic documentation merge could not be verified; inspect the real merge candidate."
+          fi
+
+          branch="automation/upstream-review"
+          git switch -C "$branch" origin/main
           if git merge --no-ff --no-edit upstream/main; then
             candidate="The branch contains the actual upstream merge candidate. Review it and let the normal PR CI validate the integrated tree."
+            rm -f .github/upstream-review-pending.md
           else
             git merge --abort
             candidate="The upstream merge has conflicts. This branch contains only the conflict report; resolve the upstream merge manually before merging the PR."
