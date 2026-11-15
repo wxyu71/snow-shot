@@ -1,4 +1,4 @@
-name: Protected upstream sync
+name: Upstream sync
 
 on:
   schedule:
@@ -10,76 +10,80 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: protected-upstream-sync
+  group: upstream-sync
   cancel-in-progress: false
 
 jobs:
   sync:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-          persist-credentials: true
-      - name: Configure Git and fetch official upstream
+      - name: Fetch official upstream
+        shell: bash
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git remote add upstream https://github.com/mg-chao/snow-shot.git
           git fetch --no-tags upstream main
-      - name: Run safety policy regression tests
-        run: |
-          python3 scripts/test-upstream-sync.py
-          python3 scripts/upstream_sync.py verify-deletions
-      - name: Classify upstream changes
+      - name: Test and classify the sync policy
         id: classify
         shell: bash
         run: |
+          set -euo pipefail
+          python3 scripts/test-upstream-sync.py
+          python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/upstream_sync.py classify --upstream upstream/main --output "$RUNNER_TEMP/sync.json"
           echo "mode=$(jq -r .mode "$RUNNER_TEMP/sync.json")" >> "$GITHUB_OUTPUT"
-      - name: Merge verified safe updates or mark conflicts for review
+      - name: Merge documentation-only safe updates
         if: steps.classify.outputs.mode == 'auto'
-        id: safe_merge
         shell: bash
         run: |
           set -euo pipefail
-          if git merge --no-commit --no-ff upstream/main; then
-            if python3 scripts/test-upstream-sync.py && python3 scripts/upstream_sync.py verify-deletions; then
-              git commit -m "chore(sync): safely integrate upstream main"
-              git push origin HEAD:main
-              echo "mode=merged" >> "$GITHUB_OUTPUT"
-            else
-              git merge --abort
-              echo "mode=review" >> "$GITHUB_OUTPUT"
-            fi
+          git merge --no-ff upstream/main -m "chore(sync): integrate upstream main"
+          python3 scripts/upstream_sync.py verify-deletions
+          git push origin HEAD:main
+      - name: Update the real upstream review candidate
+        if: steps.classify.outputs.mode == 'review'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          branch="automation/upstream-review"
+          upstream_sha="$(jq -r .upstream_commit "$RUNNER_TEMP/sync.json")"
+          reasons="$(jq -r '.reasons[] | "- " + .' "$RUNNER_TEMP/sync.json")"
+          git switch -C "$branch" origin/main
+
+          if git merge --no-ff --no-edit upstream/main; then
+            candidate="The branch contains the actual upstream merge candidate. Review it and let the normal PR CI validate the integrated tree."
           else
             git merge --abort
-            echo "mode=review" >> "$GITHUB_OUTPUT"
+            candidate="The upstream merge has conflicts. This branch contains only the conflict report; resolve the upstream merge manually before merging the PR."
+            cat > .github/upstream-review-pending.md <<EOF
+# Upstream synchronization requires conflict resolution
+
+Upstream commit: `$upstream_sha`
+
+$reasons
+EOF
+            git add .github/upstream-review-pending.md
+            git commit -m "chore(sync): report upstream merge conflict"
           fi
-      - name: Open human-review PR without modifying protected sources
-        if: steps.classify.outputs.mode == 'review' || steps.safe_merge.outputs.mode == 'review'
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          branch="automation/upstream-review-${{ github.run_id }}"
-          git switch -c "$branch"
-          python3 - <<'PY'
-          import json, pathlib
-          report = json.loads(pathlib.Path(__import__("os").environ["RUNNER_TEMP"], "sync.json").read_text())
-          path = pathlib.Path(".github/upstream-review-pending.md")
-          path.write_text(
-              "# Upstream synchronization requires review\n\n"
-              "Upstream commit: `" + report["upstream_commit"] + "`\n\n"
-              "The fork's protected paths or intentionally deleted commercial files may be "
-              "affected, a conflict occurred, or a safety check failed. **No upstream "
-              "source files were merged.** A maintainer must inspect the comparison "
-              "and integrate changes without restoring commercial code.\n\n"
-              "Reasons:\n" + "\n".join("- " + r for r in report["reasons"]) + "\n",
-              encoding="utf-8")
-          PY
-          git add .github/upstream-review-pending.md
-          git commit -m "chore(sync): flag upstream changes for manual review"
-          git push origin "$branch"
-          gh pr create --draft --base main --head "$branch"             --title "review(sync): inspect upstream ${{ github.run_id }} before integration"             --body "Protected upstream sync detected a protected change or a merge/test conflict. Review the upstream commit in .github/upstream-review-pending.md. No deleted account files were restored."
+
+          git push --force origin "$branch"
+          body="Upstream commit: `$upstream_sha`
+
+$candidate
+
+Reasons reported by the fork policy:
+$reasons"
+
+          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main             --state open --json number --jq '.[0].number // empty')"
+          if [[ -n "$number" ]]; then
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY"               --title "review(sync): integrate upstream main" --body "$body"
+          else
+            gh pr create --draft --repo "$GITHUB_REPOSITORY" --base main --head "$branch"               --title "review(sync): integrate upstream main" --body "$body"
+          fi

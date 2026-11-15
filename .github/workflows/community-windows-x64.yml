@@ -1,27 +1,26 @@
-name: Community Windows x64 installer and beta release
+name: Community Windows x64
 
 on:
+  pull_request:
   workflow_dispatch:
     inputs:
       publish_prerelease:
-        description: Build main, then create the version tag and publish a GitHub prerelease
+        description: Publish a prerelease after tests and a clean production build
         required: true
         default: false
         type: boolean
-  pull_request:
 
-# PR builds never receive publication credentials.
 permissions:
   contents: read
 
 concurrency:
   group: community-windows-x64-${{ github.ref }}
-  # Supersede outdated PR builds; manual clean/release builds are never interrupted.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  changes:
-    runs-on: ubuntu-latest
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
     outputs:
       native: ${{ steps.classify.outputs.native }}
     steps:
@@ -29,72 +28,55 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Classify whether this ref needs the native Windows gate
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Classify change
         id: classify
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" == "pull_request" ]]; then
-            native=false
-            while IFS= read -r -d '' path; do
-              case "$path" in
-                *.md|*.markdown|*.rst|docs/*) ;;
-                *) native=true ;;
-              esac
-            done < <(git diff --name-only -z "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")
-            echo "native=$native" >> "$GITHUB_OUTPUT"
-          else
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "native=true" >> "$GITHUB_OUTPUT"
+            exit 0
           fi
-
-  # Fast repository checks are the single PR preflight; the former standalone
-  # safety and PaddleOCR workflows are folded into this workflow to avoid duplicates.
-  preflight:
-    runs-on: ubuntu-latest
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-          persist-credentials: false
-      - name: Validate repository safety, Rust and C++ API contracts
+          native=false
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              *.md|*.markdown|*.rst|docs/*) ;;
+              *) native=true ;;
+            esac
+          done < <(git diff --name-only -z "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+      - name: Run repository policy and helper tests
         shell: bash
         run: |
           set -euo pipefail
+          git diff --check
           python3 scripts/test-upstream-sync.py
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
-          python3 scripts/test-community-branding.py
           python3 scripts/paddleocr_live_e2e.py --selftest
           python3 scripts/community_release.py selftest
-          python3 scripts/test-community-rust-compat.py
-          python3 scripts/test-community-cpp-api-contract.py
-          python3 scripts/test-community-nsis-toolchain.py
-          python3 scripts/test-community-package-modes.py
-          python3 scripts/test-community-ocr-ui-contract.py
-          python3 scripts/test-community-cargo-license-preflight.py
-      - name: Validate manual prerelease target
+      - name: Validate prerelease source
         if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
         shell: bash
         run: |
           set -euo pipefail
-          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
-            echo "Prereleases must be started from the main branch." >&2
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "Prereleases must be started from main." >&2
             exit 1
-          fi
+          }
           git fetch --no-tags origin main
-          main_sha="$(git rev-parse refs/remotes/origin/main)"
-          if [[ "$GITHUB_SHA" != "$main_sha" ]]; then
-            echo "Prerelease source must be the current origin/main HEAD." >&2
+          [[ "$GITHUB_SHA" == "$(git rev-parse refs/remotes/origin/main)" ]] || {
+            echo "Prerelease source is not current origin/main." >&2
             exit 1
-          fi
-          tag="$(python3 scripts/community_release.py tag)"
-          python3 scripts/community_release.py validate-tag --tag "$tag"
+          }
+          python3 scripts/community_release.py validate-tag --tag "$(python3 scripts/community_release.py tag)"
 
-  build-full-installer:
-    # Failure of either fast gate skips the costly native build, not its tests.
-    needs: [changes, preflight, verify-paddleocr-contract]
-    if: needs.changes.outputs.native == 'true' && needs.preflight.result == 'success' && needs.verify-paddleocr-contract.result == 'success'
+  windows:
+    needs: [preflight]
+    if: needs.preflight.outputs.native == 'true'
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     steps:
@@ -103,115 +85,83 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
-      # Freeze native hashes before CMake/Cargo create generated files.
-      - name: Freeze native cache key before build-side file generation
-        if: github.event_name == 'pull_request'
-        id: native-build-key
-        shell: pwsh
-        env:
-          NATIVE_TOOLCHAIN_HASH: ${{ hashFiles('scripts/build-toolchain.json', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
-          NATIVE_SOURCES_HASH: ${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg*.json', 'cmake/**', 'snow_shot/**', 'snow-crates/**', 'snow-draw-engine-gpui/**', 'snow_draw_engine_qt/**', 'snow-image-rs/**', 'snow_rust_ffi/**', 'ant_design_qt/**', 'scripts/build.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch') }}
-        run: |
-          foreach ($value in @($env:NATIVE_TOOLCHAIN_HASH, $env:NATIVE_SOURCES_HASH)) {
-            if ($value -cnotmatch '^[a-f0-9]{64}$') {
-              throw 'Native input hash missing before compilation.'
-            }
-          }
-          $prefix = "community-windows-native-x64-v2-$($env:NATIVE_TOOLCHAIN_HASH)-"
-          "prefix=$prefix" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-          "key=$prefix$($env:NATIVE_SOURCES_HASH)" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-      # #30 already compiled successfully but failed at package-time due to a
-      # mismatched Mini=ON cache expectation. Execute real PowerShell mode
-      # expressions with synthetic cases before expensive dependency bootstrap.
-      - name: Run actual FullOnly/Store/Mini packaging mode tests
-        shell: pwsh
-        run: ./scripts/test-community-package-mode.ps1
-      - name: Validate pinned OCR nightly toolchain without stale Matches
-        shell: pwsh
-        run: ./scripts/test-community-ocr-toolchain-pin.ps1
-      # Fail early if packaging tools are missing or broken. #29 fully built
-      # snow_shot.exe but failed at the very end because makensis was absent.
-      - name: Bootstrap pinned NSIS 3.12 and run CPack smoke test
+
+      - name: Bootstrap NSIS and smoke-test CPack
         shell: pwsh
         run: ./scripts/bootstrap-community-nsis.ps1
-      # The previous build spent 21 minutes rebuilding 33 pinned vcpkg
-      # packages even though the audited Qt kit was already cached.
-      - name: Restore verified vcpkg binary archive cache
+
+      - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v4
         with:
           path: .tools/vcpkg-binary-cache
           key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
-      - name: Enable vcpkg archive reuse with pinned manifests
+      - name: Enable vcpkg binary cache
         shell: pwsh
         run: |
           $cache = Join-Path $PWD '.tools/vcpkg-binary-cache'
           New-Item -ItemType Directory -Force -Path $cache | Out-Null
           "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-      - name: Restore cached Cargo registry and git sources
+
+      - name: Restore Cargo sources
         id: cargo-cache
         uses: actions/cache/restore@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-license-v3-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
-          # Old binary-only Cargo cache is missing metadata-only crates
-          # (Windows #31: anes 0.1.6). Reuse what is already present,
-          # then fetch and verify every pinned workspace before resaving.
-          restore-keys: |
-            community-cargo-license-v2-x64-
-            community-cargo-x64-
-      - name: Install pinned vcpkg, Rust and OCR build dependencies
+          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+
+      - name: Install pinned build dependencies
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
-      # Save after successful dependency installation, independently of whether
-      # later application compilation succeeds. Cache errors are non-blocking.
-      - name: Save vcpkg binary archives for subsequent builds
+
+      - name: Save vcpkg binary cache
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: .tools/vcpkg-binary-cache
           key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
-      - name: Restore previously built static Qt cache
+
+      - name: Restore static Qt
         id: qt-cache
         uses: actions/cache/restore@v4
         with:
           path: .tools/qt/6.12.0/x64-static-release
           key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
-      - name: Build or validate audited Qt 6.12.0 Release kit
+      - name: Build or validate static Qt
         shell: pwsh
         run: |
           $prefix = Join-Path $PWD '.tools/qt/6.12.0/x64-static-release'
           ./scripts/build-static-qt.ps1 -InstallPrefix $prefix -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
-          if ($LASTEXITCODE -ne 0) { throw 'Audited static Qt build failed' }
+          if ($LASTEXITCODE -ne 0) { throw 'Static Qt build failed' }
           $qt6Dir = Join-Path $prefix 'lib/cmake/Qt6'
-          if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) {
-            throw 'Validated Qt6Config.cmake missing'
-          }
+          if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) { throw 'Qt6Config.cmake missing' }
           "SNOW_QT_STATIC_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           "Qt6_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-      # Cache the validated kit *before* the full C++/Rust compilation. GitHub
-      # would otherwise skip its post-job cache save when a later build fails.
-      - name: Save audited static Qt kit for future Windows builds
+      - name: Save static Qt
         if: steps.qt-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: .tools/qt/6.12.0/x64-static-release
           key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
-      # Cargo metadata --filter-platform still needs sources outside the
-      # normal compiled dependency closure. #31 built all native binaries but
-      # failed because anes 0.1.6 was not present under cargo --offline.
-      # Fetch ALL locked workspace targets, validate exact offline metadata
-      # and tree commands, then execute the real license collector EARLY.
-      - name: Prefetch full locked Rust license graph and collect notices offline
-        id: release-license-preflight
+
+      - name: Configure focused native tests
+        shell: pwsh
+        run: cmake --preset snow-shot-msvc-test
+      - name: Build focused native tests
+        shell: pwsh
+        run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
+      - name: Run focused native tests
+        shell: pwsh
+        run: ctest --test-dir build/snow-shot-msvc-test -C Release --output-on-failure -R '^(snow-shot-paddleocr-client-tests|snow-shot-community-cloud-ocr-tests|snow-shot-image-conversion-clipboard-tests|snow-shot-image-conversion-storage-tests|snow-shot-image-conversion-toolbar-tests|snow-shot-settings-catalog-tests|snow-shot-community-cloud-ocr-settings-tests|snow-shot-about-page-tests)$'
+
+      - name: Verify production license graph
         shell: pwsh
         run: ./scripts/preflight-community-release-licenses.ps1
-      - name: Save complete Cargo sources after release license preflight
-        id: cargo-license-cache-save
+      - name: Save complete Cargo sources
         if: steps.cargo-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@v4
@@ -219,128 +169,49 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-license-v3-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
-      # Cache exact native CMake/MSVC/Rust outputs only for PR builds, never
-      # consume a PR-built binary for a reviewed tag release. The native build
-      # command still runs after restoration to verify all inputs and targets.
-      # Packaging-only script changes intentionally do not alter this key.
-      - name: Restore cached native CMake and Rust build outputs
-        if: github.event_name == 'pull_request'
-        id: native-build-cache
-        uses: actions/cache/restore@v4
-        with:
-          path: build/snow-shot-msvc-release
-          key: ${{ steps.native-build-key.outputs.key }}
-          restore-keys: |
-            ${{ steps.native-build-key.outputs.prefix }}
-      # Check real CPackConfig and FullOnly settings before the expensive build.
-      - name: Configure production Windows release without compiling
+          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+
+      - name: Build production Windows x64
         shell: pwsh
-        run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap -ConfigureOnly
-      - name: Check actual CPack and FullOnly release configuration
-        shell: pwsh
-        run: ./scripts/assert-community-release-config.ps1 -BuildDirectory build/snow-shot-msvc-release -ExpectedMini OFF
-      - name: Build full Windows x64 (Mini disabled in release preset)
-        shell: pwsh
-        # bootstrap.ps1 already installed and validated pinned dependencies.
-        # Avoid a second vcpkg/rustup/cargo initialization pass.
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
-      - name: Save Cargo sources even when native compilation reports errors
-        if: ${{ !cancelled() && steps.release-license-preflight.outcome == 'success' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.cargo-license-cache-save.outcome != 'success' }}
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-          key: community-cargo-license-v3-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
-      - name: Confirm no Mini build was configured
-        shell: pwsh
-        run: |
-          $cache = 'build/snow-shot-msvc-release/CMakeCache.txt'
-          if (-not (Select-String -LiteralPath $cache -Pattern '^SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=OFF$' -Quiet)) {
-            throw 'Snow Shot Mini must never be compiled for this community beta'
-          }
-      # Save a compilation-success checkpoint before risky packaging: the
-      # same PR can reuse CMakeCache, MSVC objects and Rust outputs after a
-      # packaging-only fix instead of recompiling for 90 minutes.
-      - name: Save successful native build before packaging
-        if: github.event_name == 'pull_request' && steps.native-build-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
-        with:
-          path: build/snow-shot-msvc-release
-          key: ${{ steps.native-build-key.outputs.key }}
-      # A failed packaging step must not erase evidence that compilation did
-      # succeed. This EXE is diagnostic, NOT a distributable installer.
-      - name: Preserve compiled Full EXE after native build
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v4
-        with:
-          name: community-x64-compiled-exe-${{ github.sha }}
-          path: build/snow-shot-msvc-release/snow_shot/Release/snow_shot.exe
-          retention-days: 7
-          compression-level: 0
-          if-no-files-found: error
-      - name: Package full Windows x64 NSIS installers only
+      - name: Package production installers
         shell: pwsh
         run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
-      - name: Verify native installer manifests and SHA-256 files
+      - name: Verify installer assets
         shell: pwsh
         run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release --allow-build-intermediates
-      - uses: actions/upload-artifact@v4
-        if: success()
+
+      - name: Upload release candidates
+        uses: actions/upload-artifact@v4
         with:
           name: community-windows-x64-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
           path: |
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.exe
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.exe
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-*.exe.sha256
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.manifest.json
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.manifest.json
-          if-no-files-found: error
 
-  # Run the actual C++/Qt contract tests on PRs and tags, in parallel with
-  # the fast Python preflight and before Windows dependency installation.
-  verify-paddleocr-contract:
-    needs: [changes]
-    if: needs.changes.outputs.native == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Install Qt Core/GUI/Network
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends qt6-base-dev
-      - name: Compile actual PaddleOCR C++ client
-        run: |
-          cmake -S tests/standalone-paddleocr -B build/community-paddleocr-contract -DCMAKE_BUILD_TYPE=Release
-          cmake --build build/community-paddleocr-contract --parallel 4
-      - name: Run three-model contract and Markdown clipboard tests
-        run: ctest --test-dir build/community-paddleocr-contract --output-on-failure
-
-  # A prerelease is an explicit manual action from current main. Build and verify
-  # everything before creating the version tag, then assemble a draft release and
-  # publish it only after all six assets are present.
-  publish-beta-release:
-    needs: [build-full-installer]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true && needs.build-full-installer.result == 'success'
-    runs-on: ubuntu-latest
+  publish-prerelease:
+    needs: [windows]
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true && needs.windows.result == 'success'
+    runs-on: ubuntu-24.04
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
-          fetch-depth: 0
           persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
       - uses: actions/download-artifact@v4
         with:
           name: community-windows-x64-${{ github.sha }}
           path: dist
-      - name: Verify release inputs and render versioned notes
+      - name: Verify release inputs
         id: release
         shell: bash
         run: |
@@ -352,23 +223,7 @@ jobs:
           python3 scripts/community_release.py render-notes --output release-notes.md
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
-      - name: Create tag after the verified build
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_TAG: ${{ steps.release.outputs.tag }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          existing_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha' 2>/dev/null || true)"
-          if [[ -n "$existing_sha" && "$existing_sha" != "$GITHUB_SHA" ]]; then
-            echo "Tag $RELEASE_TAG already points to $existing_sha, not $GITHUB_SHA." >&2
-            exit 1
-          fi
-          if [[ -z "$existing_sha" ]]; then
-            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
-              -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
-          fi
-      - name: Assemble and publish verified prerelease
+      - name: Stage verified draft release
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.release.outputs.tag }}
@@ -376,55 +231,34 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          assets=(
-            "dist/snow-shot-$RELEASE_VERSION-windows-x64-online.exe"
-            "dist/snow-shot-$RELEASE_VERSION-windows-x64-online.exe.sha256"
-            "dist/snow-shot-$RELEASE_VERSION-windows-x64-online.manifest.json"
-            "dist/snow-shot-$RELEASE_VERSION-windows-x64-offline.exe"
-            "dist/snow-shot-$RELEASE_VERSION-windows-x64-offline.exe.sha256"
-            "dist/snow-shot-$RELEASE_VERSION-windows-x64-offline.manifest.json"
-          )
-          expected="$(printf '%s\n' "${assets[@]##*/}" | sort)"
-
-          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
-            if [[ "$draft" != "true" ]]; then
-              actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-                --json assets --jq '.assets[].name' | sort)"
-              if [[ "$actual" != "$expected" ]]; then
-                echo "Published prerelease assets do not match the release allowlist." >&2
-                diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
-                exit 1
-              fi
-              prerelease="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-                --json isPrerelease --jq '.isPrerelease')"
-              [[ "$prerelease" == "true" ]]
-              exit 0
-            fi
-          else
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-              --verify-tag --draft --prerelease --latest=false \
-              --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" \
-              --notes-file release-notes.md
-          fi
-
-          gh release upload "$RELEASE_TAG" "${assets[@]}" \
-            --repo "$GITHUB_REPOSITORY" --clobber
-
-          actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --json assets --jq '.assets[].name' | sort)"
-          if [[ "$actual" != "$expected" ]]; then
-            echo "Draft prerelease assets do not match the release allowlist." >&2
-            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+          ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -n "$ref" && "$ref" != "$GITHUB_SHA" ]]; then
+            echo "Tag $RELEASE_TAG already points to $ref." >&2
             exit 1
           fi
+          if [[ -z "$ref" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
+          fi
 
-          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
-            --draft=false --prerelease --latest=false \
-            --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" \
-            --notes-file release-notes.md
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            [[ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" == "true" ]] || {
+              echo "Release $RELEASE_TAG is already published; refusing to replace it." >&2
+              exit 1
+            }
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md
+          fi
 
-          draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
-          prerelease="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease')"
-          [[ "$draft" == "false" && "$prerelease" == "true" ]]
-
+          gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Verify GitHub-hosted assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir verified
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verified
+          python3 scripts/community_release.py verify-assets --directory verified
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md

@@ -29,6 +29,7 @@
 #include "snow_shot/presentation/components/shortcutkeyrow.h"
 
 #include <QApplication>
+#include <QComboBox>
 #include <QDir>
 #include <QEvent>
 #include <QFontDatabase>
@@ -44,6 +45,7 @@
 #include <QPixmap>
 #include <QPalette>
 #include <QPointer>
+#include <QPushButton>
 #include <QScrollBar>
 #include <QSet>
 #include <QTemporaryDir>
@@ -501,6 +503,40 @@ void toolbarReorderingKeepsPageStable(const settings::SettingsRegistry& registry
         toolbarTopologyKeepsPageStable(fieldId, session, fixture.kind, page, *row, *scroll,
                                        diagnosticOnly);
     }
+}
+
+void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
+                               settings::SettingsRuntimeSession& session) {
+    SettingsPageWidget page(registry, QStringLiteral("text-recognition-translation"), session);
+    page.resize(880, 760);
+    page.show();
+    page.reveal({page.pageId(), QStringLiteral("text-recognition-settings"),
+                 QStringLiteral("text-recognition.cloud-ocr")});
+    drainEvents();
+
+    auto* widget = page.findChild<QWidget*>(QStringLiteral("settings-cloud-ocr"));
+    auto* endpoint = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrApiUrl"));
+    auto* token = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrAccessToken"));
+    auto* model = page.findChild<QComboBox*>(QStringLiteral("paddleOcrModel"));
+    auto* save = page.findChild<QPushButton*>(QStringLiteral("paddleOcrSave"));
+    auto* test = page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
+    require(widget && endpoint && token && model && save && test,
+            "Cloud OCR settings materialize their real custom controls");
+    require(token->echoMode() == QLineEdit::Password,
+            "Cloud OCR token uses a password editor");
+    require(model->count() == 3 &&
+                model->findText(QStringLiteral("PaddleOCR-VL-1.6")) >= 0 &&
+                model->findText(QStringLiteral("PP-StructureV3")) >= 0 &&
+                model->findText(QStringLiteral("PP-OCRv6")) >= 0,
+            "Cloud OCR settings expose all supported models");
+
+    endpoint->setText(QStringLiteral("not-a-url"));
+    token->setText(QStringLiteral("token"));
+    save->click();
+    drainEvents();
+    auto* status = page.findChild<QLabel*>(QStringLiteral("paddleOcrConnectionStatus"));
+    require(status && status->text().contains(QStringLiteral("valid HTTPS URL")),
+            "invalid Cloud OCR settings are rejected by the real widget");
 }
 
 void settingsRowsHaveOnlySectionSpacing(const settings::SettingsRegistry& registry,
@@ -1953,6 +1989,11 @@ int main(int argc, char** argv) {
                 "appearance reset must preserve the shake preference");
         require(session.reset(Reset::PinToScreenBehavior) && preferences.shakeWindowToHideOthers(),
                 "interaction reset must enable shaking again");
+        storage.shutdown();
+        return 0;
+    }
+    if (application.arguments().contains(QStringLiteral("--community-cloud-ocr-only"))) {
+        communityCloudOcrSettings(registry, session);
         storage.shutdown();
         return 0;
     }

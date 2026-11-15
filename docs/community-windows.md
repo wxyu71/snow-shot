@@ -110,148 +110,52 @@ paid-service reference, updater/channel behavior and bundled translations is
 required before treating the fork as a completely de-commercialized release.
 See [sync policy](community-upstream-sync.md).
 
-## Reproducible CI toolchain provisioning
+## CI and prerelease pipeline
 
-The Windows x64 release preset explicitly disables Snow Shot Mini and the
-upstream Snow Shot account API base URL. `package-snow-shot.ps1 -FullOnly`
-skips Mini packaging; legacy Homebrew, WinGet and Scoop publication workflows
-are not retained in the community fork.
+The Community fork follows the repository's native test design instead of maintaining a second
+layer of source-text contract tests. New behavior is tested in the existing C++/Rust test targets
+and executed through CMake/CTest. Compiler, CMake, Cargo and NSIS failures are validated by the
+real tools that produce the application.
 
-The hosted Windows runner does not preinstall the repository's audited
-Qt 6.12.0 static Release kit. The beta pipeline calls
-`bootstrap.ps1 -SkipQtValidation -VcpkgVariants Static` to install pinned
-vcpkg/Rust prerequisites, then `build-static-qt.ps1` to build and validate
-Qt in `.tools/qt/6.12.0/x64-static-release` before the normal build and
-installer steps. A keyed Actions cache can reuse the verified Qt kit.
-Qt compilation is slow on fresh runners, and CI failure remains a release blocker.
+Every pull request enters one workflow:
 
-The native Rust OCR license dependency audit is an independent CI job. It
-installs nightly-2026-09-08, fetches the exact locked dependency trees for
-Windows x64 and macOS x64/arm64, then runs the original offline audit.
-Neither audit should be marked green merely because build dependencies were
-missing.
+1. A small Ubuntu preflight runs the upstream-sync policy tests, deletion guard, the existing
+   Qt/CMake contract, PaddleOCR fixture self-test, and release helper self-test. Documentation-only
+   changes stop here.
+2. Native changes use the pinned Windows toolchain and the cached vcpkg/Cargo/static-Qt dependency
+   layers.
+3. A dedicated `snow-shot-msvc-test` build enables the repository's real tests without enabling
+   packaging or release optimization. CI builds only the focused targets needed by Community
+   changes and runs their CTest entries, including the production PaddleOCR client, Markdown
+   history/edit/retry flow, settings catalog/widget, toolbar/storage integration, and About page.
+4. A separate `snow-shot-msvc-release` build keeps tests disabled and produces the actual
+   production executable. The build tree is not restored from another PR.
+5. The real release license collector, NSIS package command, installer manifests and SHA-256
+   verification must pass before the workflow uploads the six release candidates.
 
-The NSIS CompanyName metadata identifies **Snow Shot Community** rather
-than the upstream vendor; the executable, registry key and installation
-directory stay identical for upgrade compatibility. Original license and
-copyright attributions remain in the bundled notices.
+The pipeline caches dependencies and the audited static Qt kit, not CMake/MSVC application build
+trees. This avoids stale compiled state while retaining the expensive dependency work.
 
-## Windows CI Rust compatibility and Qt caching
+The separate source-grep `test-community-*` scripts, standalone PaddleOCR CMake harness, and
+duplicate OCR license workflow are intentionally removed. The production Cargo license preflight
+already resolves the locked Windows release graph and runs the same collector used by packaging.
 
-Windows CI run #25 passed static Qt 6.12.0 but failed when the pinned Rust
-nightly treated deprecated `AtomicU32::fetch_update` in the screenshot
-capture pause/revision state as an error (`-D warnings`). The implementation
-uses `AtomicU32::try_update` with identical AcqRel/Acquire orderings and the
-same conditional revision transition. `scripts/test-community-rust-compat.py`
-checks the source contract, and changes to `snow-crates/**` now trigger the
-Windows installer workflow. The release keeps warnings-as-errors enabled.
+### Prerelease publication
 
-The validated Qt kit is saved immediately after the Qt build, rather than only
-at successful job completion; a subsequent unrelated application build failure
-no longer wastes the already successful Qt compilation. Cache upload failures
-cannot bypass native release tests or turn a failed build green.
+Start **Community Windows x64 installer and beta release** manually from current `main` with
+`publish_prerelease=true`. The workflow runs the same focused Windows tests and a clean production
+build first. Only after the six local release assets pass verification does it create the version
+tag, create or reuse a draft release, upload the assets, download them again and run the same asset
+verification on the GitHub-hosted copies. The draft is then published as a prerelease.
 
-## Windows CI #26 follow-up
+A failed build creates no release tag. If publication fails after a draft was created, rerun the
+same workflow while the release is still a draft; an already-published release is never silently
+overwritten.
 
-Windows CI run #26 got beyond the screenshot capture deprecation fix from
-#25, but the same pinned Rust nightly rejected two further deprecated atomic
-calls at `snow-crates/crates/snow-audio-recorder/src/control.rs:149,248`.
-They now use `AtomicU64::try_update`, retaining the same conditional
-compare-and-swap updates and `Ordering::AcqRel`/`Ordering::Acquire` memory
-orderings. `scripts/test-community-rust-compat.py` scans **all git-tracked
-Rust sources** before the expensive Qt and Windows builds for new uses of
-the deprecated method. This preflight does not replace actual native CI.
+### Upstream synchronization
 
-## Rust atomic compatibility preflight coverage
-
-The new repository-wide test caught five more pre-existing deprecated calls
-before Windows could reach them: `snow-recording-export/src/gpu.rs`,
-`snow-ui-selector/src/windows/msaa.rs`, `snow-draw-engine-gpui/src/gpu_wake.rs`,
-`snow-draw-engine-gpui/src/smart_erase.rs`, and
-`snow-image-rs/src/animation.rs`. They now use `try_update` with their
-original memory orderings, closures and error handling. Windows PR builds
-are triggered by changes in all tracked Rust workspace source trees.
-
-## Failure triage and fast-to-slow CI
-
-See [the CI triage ledger](community-ci-triage.md) for the first real errors
-behind Windows runs #21, #25, #26, #27 and #28. The latest independent
-failure in #28 is a C++ translation listener for the removed account identity
-signal. The listener has been removed and a full-tree C++ API source contract
-now runs in the Linux fast preflight.
-
-The Windows workflow is now the single Community PR gate for fast policy checks,
-the real C++ Qt PaddleOCR contract, and the conditional native Windows build.
-Every PR enters the workflow; documentation-only changes stop after the fast
-classification/preflight, while any non-documentation change reaches the native
-gate. This avoids brittle build-input path allowlists and removes the duplicate
-standalone safety/PaddleOCR workflows. The Windows build waits for **both** the
-fast Python preflight and the real C++ Qt PaddleOCR contract before provisioning
-vcpkg and compiling. It reuses pinned vcpkg binary archives and Cargo sources,
-retains the audited static Qt cache, and avoids a duplicate
-`build.ps1`-invoked bootstrap. Native compilation and installer verification cannot be skipped by a cache.
-Prerelease publication is an explicit manual mode and never consumes the PR-only native build cache.
-
-## Early NSIS packaging-toolchain check
-
-Windows run #29 completed the native x64 Full application and staged verified
-local OCR assets, but the installer step failed because the hosted runner did
-not include `makensis`. The pinned `scripts/bootstrap-community-nsis.ps1`
-now installs NSIS 3.12.0 with Chocolatey, verifies the installed compiler and
-runs an actual minimal CPack NSIS packaging smoke test **before** the costly
-vcpkg/Rust/C++ initialization. `scripts/test-community-nsis-toolchain.py`
-checks this ordering in the Linux fast preflight. See
-[CI triage](community-ci-triage.md) for evidence. Native end-to-end
-installation, offline payload and release checksum checks remain mandatory.
-
-## FullOnly Mini policy and native compilation checkpoints
-
-Windows run #30 again linked the complete Full executable, but the
-packaging script (rather than CMake) incorrectly demanded
-`SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=ON`. Community x64 Full must
-always have Mini=OFF. The packaging code now uses a shared
-`$miniEnabled` decision for both CMake cache enforcement and optional
-native build targets; `-FullOnly` suppresses Mini, while legacy
-Full+Mini standalone packaging remains available outside the community
-release. Python and actual early Windows PowerShell tests validate all
-four Store/FullOnly combinations before vcpkg/Rust initialization.
-
-Build outputs from a previous failed hosted run are not retained unless
-explicitly saved; #30 had no artifacts. For future native-success /
-packaging-failure cases the PR workflow now saves a source-keyed,
-PR-only cache of the CMake/MSVC/Rust build directory immediately after
-successful native build and the Mini=OFF guard; packaging-only edits
-do not invalidate that key. A diagnostic x64 Full executable artifact
-is also uploaded before attempting NSIS packaging. The native CMake
-build still runs, and tagged releases never consume the PR build cache.
-
-## Cargo release license audit preflight and native reuse
-
-Windows #31 compiled the full x64 binary and saved the native build cache,
-but packaging failed because the mandatory offline Cargo metadata audit
-for `snow-ocr-process` needed `anes v0.1.6` that compilation and the
-old Cargo source cache had not downloaded. To avoid repeated hour-long
-compile-then-audit failures, the Windows job now uses a **shared,
-audited Cargo license manifest/feature plan**, fetches complete locked
-workspace dependencies for all targets, checks offline metadata and
-dependency trees, and executes the full third-party license collector
-after Qt provisioning **before** the native build. Production packaging
-runs the same collector again without relaxing `--offline`, license
-notice provenance or the release-integrity gates. A separate v2 Cargo
-source cache stores this resolved graph, restoring from the old cache
-when available. Script-only changes preserve the PR-only compiled
-native cache from #31; native CMake validation still runs.
-
-### Pinned nightly toolchain and incomplete Cargo caches
-
-The first Windows execution of the early license audit revealed that
-`Get-SnowOcrToolchain` used `-cnotmatch` followed by `$Matches[1]`,
-which can return an empty string when invoked in a fresh scope.
-An explicit regex Match/Group now produces the pinned nightly reliably;
-an early real PowerShell regression test validates both fresh and stale
-capture scenarios. The Cargo license preflight constructs explicit
-typed CLI argument arrays and validates the nightly name.
-Any v2 Cargo cache written after an incomplete preflight remains only a
-restore fallback; successful complete license preflight is required
-before writing the new v3 cache. The PR-only native compile cache key
-remains unchanged.
+The scheduled upstream classifier still auto-merges only documentation changes that do not touch
+fork-protected paths. Source changes use one reusable `automation/upstream-review` branch. When
+the upstream merge is conflict-free, that branch contains the real merge candidate so the normal
+pull-request CI tests the code that would actually enter `main`; merge conflicts produce a small
+report on the same branch instead of opening a new notification PR every day.

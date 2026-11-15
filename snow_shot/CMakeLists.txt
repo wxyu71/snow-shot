@@ -3498,6 +3498,12 @@ if(SNOW_SHOT_BUILD_TESTS)
     )
     add_test(NAME snow-shot-settings-page-loading-tests
         COMMAND snow-shot-settings-page-loading-tests)
+    add_test(NAME snow-shot-community-cloud-ocr-settings-tests
+        COMMAND snow-shot-settings-page-loading-tests --community-cloud-ocr-only -platform offscreen)
+    set_tests_properties(snow-shot-community-cloud-ocr-settings-tests PROPERTIES
+        LABELS "unit;ocr" TIMEOUT 60
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-settings-variable-help-tests
         COMMAND snow-shot-settings-page-loading-tests --variable-help-only -platform offscreen)
     set_tests_properties(snow-shot-settings-variable-help-tests PROPERTIES
@@ -9660,6 +9666,12 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-image-conversion-network-tests
         COMMAND snow-shot-recognition-session-controller-tests --image-conversion-network-only -platform offscreen)
     set_tests_properties(snow-shot-image-conversion-network-tests PROPERTIES TIMEOUT 60
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+    add_test(NAME snow-shot-community-cloud-ocr-tests
+        COMMAND snow-shot-recognition-session-controller-tests --community-cloud-ocr-only -platform offscreen)
+    set_tests_properties(snow-shot-community-cloud-ocr-tests PROPERTIES
+        LABELS "unit;ocr" TIMEOUT 60
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-clipboard-tests
         COMMAND snow-shot-recognition-session-controller-tests --image-conversion-clipboard-only -platform offscreen)

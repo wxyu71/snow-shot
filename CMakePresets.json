@@ -146,6 +146,17 @@
       }
     },
     {
+      "name": "snow-shot-msvc-test",
+      "displayName": "Snow Shot MSVC focused tests",
+      "inherits": "snow-shot-msvc-fast",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "SNOW_APPS_BUILD_TESTS": "ON",
+        "SNOW_APPS_BUILD_BENCHMARKS": "OFF",
+        "SNOW_APPS_PACKAGE_SNOW_SHOT": "OFF"
+      }
+    },
+    {
       "name": "macos-base",
       "hidden": true,
       "generator": "Ninja",
@@ -499,6 +510,20 @@
       "configuration": "Release",
       "targets": [
         "snow_shot"
+      ]
+    },
+    {
+      "name": "build-snow-shot-msvc-test",
+      "configurePreset": "snow-shot-msvc-test",
+      "configuration": "Release",
+      "targets": [
+        "snow-shot-paddleocr-client-tests",
+        "snow-shot-recognition-session-controller-tests",
+        "snow-shot-application-storage-tests",
+        "snow-shot-screenshot-tool-palette-tests",
+        "snow-shot-settings-catalog-tests",
+        "snow-shot-settings-page-loading-tests",
+        "snow-shot-about-page-tests"
       ]
     },
     {

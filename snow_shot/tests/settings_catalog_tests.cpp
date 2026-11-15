@@ -829,6 +829,19 @@ void builtInCatalogIsCompleteAndValid() {
 #else
     require(foundUpdates, "catalog must contain the update mode item");
 #endif
+    const auto* cloudOcr =
+        catalog.item({QStringLiteral("text-recognition-translation"),
+                      QStringLiteral("text-recognition-settings"),
+                      QStringLiteral("text-recognition.cloud-ocr")});
+    const auto* cloudOcrCustom =
+        cloudOcr != nullptr
+            ? std::get_if<settings::SettingsCustomDefinition>(&cloudOcr->payload)
+            : nullptr;
+    require(cloudOcr != nullptr && cloudOcrCustom != nullptr &&
+                cloudOcrCustom->renderer == settings::SettingsCustomRenderer::CloudOcr &&
+                cloudOcr->title.translated() == QStringLiteral("Cloud OCR for Markdown"),
+            "Text recognition settings expose the Cloud OCR custom renderer");
+
     const auto* pinnedEditor =
         catalog.item({QStringLiteral("pinned-windows"), QStringLiteral("pin-to-screen-toolbar"),
                       QStringLiteral("interface.pin-to-screen.pinned-toolbar-editor")});
