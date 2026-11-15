@@ -9,7 +9,6 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
-import os
 import re
 import subprocess
 from pathlib import Path
@@ -53,13 +52,13 @@ def decide(incoming: set[str], fork_changes: set[str], policy: dict,
     overlap = sorted(incoming & fork_changes)
     danger = sorted(p for p in incoming if p in protected or is_protected(p, patterns))
     commercial = sorted(p for p in incoming if COMMERCIAL_PATH.search(p))
-    # The current CI only runs policy and source-contract tests. Until the
-    # complete Qt/Windows tests run successfully in the sync workflow, source,
-    # build, installer and executable changes MUST go through manual review.
-    # Documentation-only updates can be verified by the available CI tests.
-    requires_native_tests = sorted(
+    # Only obvious documentation is eligible for direct synchronization.
+    # Every source/build/tooling change is reviewed through the normal PR CI,
+    # which runs the real Windows CMake/CTest suite.
+    review_required = sorted(
         p for p in incoming
-        if not p.lower().endswith((".md", ".markdown", ".rst", ".txt"))
+        if not (p.startswith("docs/") or
+                p.lower().endswith((".md", ".markdown", ".rst")))
     )
     reasons = []
     if overlap:
@@ -70,16 +69,16 @@ def decide(incoming: set[str], fork_changes: set[str], policy: dict,
     if commercial or suspicious_patch:
         reasons.append("Potential commercial code in incoming upstream changes: " +
                        ", ".join(commercial[:20]))
-    if requires_native_tests:
-        reasons.append("Native Qt/Windows regression tests are not available in sync CI: " +
-                       ", ".join(requires_native_tests[:20]))
+    if review_required:
+        reasons.append("Source/build/tooling changes require normal PR review: " +
+                       ", ".join(review_required[:20]))
     return {
         "mode": "review" if reasons else "auto",
         "reasons": reasons,
         "upstream_paths": sorted(incoming),
         "overlap": overlap,
         "protected": danger,
-        "native_test_required": requires_native_tests,
+        "review_required": review_required,
     }
 
 

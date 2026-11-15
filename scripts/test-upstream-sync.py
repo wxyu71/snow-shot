@@ -27,10 +27,13 @@ class UpstreamSyncGuardTests(unittest.TestCase):
             "auto"
         )
 
-    def test_unrelated_source_without_native_tests_requires_review(self):
+    def test_arbitrary_text_file_is_not_treated_as_documentation(self):
+        self.assertEqual(self.decision(["cmake/toolchain.txt"])["mode"], "review")
+
+    def test_unrelated_source_requires_normal_pr_review(self):
         result = self.decision(["snow_shot/src/presentation/selection/safe_selection.cpp"])
         self.assertEqual(result["mode"], "review")
-        self.assertEqual(len(result["native_test_required"]), 1)
+        self.assertEqual(result["review_required"], ["snow_shot/src/presentation/selection/safe_selection.cpp"])
 
     def test_build_workflow_cannot_silently_auto_merge(self):
         self.assertEqual(

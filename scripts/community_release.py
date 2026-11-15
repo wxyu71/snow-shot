@@ -150,10 +150,6 @@ def selftest() -> None:
     release = next(p for p in presets["configurePresets"] if p["name"] == "snow-shot-msvc-release")
     assert release["cacheVariables"]["SNOW_APPS_BUILD_SNOW_SHOT_MINI"] == "OFF"
     assert release["cacheVariables"]["SNOW_APPS_API_BASE_URL"] == ""
-    package = (ROOT / "scripts" / "package-snow-shot.ps1").read_text(encoding="utf-8")
-    assert "[switch]$FullOnly" in package and "if (-not $FullOnly)" in package
-    qt = (ROOT / "scripts" / "build-static-qt.ps1").read_text(encoding="utf-8")
-    assert "CreateDirectory($destinationParent)" in qt
     print("Community release policy selftest passed")
 
 

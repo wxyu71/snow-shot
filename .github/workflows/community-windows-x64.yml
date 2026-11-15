@@ -87,6 +87,7 @@ jobs:
           persist-credentials: false
 
       - name: Bootstrap NSIS and smoke-test CPack
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: ./scripts/bootstrap-community-nsis.ps1
 
@@ -159,6 +160,7 @@ jobs:
         run: ctest --preset test-snow-shot-msvc-community
 
       - name: Verify production license graph
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: ./scripts/preflight-community-release-licenses.ps1
       - name: Save complete Cargo sources

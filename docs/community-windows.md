@@ -128,14 +128,13 @@ Every pull request enters one workflow:
    packaging or release optimization. Its aggregate `snow-shot-community-tests` target also builds
    the full `snow_shot` application, so every PR still compiles the integrated Windows app once,
    then runs the focused Community CTest entries.
-4. The real release license collector validates the locked production dependency/notices graph on
-   PRs as well as manual builds.
-5. A normal `workflow_dispatch` additionally creates a separate `snow-shot-msvc-release`
-   production build tree, packages the Full-only NSIS online/offline installers, verifies their
-   manifests/SHA-256 files, and uploads them as private workflow artifacts. PRs do not repeat this
-   second production compilation.
-6. With `publish_prerelease=true`, the same manually built production artifacts continue into the
-   draft/prerelease publication gate.
+4. A normal `workflow_dispatch` additionally smoke-tests the pinned NSIS/CPack toolchain, runs
+   the production Cargo/license collector, creates a separate `snow-shot-msvc-release` production
+   build tree, packages the Full-only NSIS online/offline installers, verifies their manifests and
+   SHA-256 files, and uploads them as private workflow artifacts. PRs do not perform release-only
+   packaging work or repeat the application compilation.
+5. With `publish_prerelease=true`, the same manually verified production artifacts continue into
+   the draft/prerelease publication gate.
 
 The pipeline caches dependencies and the audited static Qt kit, not CMake/MSVC application build
 trees. This avoids stale compiled state while retaining the expensive dependency work.
