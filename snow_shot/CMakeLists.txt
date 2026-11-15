@@ -9672,7 +9672,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-community-cloud-ocr-tests
         COMMAND snow-shot-recognition-session-controller-tests --community-cloud-ocr-only -platform offscreen)
     set_tests_properties(snow-shot-community-cloud-ocr-tests PROPERTIES
-        LABELS "unit;ocr" TIMEOUT 60
+        LABELS "unit;ocr;community" TIMEOUT 60
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-clipboard-tests
