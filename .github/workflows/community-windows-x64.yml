@@ -156,7 +156,7 @@ jobs:
         run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
       - name: Run focused native tests
         shell: pwsh
-        run: ctest --test-dir build/snow-shot-msvc-test -C Release --output-on-failure -R '^(snow-shot-paddleocr-client-tests|snow-shot-community-cloud-ocr-tests|snow-shot-image-conversion-clipboard-tests|snow-shot-image-conversion-storage-tests|snow-shot-image-conversion-toolbar-tests|snow-shot-settings-catalog-tests|snow-shot-community-cloud-ocr-settings-tests|snow-shot-about-page-tests)$'
+        run: ctest --preset test-snow-shot-msvc-community
 
       - name: Verify production license graph
         shell: pwsh

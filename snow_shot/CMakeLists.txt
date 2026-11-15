@@ -3250,6 +3250,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-about-page-tests COMMAND snow-shot-about-page-tests)
     target_link_libraries(snow-shot-about-page-tests PRIVATE snow_shot_updates)
     set_tests_properties(snow-shot-about-page-tests PROPERTIES
+        LABELS "unit;community"
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
@@ -3369,6 +3370,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     set_tests_properties(snow-shot-ocr-text-options-catalog-tests PROPERTIES LABELS "unit" TIMEOUT 30
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     set_tests_properties(snow-shot-settings-catalog-tests PROPERTIES
+        LABELS "unit;community"
         ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
@@ -3501,7 +3503,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-community-cloud-ocr-settings-tests
         COMMAND snow-shot-settings-page-loading-tests --community-cloud-ocr-only -platform offscreen)
     set_tests_properties(snow-shot-community-cloud-ocr-settings-tests PROPERTIES
-        LABELS "unit;ocr" TIMEOUT 60
+        LABELS "unit;ocr;community" TIMEOUT 60
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-settings-variable-help-tests
@@ -9675,15 +9677,15 @@ if(SNOW_SHOT_BUILD_TESTS)
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-clipboard-tests
         COMMAND snow-shot-recognition-session-controller-tests --image-conversion-clipboard-only -platform offscreen)
-    set_tests_properties(snow-shot-image-conversion-clipboard-tests PROPERTIES LABELS "unit" TIMEOUT 60
+    set_tests_properties(snow-shot-image-conversion-clipboard-tests PROPERTIES LABELS "unit;community" TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-storage-tests
         COMMAND snow-shot-application-storage-tests --image-conversion-only)
-    set_tests_properties(snow-shot-image-conversion-storage-tests PROPERTIES TIMEOUT 60
+    set_tests_properties(snow-shot-image-conversion-storage-tests PROPERTIES LABELS "unit;community" TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-toolbar-tests
         COMMAND snow-shot-screenshot-tool-palette-tests --image-conversion-only -platform offscreen)
-    set_tests_properties(snow-shot-image-conversion-toolbar-tests PROPERTIES TIMEOUT 60
+    set_tests_properties(snow-shot-image-conversion-toolbar-tests PROPERTIES LABELS "unit;community" TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-pinned-tests
         COMMAND snow-shot-pinned-window-tests --image-conversion-only)
@@ -10008,7 +10010,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-paddleocr-client-tests
              COMMAND snow-shot-paddleocr-client-tests)
     set_tests_properties(snow-shot-paddleocr-client-tests PROPERTIES
-        LABELS "unit;ocr" TIMEOUT 60)
+        LABELS "unit;ocr;community" TIMEOUT 60)
 
     add_executable(snow-shot-api-client-tests
         tests/snowshot_api_client_tests.cpp
@@ -14594,4 +14596,17 @@ if(SNOW_SHOT_BUILD_BENCHMARKS)
     if(APPLE)
         target_link_libraries(snow-shot-pinned-window-stacking-performance-benchmark PRIVATE "-framework AppKit")
     endif()
+endif()
+
+# Keep Community CI selection in the native build graph. The workflow builds one
+# aggregate target and CTest selects the matching label, like other focused suites.
+if(SNOW_SHOT_BUILD_TESTS)
+    add_custom_target(snow-shot-community-tests DEPENDS
+        snow-shot-paddleocr-client-tests
+        snow-shot-recognition-session-controller-tests
+        snow-shot-application-storage-tests
+        snow-shot-screenshot-tool-palette-tests
+        snow-shot-settings-catalog-tests
+        snow-shot-settings-page-loading-tests
+        snow-shot-about-page-tests)
 endif()

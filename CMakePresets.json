@@ -517,13 +517,7 @@
       "configurePreset": "snow-shot-msvc-test",
       "configuration": "Release",
       "targets": [
-        "snow-shot-paddleocr-client-tests",
-        "snow-shot-recognition-session-controller-tests",
-        "snow-shot-application-storage-tests",
-        "snow-shot-screenshot-tool-palette-tests",
-        "snow-shot-settings-catalog-tests",
-        "snow-shot-settings-page-loading-tests",
-        "snow-shot-about-page-tests"
+        "snow-shot-community-tests"
       ]
     },
     {
@@ -632,6 +626,19 @@
     }
   ],
   "testPresets": [
+    {
+      "name": "test-snow-shot-msvc-community",
+      "configurePreset": "snow-shot-msvc-test",
+      "configuration": "Release",
+      "output": {
+        "outputOnFailure": true
+      },
+      "filter": {
+        "include": {
+          "label": "community"
+        }
+      }
+    },
     {
       "name": "test-windows-msvc-debug",
       "configurePreset": "windows-msvc-debug",
