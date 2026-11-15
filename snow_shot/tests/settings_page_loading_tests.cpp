@@ -1,4 +1,5 @@
 #include "snow_shot/presentation/components/settingspagewidget.h"
+#include "snow_shot/network/communitycloudocrsettings.h"
 #include "snow_shot/presentation/components/formfields.h"
 #include "snow_shot/presentation/components/pathinput.h"
 #include "snow_shot/presentation/components/toolbareditorsettingswidget.h"
@@ -46,6 +47,7 @@
 #include <QPalette>
 #include <QPointer>
 #include <QPushButton>
+#include <QSettings>
 #include <QScrollBar>
 #include <QSet>
 #include <QTemporaryDir>
@@ -519,8 +521,10 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     auto* token = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrAccessToken"));
     auto* model = page.findChild<QComboBox*>(QStringLiteral("paddleOcrModel"));
     auto* save = page.findChild<QPushButton*>(QStringLiteral("paddleOcrSave"));
-    auto* test = page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
-    require(widget && endpoint && token && model && save && test,
+    auto* testConnection =
+        page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
+    auto* status = page.findChild<QLabel*>(QStringLiteral("paddleOcrConnectionStatus"));
+    require(widget && endpoint && token && model && save && testConnection && status,
             "Cloud OCR settings materialize their real custom controls");
     require(token->echoMode() == QLineEdit::Password,
             "Cloud OCR token uses a password editor");
@@ -534,9 +538,27 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     token->setText(QStringLiteral("token"));
     save->click();
     drainEvents();
-    auto* status = page.findChild<QLabel*>(QStringLiteral("paddleOcrConnectionStatus"));
-    require(status && status->text().contains(QStringLiteral("valid HTTPS URL")),
+    require(status->text().contains(QStringLiteral("valid HTTPS URL")),
             "invalid Cloud OCR settings are rejected by the real widget");
+
+    endpoint->setText(QStringLiteral("http://127.0.0.1:5102"));
+    token->setText(QStringLiteral("native-test-token"));
+    model->setCurrentText(QStringLiteral("PP-OCRv6"));
+    save->click();
+    drainEvents();
+    const auto stored = snow_shot::network::readCommunityCloudOcrSettings();
+    require(status->text() == QStringLiteral("PaddleOCR configuration saved.") &&
+                stored.apiUrl == QStringLiteral("http://127.0.0.1:5102") &&
+                stored.accessToken == QStringLiteral("native-test-token") &&
+                stored.model == QStringLiteral("PP-OCRv6"),
+            "the real Cloud OCR settings widget persists and reloads its configuration");
+#ifdef Q_OS_WIN
+    QSettings raw(QSettings::IniFormat, QSettings::UserScope,
+                  QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+    require(raw.value(QStringLiteral("access_token")).toString().isEmpty() &&
+                !raw.value(QStringLiteral("access_token_dpapi_v1")).toString().isEmpty(),
+            "Windows persists the Cloud OCR token through the protected settings slot");
+#endif
 }
 
 void settingsRowsHaveOnlySectionSpacing(const settings::SettingsRegistry& registry,
@@ -1954,9 +1976,10 @@ int main(int argc, char** argv) {
             "load Windows UI fonts for offscreen layout checks");
 #endif
     QTemporaryDir temporary;
+    require(temporary.isValid(), "create isolated settings test directory");
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, temporary.path());
     auto& storage = snow_shot::storage::ApplicationStorage::instance();
-    require(temporary.isValid() &&
-                storage.initialize({temporary.path(), temporary.path(), 60000}).success,
+    require(storage.initialize({temporary.path(), temporary.path(), 60000}).success,
             "initialize isolated storage");
     auto& languageManager = snow_shot::presentation::LanguageManager::instance();
     languageManager.initialize();

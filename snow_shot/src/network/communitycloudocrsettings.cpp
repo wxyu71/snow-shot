@@ -54,15 +54,11 @@ CommunityCloudOcrSettings readCommunityCloudOcrSettings() {
     result.model = settings.value(QStringLiteral("model"), result.model).toString();
 #ifdef Q_OS_WIN
     const QString secured = settings.value(QStringLiteral("access_token_dpapi_v1")).toString();
-    if (!secured.isEmpty()) {
-        // Do not fall back to an unprotected token if decryption fails.
+    if (!secured.isEmpty())
         result.accessToken = unprotect(secured);
-    } else
+#else
+    result.accessToken = settings.value(QStringLiteral("access_token")).toString();
 #endif
-    {
-        // Backwards compatible with the earlier beta; migrate on the next save.
-        result.accessToken = settings.value(QStringLiteral("access_token")).toString();
-    }
     return result;
 }
 
