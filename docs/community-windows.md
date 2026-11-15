@@ -190,3 +190,20 @@ successful native build and the Mini=OFF guard; packaging-only edits
 do not invalidate that key. A diagnostic x64 Full executable artifact
 is also uploaded before attempting NSIS packaging. The native CMake
 build still runs, and tagged releases never consume the PR build cache.
+
+## Cargo release license audit preflight and native reuse
+
+Windows #31 compiled the full x64 binary and saved the native build cache,
+but packaging failed because the mandatory offline Cargo metadata audit
+for `snow-ocr-process` needed `anes v0.1.6` that compilation and the
+old Cargo source cache had not downloaded. To avoid repeated hour-long
+compile-then-audit failures, the Windows job now uses a **shared,
+audited Cargo license manifest/feature plan**, fetches complete locked
+workspace dependencies for all targets, checks offline metadata and
+dependency trees, and executes the full third-party license collector
+after Qt provisioning **before** the native build. Production packaging
+runs the same collector again without relaxing `--offline`, license
+notice provenance or the release-integrity gates. A separate v2 Cargo
+source cache stores this resolved graph, restoring from the old cache
+when available. Script-only changes preserve the PR-only compiled
+native cache from #31; native CMake validation still runs.

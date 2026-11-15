@@ -69,6 +69,10 @@
     "scripts/bootstrap-community-nsis.ps1",
     "scripts/test-community-nsis-toolchain.py",
     "scripts/test-community-package-mode.ps1",
-    "scripts/test-community-package-modes.py"
+    "scripts/test-community-package-modes.py",
+    "scripts/preflight-community-release-licenses.ps1",
+    "scripts/snow-community-release-cargo-licenses.ps1",
+    "scripts/test-community-cargo-license-preflight.py",
+    "scripts/collect-third-party-licenses.ps1"
   ]
 }

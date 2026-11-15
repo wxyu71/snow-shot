@@ -502,21 +502,15 @@ if (-not $store) {
 
 $thirdPartyLicenseCollector = Join-Path $PSScriptRoot "collect-third-party-licenses.ps1"
 $thirdPartyLicenseDirectory = Join-Path $buildDirectory "snow_shot\third-party-licenses\third-party"
-$ocrCargoManifest = Join-Path $repoRoot "snow-crates\crates\snow-ocr-process\Cargo.toml"
-$updaterCargoManifest = Join-Path $repoRoot "snow_shot\rust\snow-shot-updater\Cargo.toml"
-$licenseManifests = @((Join-Path $repoRoot "snow_rust_ffi\Cargo.toml"), $ocrCargoManifest,
-    (Join-Path $repoRoot "snow_shot\rust\snow-shot-mcp\Cargo.toml"))
-if (-not $store) { $licenseManifests += $updaterCargoManifest }
+. (Join-Path $PSScriptRoot 'snow-community-release-cargo-licenses.ps1')
+$licensePlan = Get-SnowShotReleaseCargoLicensePlan -RepoRoot $repoRoot -Store:$store
 & $thirdPartyLicenseCollector `
     -Destination $thirdPartyLicenseDirectory `
     -AllowedRoot $buildDirectory `
     -VcpkgPrefix $staticVcpkgPrefix `
     -QtPrefix $qtPrefix `
-    -CargoManifest $licenseManifests `
-    -CargoOptions @{ (Join-Path $repoRoot "snow_rust_ffi\Cargo.toml") = @('--features', 'selected-text,language-detection');
-        # The runtime ships the raw-pixel worker without convenience dependencies.
-        $ocrCargoManifest = @('--no-default-features', '--features',
-        'crash-diagnostics,gpu') } `
+    -CargoManifest $licensePlan.Manifests `
+    -CargoOptions $licensePlan.Options `
     -AntDesignNotice (Join-Path $repoRoot "ant_design_qt\THIRD_PARTY_NOTICES.md") `
     -FallbackLicenseDirectory (Join-Path $repoRoot "licenses")
 if ($LASTEXITCODE -ne 0) {

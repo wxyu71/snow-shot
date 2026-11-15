@@ -13,6 +13,7 @@ after MSBuild aborts.
 | [#28](https://github.com/wxyu71/snow-shot/actions/runs/43670848752) | build-full-installer / Build full Windows x64 | translationservice.cpp:128 connects deleted SnowShotApiClient::accountIdentityChanged | Removed account API / C++ |
 | [#29](https://github.com/wxyu71/snow-shot/actions/runs/43675295729) | build-full-installer / Package full Windows x64 NSIS installers only | package-snow-shot.ps1:141 cannot find makensis after successfully linking snow_shot.exe and staging PP-OCRv6 assets | Missing packaging tool, unrelated to compiler/API failures |
 | [#30](https://github.com/wxyu71/snow-shot/actions/runs/43683967993) | build-full-installer / Package full Windows x64 NSIS installers only | package-snow-shot.ps1:471 requires `SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=ON` despite release preset and CI guard requiring OFF | Inconsistent FullOnly/Store packaging contract; native x64 Full build succeeded |
+| [#31](https://github.com/wxyu71/snow-shot/actions/runs/43692109496) | build-full-installer / Package full Windows x64 NSIS installers only | `cargo metadata --locked --offline` for `snow-ocr-process` cannot fetch missing `anes v0.1.6` | Cargo license metadata-only dependency omitted by compilation-only cache; unrelated to native build |
 
 All tracked Rust `.rs` files were checked for the deprecated atomic call
 and repaired with `try_update` while preserving memory order. The
@@ -129,3 +130,47 @@ verification, trusted dependencies, installer integrity checks or release
 gates. Tag releases cannot reuse this PR-native cache. Cache size/quota
 limitations and initial cache misses may still require a full rebuild;
 there is no claimed speedup until a cache restore proves it.
+
+## Windows #31: missing Cargo metadata-only crate despite native build success
+
+Windows #31 again linked the full `snow_shot.exe`, passed Mini=OFF,
+and saved the **4.95 GB native CMake/MSVC/Rust build cache** before
+packaging. The compiled EXE also was uploaded as diagnostic artifact
+`14155951293`. Packaging then failed inside the mandatory
+`collect-third-party-licenses.ps1:179`. Its true Cargo stderr was:
+
+```
+error: failed to download `anes v0.1.6`
+Caused by:
+  attempting to make an HTTP request, but --offline was specified
+```
+
+This is **not** a compiler failure, a missing NSIS executable, a Mini
+policy conflict, nor evidence of incorrect license attribution. Compiling
+the shipping Windows target does not guarantee that all packages needed
+to resolve `cargo metadata` for an entire Cargo workspace—including
+other-platform or dev dependencies—are present. Using
+`--filter-platform x86_64-pc-windows-msvc` alone is insufficient to
+guarantee metadata fetch completeness.
+
+`scripts/snow-community-release-cargo-licenses.ps1` now defines one
+manifest/feature plan shared by the early preflight and production
+packaging for Rust FFI, OCR process (pinned nightly, GPU + crash
+diagnostics, no default features), MCP, and updater. After successful
+vcpkg/Qt provisioning and **before** the native build, the preflight
+runs `cargo fetch --locked` without restricting target platforms for
+*every* release manifest, then validates the precise
+`cargo metadata --locked --offline --filter-platform` and
+`cargo tree --locked --offline` commands. It also runs the **actual
+third-party license collector**, verifying Qt/vcpkg/Rust notice presence.
+The real packaging stage reruns the collector. This ensures missing
+crates and license files fail before costly native compilation, while
+the strict offline license audit and exact release integrity gates remain.
+
+The complete Cargo registry/git cache now uses a new v2 key, with
+the previous binary-only cache as a restore fallback. It is saved
+immediately after the license preflight succeeds. The PR-only native
+cache key is unchanged by this script-only fix, so CI can restore
+the proven build from #31 and rerun CMake incrementally rather than
+recompiling from scratch, provided the cache remains available.
+Production tag builds still cannot use the PR native cache.

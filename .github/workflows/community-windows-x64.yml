@@ -53,6 +53,7 @@ jobs:
           python3 scripts/test-community-cpp-api-contract.py
           python3 scripts/test-community-nsis-toolchain.py
           python3 scripts/test-community-package-modes.py
+          python3 scripts/test-community-cargo-license-preflight.py
       - name: Reject unreviewed or incorrectly versioned beta tags
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
