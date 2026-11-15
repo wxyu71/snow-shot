@@ -9679,6 +9679,11 @@ if(SNOW_SHOT_BUILD_TESTS)
         COMMAND snow-shot-recognition-session-controller-tests --image-conversion-clipboard-only -platform offscreen)
     set_tests_properties(snow-shot-image-conversion-clipboard-tests PROPERTIES LABELS "unit;community" TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+    add_test(NAME snow-shot-image-conversion-layout-tests
+        COMMAND snow-shot-recognition-session-controller-tests --image-conversion-layout-only -platform offscreen)
+    set_tests_properties(snow-shot-image-conversion-layout-tests PROPERTIES
+        LABELS "unit;community" TIMEOUT 30
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-storage-tests
         COMMAND snow-shot-application-storage-tests --image-conversion-only)
     set_tests_properties(snow-shot-image-conversion-storage-tests PROPERTIES LABELS "unit;community" TIMEOUT 60

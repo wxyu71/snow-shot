@@ -2514,6 +2514,10 @@ void runImageConversionClipboardTests() {
     recognitionFileSnapshotTracksPartialConversionAndQrValues();
 }
 
+void runImageConversionLayoutTests() {
+    conversionToolbarMigration();
+}
+
 void latexSessionRequestsAreIsolated() {
     using Mode = ScreenshotRecognitionSessionController::Mode;
     QTcpServer server;
