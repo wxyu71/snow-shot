@@ -157,3 +157,15 @@ and compiling. It reuses pinned vcpkg binary archives and Cargo sources,
 retains the audited static Qt cache, and avoids a duplicate
 `build.ps1`-invoked bootstrap. Native compilation, installer verification and
 tag-based publication rules are unchanged and cannot be skipped by a cache.
+
+## Early NSIS packaging-toolchain check
+
+Windows run #29 completed the native x64 Full application and staged verified
+local OCR assets, but the installer step failed because the hosted runner did
+not include `makensis`. The pinned `scripts/bootstrap-community-nsis.ps1`
+now installs NSIS 3.12.0 with Chocolatey, verifies the installed compiler and
+runs an actual minimal CPack NSIS packaging smoke test **before** the costly
+vcpkg/Rust/C++ initialization. `scripts/test-community-nsis-toolchain.py`
+checks this ordering in the Linux fast preflight. See
+[CI triage](community-ci-triage.md) for evidence. Native end-to-end
+installation, offline payload and release checksum checks remain mandatory.

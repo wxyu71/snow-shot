@@ -31,3 +31,4 @@ jobs:
           python3 scripts/community_release.py selftest
           python3 scripts/test-community-rust-compat.py
           python3 scripts/test-community-cpp-api-contract.py
+          python3 scripts/test-community-nsis-toolchain.py

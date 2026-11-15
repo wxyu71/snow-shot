@@ -65,6 +65,8 @@
     "snow-draw-engine-gpui/src/smart_erase.rs",
     "snow-image-rs/crates/snow-image-rs/src/animation.rs",
     "snow_shot/src/app/translationservice.cpp",
-    "scripts/test-community-cpp-api-contract.py"
+    "scripts/test-community-cpp-api-contract.py",
+    "scripts/bootstrap-community-nsis.ps1",
+    "scripts/test-community-nsis-toolchain.py"
   ]
 }

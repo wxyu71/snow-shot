@@ -11,6 +11,7 @@ after MSBuild aborts.
 | [#26](https://github.com/wxyu71/snow-shot/actions/runs/43664415633) | build-full-installer / Build full Windows x64 | snow-audio-recorder/control.rs:149,248 use deprecated AtomicU64::fetch_update | Same Rust API category |
 | [#27](https://github.com/wxyu71/snow-shot/actions/runs/43670691161) | build-full-installer / Verify version, safety policy and offline API contracts | New full-tree Rust preflight reported 5 more deprecated calls | Same Rust API category, now caught early |
 | [#28](https://github.com/wxyu71/snow-shot/actions/runs/43670848752) | build-full-installer / Build full Windows x64 | translationservice.cpp:128 connects deleted SnowShotApiClient::accountIdentityChanged | Removed account API / C++ |
+| [#29](https://github.com/wxyu71/snow-shot/actions/runs/43675295729) | build-full-installer / Package full Windows x64 NSIS installers only | package-snow-shot.ps1:141 cannot find makensis after successfully linking snow_shot.exe and staging PP-OCRv6 assets | Missing packaging tool, unrelated to compiler/API failures |
 
 All tracked Rust `.rs` files were checked for the deprecated atomic call
 and repaired with `try_update` while preserving memory order. The
@@ -62,3 +63,31 @@ builds.
 
 **No installer, speed improvement or GitHub Release should be claimed as
 verified until the corresponding new CI run finishes successfully.**
+
+## Windows #29 packaging prerequisite failure and fix
+
+Windows run #29 passed the separate Linux `preflight` and the compiled
+Qt C++ PaddleOCR contract test. On the native runner, pinned vcpkg packages,
+Rust builds and the **complete Windows x64 Full executable** built successfully
+(`snow_shot.vcxproj -> .../Release/snow_shot.exe`). It staged the local
+PP-OCRv6 model assets. `SNOW_APPS_BUILD_SNOW_SHOT_MINI=OFF` also passed.
+
+Packaging then failed before generating either installer because the runner
+image did not contain `makensis` (`scripts/package-snow-shot.ps1:141`).
+Thus #29 is **not** a continuation of the earlier Rust deprecated-atomic or
+C++ deleted-account-signal failures. It is a missing NSIS prerequisite.
+
+`scripts/bootstrap-community-nsis.ps1` now pins Chocolatey NSIS 3.12.0,
+checks the actual executable version and exports its directory to the build
+PATH. It performs a real minimal CMake/CPack NSIS installer build before the
+workflow spends resources on vcpkg, Qt, Rust or application compilation.
+A failed install, missing compiler, incompatible CPack generator or empty
+smoke installer causes a non-optional failure. Static Linux checks verify that
+the smoke step runs before the expensive Windows steps and that the complete
+native installer and release-integrity guards are still required. The normal
+CPack online/offline NSIS packaging and native probing must still succeed.
+
+#29 also saved the pinned vcpkg binary archives and Cargo source caches;
+subsequent attempts may reuse them, subject to key validity. The successful
+Windows binary from #29 was **not uploaded** because final packaging failed,
+so no installable release artifact exists from that run.
