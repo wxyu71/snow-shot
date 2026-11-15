@@ -69,5 +69,16 @@ class RustAtomicCompatibility(unittest.TestCase):
         )
 
 
+    def test_native_windows_build_is_gated_and_skips_redundant_bootstrap(self):
+        workflow = WORKFLOW.read_text(encoding="utf-8")
+        self.assertIn("needs: [preflight, verify-paddleocr-contract]", workflow)
+        self.assertIn("python3 scripts/test-community-cpp-api-contract.py", workflow)
+        self.assertIn("run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap", workflow)
+        self.assertIn("VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite", workflow)
+        self.assertIn("Save vcpkg binary archives for subsequent builds", workflow)
+        self.assertIn("verify-assets --directory dist", workflow)
+        self.assertIn("contents: read", workflow)
+        self.assertIn("contents: write", workflow)
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

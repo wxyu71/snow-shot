@@ -142,3 +142,18 @@ before Windows could reach them: `snow-recording-export/src/gpu.rs`,
 `snow-image-rs/src/animation.rs`. They now use `try_update` with their
 original memory orderings, closures and error handling. Windows PR builds
 are triggered by changes in all tracked Rust workspace source trees.
+
+## Failure triage and fast-to-slow CI
+
+See [the CI triage ledger](community-ci-triage.md) for the first real errors
+behind Windows runs #21, #25, #26, #27 and #28. The latest independent
+failure in #28 is a C++ translation listener for the removed account identity
+signal. The listener has been removed and a full-tree C++ API source contract
+now runs in the Linux fast preflight.
+
+The Windows workflow now waits for **both** the fast Python preflight and
+the standalone real C++ Qt PaddleOCR contract test before provisioning vcpkg
+and compiling. It reuses pinned vcpkg binary archives and Cargo sources,
+retains the audited static Qt cache, and avoids a duplicate
+`build.ps1`-invoked bootstrap. Native compilation, installer verification and
+tag-based publication rules are unchanged and cannot be skipped by a cache.

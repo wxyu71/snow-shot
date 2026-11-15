@@ -125,8 +125,6 @@ TranslationService::TranslationService(SnowShotApiClient& client,
         if (guard)
             refreshModels(true);
     });
-    connect(&client, &SnowShotApiClient::accountIdentityChanged, this,
-            [this] { emit modelInvalidated(fastTranslationId); });
     connect(&client, &SnowShotApiClient::chatModelsChanged, this,
             [this] { publishModels(m_modelsToken == 0); });
     connect(&client, &QObject::destroyed, this, [this] {

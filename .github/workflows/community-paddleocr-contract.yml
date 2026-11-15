@@ -14,6 +14,11 @@ on:
 permissions:
   contents: read
 
+# Cancel obsolete PR checks while preserving any manual run.
+concurrency:
+  group: community-paddleocr-contract-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   compile-and-run-client:
     runs-on: ubuntu-latest

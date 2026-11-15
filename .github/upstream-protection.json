@@ -63,6 +63,8 @@
     "snow-crates/crates/snow-ui-selector/src/windows/msaa.rs",
     "snow-draw-engine-gpui/src/gpu_wake.rs",
     "snow-draw-engine-gpui/src/smart_erase.rs",
-    "snow-image-rs/crates/snow-image-rs/src/animation.rs"
+    "snow-image-rs/crates/snow-image-rs/src/animation.rs",
+    "snow_shot/src/app/translationservice.cpp",
+    "scripts/test-community-cpp-api-contract.py"
   ]
 }

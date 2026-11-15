@@ -12,6 +12,11 @@ on:
 permissions:
   contents: read
 
+# Cancel obsolete PR checks while preserving any manual run.
+concurrency:
+  group: community-ocr-license-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   rust-ocr-license:
     runs-on: ubuntu-latest

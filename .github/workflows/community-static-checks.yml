@@ -7,6 +7,11 @@ on:
 permissions:
   contents: read
 
+# Cancel obsolete PR checks while preserving any manual run.
+concurrency:
+  group: community-policy-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   policy-and-contracts:
     runs-on: ubuntu-latest
@@ -25,3 +30,4 @@ jobs:
           python3 scripts/test-community-branding.py
           python3 scripts/community_release.py selftest
           python3 scripts/test-community-rust-compat.py
+          python3 scripts/test-community-cpp-api-contract.py
