@@ -125,13 +125,17 @@ Every pull request enters one workflow:
 2. Native changes use the pinned Windows toolchain and the cached vcpkg/Cargo/static-Qt dependency
    layers.
 3. A dedicated `snow-shot-msvc-test` build enables the repository's real tests without enabling
-   packaging or release optimization. CI builds only the focused targets needed by Community
-   changes and runs their CTest entries, including the production PaddleOCR client, Markdown
-   history/edit/retry flow, settings catalog/widget, toolbar/storage integration, and About page.
-4. A separate `snow-shot-msvc-release` build keeps tests disabled and produces the actual
-   production executable. The build tree is not restored from another PR.
-5. The real release license collector, NSIS package command, installer manifests and SHA-256
-   verification must pass before the workflow uploads the six release candidates.
+   packaging or release optimization. Its aggregate `snow-shot-community-tests` target also builds
+   the full `snow_shot` application, so every PR still compiles the integrated Windows app once,
+   then runs the focused Community CTest entries.
+4. The real release license collector validates the locked production dependency/notices graph on
+   PRs as well as manual builds.
+5. A normal `workflow_dispatch` additionally creates a separate `snow-shot-msvc-release`
+   production build tree, packages the Full-only NSIS online/offline installers, verifies their
+   manifests/SHA-256 files, and uploads them as private workflow artifacts. PRs do not repeat this
+   second production compilation.
+6. With `publish_prerelease=true`, the same manually built production artifacts continue into the
+   draft/prerelease publication gate.
 
 The pipeline caches dependencies and the audited static Qt kit, not CMake/MSVC application build
 trees. This avoids stale compiled state while retaining the expensive dependency work.

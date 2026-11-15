@@ -172,16 +172,20 @@ jobs:
           key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Build production Windows x64
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
       - name: Package production installers
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
       - name: Verify installer assets
+        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release --allow-build-intermediates
 
       - name: Upload release candidates
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v4
         with:
           name: community-windows-x64-${{ github.sha }}

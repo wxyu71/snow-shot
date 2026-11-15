@@ -14607,6 +14607,7 @@ endif()
 # aggregate target and CTest selects the matching label, like other focused suites.
 if(SNOW_SHOT_BUILD_TESTS)
     add_custom_target(snow-shot-community-tests DEPENDS
+        snow_shot
         snow-shot-paddleocr-client-tests
         snow-shot-recognition-session-controller-tests
         snow-shot-application-storage-tests
