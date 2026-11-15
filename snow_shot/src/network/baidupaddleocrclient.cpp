@@ -189,7 +189,8 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
         base += QStringLiteral("/api/v2/ocr/jobs");
     m_endpoint = QUrl(base);
     // Loopback fake-server contract tests must not wait five seconds per job.
-    m_pollTimer.setInterval(m_endpoint.scheme() == u"http" ? 10 : kPollIntervalMs);
+    m_pollIntervalMs = m_endpoint.scheme() == u"http" ? 10 : kPollIntervalMs;
+    m_pollTimer.setInterval(m_pollIntervalMs);
     if (!acceptableUrl(m_endpoint) || m_endpoint.hasQuery()) {
         finish({}, QStringLiteral("PaddleOCR API URL must be HTTPS (or localhost for testing)"));
         return;
@@ -260,7 +261,7 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
             finish({}, QStringLiteral("PaddleOCR response has no jobId"));
             return;
         }
-        m_pollTimer.start();
+        m_pollTimer.start(m_pollIntervalMs);
     });
 }
 
@@ -283,7 +284,7 @@ void BaiduPaddleOcrClient::poll() {
             if ((status == 429 || QJsonDocument::fromJson(body).object()
                                    .value(QStringLiteral("code")).toInt() == 12002) &&
                 m_rateLimitRetries++ < 3) {
-                m_pollTimer.start(m_pollTimer.interval() * (1 << m_rateLimitRetries));
+                m_pollTimer.start(m_pollIntervalMs * (1 << m_rateLimitRetries));
                 return;
             }
             finish({}, httpFailure(status, body, error));
@@ -294,7 +295,7 @@ void BaiduPaddleOcrClient::poll() {
         if (!json.isObject() || object.value(QStringLiteral("code")).toInt(-1) != 0) {
             if (object.value(QStringLiteral("code")).toInt() == 12002 &&
                 m_rateLimitRetries++ < 3) {
-                m_pollTimer.start(m_pollTimer.interval() * (1 << m_rateLimitRetries));
+                m_pollTimer.start(m_pollIntervalMs * (1 << m_rateLimitRetries));
                 return;
             }
             finish({}, httpFailure(status, body, {}));
@@ -303,7 +304,7 @@ void BaiduPaddleOcrClient::poll() {
         const QJsonObject data = object.value(QStringLiteral("data")).toObject();
         const QString state = data.value(QStringLiteral("state")).toString();
         if (state == QStringLiteral("pending") || state == QStringLiteral("running")) {
-            m_pollTimer.start();
+            m_pollTimer.start(m_pollIntervalMs);
             return;
         }
         if (state != QStringLiteral("done")) {

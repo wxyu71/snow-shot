@@ -15,14 +15,16 @@ directly to `/api/v2/ocr/jobs` without the upstream Snow Shot account.
 Click **Test connection** to submit a small synthetic OCR image through the
 *actual authenticated asynchronous API*. The test may consume provider quota.
 Click **Save** to keep the selected endpoint/model/credentials. On Windows the
-Access Token is protected with user-scoped DPAPI; beta.1 plaintext token entries
-remain readable until the user saves/migrates the configuration.
+Access Token is protected with user-scoped DPAPI.
 
 After capturing a selection, click the **single Convert to Markdown** action.
 There is no five-action popup or screenshot-local credential editor. The job
 runs in the background; success copies the complete Markdown to the clipboard
-and shows a short system-tray notification. Markdown can still be edited and
-partially copied in its viewer. **Ctrl+D, local text recognition, and the QR
+and shows a short system-tray notification. Completed Markdown is stored with the
+existing screenshot recognition history; reopening the same recognition key with
+the same provider/model/endpoint identity restores that result immediately instead
+of uploading the image again. Markdown edits update the stored conversion result,
+and partial copy remains available in the viewer. **Ctrl+D, local text recognition, and the QR
 scanner in the selection toolbar stay independent and offline.** For now the
 supported cloud protocol is Baidu AI Studio's OCR jobs API; arbitrary third
 party APIs require individual protocol adapters, not just an arbitrary URL.
@@ -67,10 +69,11 @@ https://github.com/wxyu71/snow-shot/releases
 The **About > Check updates on GitHub** button opens this page in the
 default web browser; it does **not** download, unpack, or execute software.
 Choose the latest online/offline NSIS installer and install it manually.
-A rolling prerelease tagged `community-beta` is created only when a reviewed
-main-branch beta tag passes native Windows build, installer, and SHA-256
-manifest checks. New releases replace the attachments on that rolling
-release instead of creating another signed update channel.
+Each reviewed beta tag creates its own versioned GitHub prerelease (for example,
+`v1.5.8-beta.1_snow-shot`) after the native Windows build, installer, and
+SHA-256 manifest checks pass. Workflow retries update only that tag's prerelease
+assets; later beta versions publish separate prereleases instead of mutating a
+rolling release.
 
 The Windows Community build no longer starts the legacy automatic updater
 on launch, nor offers automatic download/install controls. GitHub HTTPS
@@ -170,9 +173,14 @@ failure in #28 is a C++ translation listener for the removed account identity
 signal. The listener has been removed and a full-tree C++ API source contract
 now runs in the Linux fast preflight.
 
-The Windows workflow now waits for **both** the fast Python preflight and
-the standalone real C++ Qt PaddleOCR contract test before provisioning vcpkg
-and compiling. It reuses pinned vcpkg binary archives and Cargo sources,
+The Windows workflow is now the single Community PR gate for fast policy checks,
+the real C++ Qt PaddleOCR contract, and the conditional native Windows build.
+Every PR enters the workflow; documentation-only changes stop after the fast
+classification/preflight, while any non-documentation change reaches the native
+gate. This avoids brittle build-input path allowlists and removes the duplicate
+standalone safety/PaddleOCR workflows. The Windows build waits for **both** the
+fast Python preflight and the real C++ Qt PaddleOCR contract before provisioning
+vcpkg and compiling. It reuses pinned vcpkg binary archives and Cargo sources,
 retains the audited static Qt cache, and avoids a duplicate
 `build.ps1`-invoked bootstrap. Native compilation, installer verification and
 tag-based publication rules are unchanged and cannot be skipped by a cache.

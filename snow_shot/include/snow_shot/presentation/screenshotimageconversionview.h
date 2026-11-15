@@ -26,6 +26,7 @@ class ScreenshotImageConversionView final : public QWidget {
 
   signals:
     void retryRequested();
+    void sourceEdited(const QString& source);
     void linkActivated(const QUrl& url);
 
   protected:

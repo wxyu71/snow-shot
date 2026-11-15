@@ -8,7 +8,6 @@ import unittest
 ROOT = Path(__file__).resolve().parents[1]
 PACKAGE = ROOT / "scripts/package-snow-shot.ps1"
 WINDOWS = ROOT / ".github/workflows/community-windows-x64.yml"
-SAFETY = ROOT / ".github/workflows/community-static-checks.yml"
 PRESET = ROOT / "CMakePresets.json"
 
 
@@ -64,8 +63,7 @@ class CommunityFullOnlyPackagingTests(unittest.TestCase):
             workflow.index("Run actual FullOnly/Store/Mini packaging mode tests"),
             workflow.index("Install pinned vcpkg, Rust and OCR build dependencies"),
         )
-        self.assertIn("python3 scripts/test-community-package-modes.py",
-                      SAFETY.read_text(encoding="utf-8"))
+        self.assertEqual(workflow.count("python3 scripts/test-community-package-modes.py"), 1)
         ps = (ROOT / "scripts/test-community-package-mode.ps1").read_text(encoding="utf-8")
         for expected in ("$modeExpression", "$cacheExpression", "$targetsExpression",
                          "standalone FullOnly community beta", "Store channel",
@@ -116,6 +114,8 @@ class CommunityFullOnlyPackagingTests(unittest.TestCase):
             workflow,
         )
         self.assertNotIn("if: startsWith(github.ref, 'refs/tags/')", workflow)
+        self.assertNotIn("pull_request:\n    paths:", workflow)
+        self.assertIn("Classify whether this ref needs the native Windows gate", workflow)
 
     def test_release_build_presets_exclude_disabled_mini(self):
         presets = json.loads(PRESET.read_text(encoding="utf-8"))

@@ -4077,6 +4077,7 @@ void ScreenshotRecognitionSessionController::attachContent() {
     {
         QObject::disconnect(m_recognitionRetryConnection);
         QObject::disconnect(m_conversionRetryConnection);
+        QObject::disconnect(m_conversionEditConnection);
         const QPointer<ScreenshotRecognitionSessionController> session(this);
         const QPointer<ScreenshotRecognitionWindow> view = m_content;
         m_attachmentToken = view->attachSession(
@@ -4102,6 +4103,12 @@ void ScreenshotRecognitionSessionController::attachContent() {
                     [session, view, token] {
                         if (session && view && view->ownsAttachment(session, token))
                             session->m_conversion->retry();
+                    });
+        m_conversionEditConnection =
+            connect(view, &ScreenshotRecognitionWindow::imageConversionSourceEdited, this,
+                    [session, view, token](const QString& source) {
+                        if (session && view && view->ownsAttachment(session, token))
+                            session->m_conversion->setSource(source);
                     });
 #endif
     }

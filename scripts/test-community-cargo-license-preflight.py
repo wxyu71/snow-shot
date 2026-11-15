@@ -6,7 +6,6 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 WORKFLOW = ROOT / ".github/workflows/community-windows-x64.yml"
-SAFETY = ROOT / ".github/workflows/community-static-checks.yml"
 PREFLIGHT = ROOT / "scripts/preflight-community-release-licenses.ps1"
 PLAN = ROOT / "scripts/snow-community-release-cargo-licenses.ps1"
 COLLECTOR = ROOT / "scripts/collect-third-party-licenses.ps1"
@@ -93,12 +92,11 @@ class OfflineReleaseLicensePreflightTests(unittest.TestCase):
         self.assertIn("community-cargo-license-v3-x64-", workflow)
         self.assertIn("community-cargo-license-v2-x64-", workflow)  # previous partial fallback
         self.assertIn("community-cargo-x64-", workflow)  # old cache fallback
-        self.assertIn("community-windows-native-x64-v1-", workflow)
+        self.assertNotIn("community-windows-native-x64-v1-", workflow)
         self.assertIn("python3 scripts/test-community-cargo-license-preflight.py", workflow)
-        self.assertIn("python3 scripts/test-community-cargo-license-preflight.py",
-                      SAFETY.read_text(encoding="utf-8"))
-        self.assertIn("needs: [preflight, verify-paddleocr-contract]", workflow)
-        self.assertIn("needs: [build-full-installer, verify-paddleocr-contract]", workflow)
+        self.assertEqual(workflow.count("python3 scripts/test-community-cargo-license-preflight.py"), 1)
+        self.assertIn("needs: [changes, preflight, verify-paddleocr-contract]", workflow)
+        self.assertIn("needs: [build-full-installer]", workflow)
         self.assertIn("verify-assets --directory dist", workflow)
 
 

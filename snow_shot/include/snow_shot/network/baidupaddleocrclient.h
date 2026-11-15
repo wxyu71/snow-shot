@@ -48,6 +48,7 @@ class BaiduPaddleOcrClient final : public QObject {
     quint64 m_generation = 0;
     int m_attempts = 0;
     int m_rateLimitRetries = 0;
+    int m_pollIntervalMs = 5000;
 };
 
 } // namespace snow_shot::network

@@ -17,7 +17,15 @@ void require(bool condition, const char* message) {
         qFatal("PaddleOCR API contract failure: %s", message);
 }
 
-enum class ReplyMode { Success, Unauthorized, RateLimited, VendorQuota, FailedJob, InvalidJsonl };
+enum class ReplyMode {
+    Success,
+    Unauthorized,
+    RateLimited,
+    PollRateLimitedThenSuccess,
+    VendorQuota,
+    FailedJob,
+    InvalidJsonl
+};
 
 struct RunResult {
     QString markdown;
@@ -84,7 +92,10 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                 } else if (headers.startsWith("GET /api/v2/ocr/jobs/job-123 ")) {
                     outcome.pollAuthenticated = bearer;
                     ++outcome.polls;
-                    if (outcome.polls == 1) {
+                    if (mode == ReplyMode::PollRateLimitedThenSuccess && outcome.polls == 1) {
+                        status = "429 Too Many Requests";
+                        body = R"({"code":12002,"msg":"poll frequency too high"})";
+                    } else if (outcome.polls == 1) {
                         body = R"({"code":0,"data":{"state":"running"}})";
                     } else if (mode == ReplyMode::FailedJob) {
                         body = R"({"code":0,"data":{"state":"failed","errorMsg":"unreadable image"}})";
@@ -171,6 +182,10 @@ void checkErrors() {
     require(throttle.markdown.isEmpty() &&
             throttle.error.contains(QStringLiteral("12002")),
             "rate-limit HTTP 429 and vendor code 12002 are actionable");
+    auto pollThrottle = runCase(model, ReplyMode::PollRateLimitedThenSuccess);
+    require(pollThrottle.error.isEmpty() && pollThrottle.polls >= 2 &&
+                pollThrottle.markdown.contains(QStringLiteral("Hello OCR")),
+            "poll-time HTTP 429 retries with backoff and then completes");
     auto quota = runCase(model, ReplyMode::VendorQuota);
     require(quota.markdown.isEmpty() &&
             quota.error.contains(QStringLiteral("12001")),

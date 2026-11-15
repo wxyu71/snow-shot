@@ -27,6 +27,7 @@ class ScreenshotImageConversionController final : public QObject {
     void deactivate();
     void invalidate();
     void retry();
+    void setSource(QString source);
     void selectVisionModel(const QString& model);
     void openSettings(QWidget* owner);
     void seed(const QString& key, const QVector<ScreenshotImageConversionEntry>& entries);
@@ -70,8 +71,9 @@ class ScreenshotImageConversionController final : public QObject {
     bool notifyChanged();
     bool notifyResultsChanged();
     [[nodiscard]] bool entryMatchesProvider(const ScreenshotImageConversionEntry& entry) const;
-    bool restoreCachedResult(const QString& model);
+    bool restoreCachedResult(const QString& model, const QString& fingerprint = {});
     void cacheResult(const QString& key, ScreenshotImageConversionEntry entry);
+    void updateCurrentCache();
     void trimCache();
     struct CacheEntry {
         QString key;
@@ -84,6 +86,7 @@ class ScreenshotImageConversionController final : public QObject {
     QTimer m_previewTimer;
     QString m_key;
     QString m_requestModel;
+    QString m_requestFingerprint;
     QImage m_image;
     QString m_source;
     QString m_error;

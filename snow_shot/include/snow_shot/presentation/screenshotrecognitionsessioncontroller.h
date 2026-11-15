@@ -440,6 +440,7 @@ class ScreenshotRecognitionSessionController final : public QObject {
     bool m_uiPublicationEnabled = true;
     QMetaObject::Connection m_recognitionRetryConnection;
     QMetaObject::Connection m_conversionRetryConnection;
+    QMetaObject::Connection m_conversionEditConnection;
     QHash<QString, TextCacheEntry> m_textCache;
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION
     QHash<QString, TableCacheEntry> m_tableCache;

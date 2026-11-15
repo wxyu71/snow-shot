@@ -61,8 +61,10 @@ ScreenshotImageConversionView::ScreenshotImageConversionView(QWidget* parent) : 
     editRow->addWidget(m_editButton);
     layout->addLayout(editRow);
     connect(m_rawEditor, &QPlainTextEdit::textChanged, this, [this] {
-        if (m_editMode)
-            m_source = m_rawEditor->toPlainText();
+        if (!m_editMode)
+            return;
+        m_source = m_rawEditor->toPlainText();
+        emit sourceEdited(m_source);
     });
     connect(m_editButton, &adqt::widgets::AdButton::clicked, this, [this] {
         m_editMode = !m_editMode;
