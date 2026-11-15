@@ -88,6 +88,9 @@ jobs:
       - name: Run actual FullOnly/Store/Mini packaging mode tests
         shell: pwsh
         run: ./scripts/test-community-package-mode.ps1
+      - name: Validate pinned OCR nightly toolchain without stale Matches
+        shell: pwsh
+        run: ./scripts/test-community-ocr-toolchain-pin.ps1
       # Fail early if packaging tools are missing or broken. #29 fully built
       # snow_shot.exe but failed at the very end because makensis was absent.
       - name: Bootstrap pinned NSIS 3.12 and run CPack smoke test
@@ -114,7 +117,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-license-v2-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: community-cargo-license-v3-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
           # Old binary-only Cargo cache is missing metadata-only crates
           # (Windows #31: anes 0.1.6). Reuse what is already present,
           # then fetch and verify every pinned workspace before resaving.
@@ -166,6 +169,7 @@ jobs:
       # Fetch ALL locked workspace targets, validate exact offline metadata
       # and tree commands, then execute the real license collector EARLY.
       - name: Prefetch full locked Rust license graph and collect notices offline
+        id: release-license-preflight
         shell: pwsh
         run: ./scripts/preflight-community-release-licenses.ps1
       - name: Save complete Cargo sources after release license preflight
@@ -177,7 +181,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-license-v2-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: community-cargo-license-v3-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
       # Cache exact native CMake/MSVC/Rust outputs only for PR builds, never
       # consume a PR-built binary for a reviewed tag release. The native build
       # command still runs after restoration to verify all inputs and targets.
@@ -195,14 +199,14 @@ jobs:
         # Avoid a second vcpkg/rustup/cargo initialization pass.
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
       - name: Save Cargo sources even when native compilation reports errors
-        if: ${{ !cancelled() && steps.cargo-cache.outputs.cache-hit != 'true' && steps.cargo-license-cache-save.outcome != 'success' }}
+        if: ${{ !cancelled() && steps.release-license-preflight.outcome == 'success' && steps.cargo-cache.outputs.cache-hit != 'true' && steps.cargo-license-cache-save.outcome != 'success' }}
         continue-on-error: true
         uses: actions/cache/save@v4
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-license-v2-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: community-cargo-license-v3-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
       - name: Confirm no Mini build was configured
         shell: pwsh
         run: |

@@ -174,3 +174,24 @@ cache key is unchanged by this script-only fix, so CI can restore
 the proven build from #31 and rerun CMake incrementally rather than
 recompiling from scratch, provided the cache remains available.
 Production tag builds still cannot use the PR native cache.
+
+## #32–#33 early gates and OCR pinned-toolchain regression
+
+The #32 fast checks correctly prevented native Windows work: the new
+workflow was accidentally overwritten by a stale workflow copy, and the
+existing OCR license audit still searched for the feature declaration in
+the old packaging-script location. Both were corrected; the original
+real OCR dependency-closure audit passed again.
+
+On #33 the early full release license preflight successfully fetched and
+validated the FFI manifest. It then failed to invoke the OCR manifest's
+pinned nightly toolchain because `Get-SnowOcrToolchain` relied on
+`$Matches[1]` after a `-cnotmatch` guard, which does not guarantee a
+fresh capture and can return an empty string in a clean PowerShell scope.
+The fix uses an explicit `[regex]::Match` object, validates the returned
+nightly pin, uses typed Cargo argument arrays and runs an adversarial
+PowerShell pin unit test before provisioning dependencies. A v3 cache key
+avoids accepting the incomplete v2 Cargo archive saved after #33's
+failed preflight; failed preflights can no longer populate a supposedly
+complete v3 cache. All existing offline Cargo/third-party notice checks
+remain required.

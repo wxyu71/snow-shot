@@ -207,3 +207,17 @@ notice provenance or the release-integrity gates. A separate v2 Cargo
 source cache stores this resolved graph, restoring from the old cache
 when available. Script-only changes preserve the PR-only compiled
 native cache from #31; native CMake validation still runs.
+
+### Pinned nightly toolchain and incomplete Cargo caches
+
+The first Windows execution of the early license audit revealed that
+`Get-SnowOcrToolchain` used `-cnotmatch` followed by `$Matches[1]`,
+which can return an empty string when invoked in a fresh scope.
+An explicit regex Match/Group now produces the pinned nightly reliably;
+an early real PowerShell regression test validates both fresh and stale
+capture scenarios. The Cargo license preflight constructs explicit
+typed CLI argument arrays and validates the nightly name.
+Any v2 Cargo cache written after an incomplete preflight remains only a
+restore fallback; successful complete license preflight is required
+before writing the new v3 cache. The PR-only native compile cache key
+remains unchanged.

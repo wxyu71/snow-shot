@@ -73,6 +73,9 @@
     "scripts/preflight-community-release-licenses.ps1",
     "scripts/snow-community-release-cargo-licenses.ps1",
     "scripts/test-community-cargo-license-preflight.py",
-    "scripts/collect-third-party-licenses.ps1"
+    "scripts/collect-third-party-licenses.ps1",
+    "scripts/snow-ocr-toolchain.ps1",
+    "scripts/test-community-ocr-toolchain-pin.ps1",
+    "scripts/test-snow-shot-ocr-license-features.py"
   ]
 }

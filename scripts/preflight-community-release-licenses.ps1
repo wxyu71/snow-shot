@@ -9,23 +9,36 @@ $plan = Get-SnowShotReleaseCargoLicensePlan -RepoRoot $repoRoot
 $cargo = (Get-Command cargo -ErrorAction Stop).Source
 $target = 'x86_64-pc-windows-msvc'
 $ocrManifest = Join-Path $repoRoot 'snow-crates/crates/snow-ocr-process/Cargo.toml'
-$ocrToolchain = Get-SnowOcrToolchain
+[string]$ocrToolchain = Get-SnowOcrToolchain
+if ($ocrToolchain -cnotmatch '^nightly-\d{4}-\d{2}-\d{2}$') {
+    throw "Invalid pinned OCR toolchain '$ocrToolchain'; refusing Cargo license preflight."
+}
+Write-Host "Verified pinned OCR Cargo toolchain: $ocrToolchain"
 
 # Cargo metadata --filter-platform still needs the complete locked workspace,
 # including dev/other-platform dependencies like anes. Fetch all platforms
 # (no --target) before testing strict --offline metadata and tree commands.
 # Never use --no-deps or update Cargo.lock.
 foreach ($manifest in $plan.Manifests) {
-    $compiler = if ($manifest -ieq $ocrManifest) { @("+$ocrToolchain") } else { @() }
-    $options = if ($plan.Options.ContainsKey($manifest)) { @($plan.Options[$manifest]) } else { @() }
+    $compiler = if ($manifest -ieq $ocrManifest) { "+$ocrToolchain" } else { $null }
+    [string[]]$prefix = if ($compiler) { @($compiler) } else { @() }
+    [string[]]$options = if ($plan.Options.ContainsKey($manifest)) {
+        @($plan.Options[$manifest])
+    } else { @() }
 
-    Write-Host "Prefetching locked complete Cargo workspace for release licenses: $manifest"
-    & $cargo @compiler fetch --locked --manifest-path $manifest
+    # Typed arrays avoid PowerShell splatting an empty toolchain as "cargo +".
+    [string[]]$fetchArgs = @($prefix) + @('fetch', '--locked', '--manifest-path', $manifest)
+    Write-Host "Prefetching locked Cargo workspace ($($prefix -join ' ')): $manifest"
+    & $cargo @fetchArgs
     if ($LASTEXITCODE -ne 0) {
         throw "Locked Cargo workspace fetch failed for $manifest; do not bypass the offline license audit."
     }
 
-    $metadataOutput = @(& $cargo @compiler metadata --locked --offline --filter-platform $target --format-version 1 --manifest-path $manifest @options)
+    [string[]]$metadataArgs = @($prefix) + @(
+        'metadata', '--locked', '--offline', '--filter-platform', $target,
+        '--format-version', '1', '--manifest-path', $manifest
+    ) + @($options)
+    $metadataOutput = @(& $cargo @metadataArgs)
     if ($LASTEXITCODE -ne 0) {
         throw "Full offline Cargo metadata failed after locked fetch: $manifest"
     }
@@ -37,7 +50,12 @@ foreach ($manifest in $plan.Manifests) {
         throw "Expected one root package in offline Cargo metadata for $manifest; found $($roots.Count)."
     }
     $rootId = [string]$roots[0].id
-    & $cargo @compiler tree --locked --offline --target $target --manifest-path $manifest --package $rootId --edges normal,build --prefix none --format '{p}' @options | Out-Null
+    [string[]]$treeArgs = @($prefix) + @(
+        'tree', '--locked', '--offline', '--target', $target, '--manifest-path', $manifest,
+        '--package', $rootId, '--edges', 'normal,build', '--prefix', 'none',
+        '--format', '{p}'
+    ) + @($options)
+    & $cargo @treeArgs | Out-Null
     if ($LASTEXITCODE -ne 0) {
         throw "Full offline Cargo tree failed for $manifest"
     }
