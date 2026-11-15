@@ -238,7 +238,7 @@ void officialHttpErrorsDescribeTheFailure() {
         {Kind::Translation, 503, R"({"code":"operator_budget_exhausted"})",
          QStringLiteral("operator_budget_exhausted"),
          QStringLiteral("service has reached its usage limit")},
-        {Kind::Translation, 401, {}, {}, QStringLiteral("Sign in to your Snow Shot account")},
+        {Kind::Translation, 401, {}, {}, QStringLiteral("HTTP 401")},
         {Kind::Latex, 402, {}, {}, QStringLiteral("HTTP 402")},
         {Kind::Table, 422, R"({"code":"future_error","title":"Image cannot be processed"})",
          QStringLiteral("future_error"), QStringLiteral("Image cannot be processed")},
