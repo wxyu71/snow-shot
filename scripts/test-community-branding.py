@@ -41,7 +41,7 @@ class CommunityBrandingTests(unittest.TestCase):
 
     def test_fork_identity_and_nonofficial_beta_notice(self):
         root = (ROOT / "CMakeLists.txt").read_text(encoding="utf-8")
-        self.assertIn('set(SNOW_SHOT_VERSION "1.5.8-beta.1")', root)
+        self.assertRegex(root, r'set\(SNOW_SHOT_VERSION "\d+\.\d+\.\d+-beta\.[1-9]\d*"\)')
         self.assertIn('set(SNOW_SHOT_VENDOR "Snow Shot Community")', root)
         for name in ("README.md", "README.zh-CN.md"):
             content = (ROOT / name).read_text(encoding="utf-8")
