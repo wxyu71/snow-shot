@@ -1623,7 +1623,7 @@ bool ScreenshotToolPalette::setSecondaryToolbarVisibility(bool actionToolbarVisi
     const bool tableVisible = m_activeTool == Tool::Table;
     const bool qrVisible = m_activeTool == Tool::Qr || m_activeTool == Tool::Latex;
     const bool conversionVisible = m_activeTool == Tool::Markdown || m_activeTool == Tool::Html;
-    const bool modelVisible = tableVisible || m_activeTool == Tool::Latex || conversionVisible;
+    const bool modelVisible = tableVisible || m_activeTool == Tool::Latex;
     const bool originalVisible = ocrVisible || tableVisible || qrVisible || conversionVisible;
     const bool scrollingVisible = m_activeTool == Tool::ScrollingScreenshot;
     const bool moveVisible = m_activeTool == Tool::Move && m_moveOptionsToolbarVisible;
@@ -6839,29 +6839,17 @@ bool ScreenshotToolPalette::addMainSecondaryButtons(const Options& options, QBox
                 [this]() { activateActionTool(QStringLiteral("barcode-recognition")); });
     }
 
-    if ((options.showImageConversionTools && snow_shot::app::edition::imageConversion)) {
-        m_latexButton =
-            addToolButton(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "LaTeX formula recognition"),
-                          adqt::icons::antd::outlined::Function());
-        m_latexButton->setObjectName(QStringLiteral("screenshotLatexRecognitionButton"));
-        connect(m_latexButton, &adqt::widgets::AdButton::clicked, this,
-                [this]() { activateActionTool(QStringLiteral("latex-recognition")); });
+    if (options.showImageConversionTools && snow_shot::app::edition::imageConversion) {
+        // Community cloud OCR is a single direct action, not a five-item hover menu.
         m_markdownButton =
             addToolButton(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Convert to Markdown"),
                           custom_outlined_icons::Markdown());
         m_markdownButton->setObjectName(QStringLiteral("screenshotConvertToMarkdownButton"));
-        m_htmlButton = addToolButton(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Convert to HTML"),
-                                     custom_outlined_icons::Html());
-        m_htmlButton->setObjectName(QStringLiteral("screenshotConvertToHtmlButton"));
-        for (auto* button : {m_markdownButton, m_htmlButton, m_latexButton}) {
-            button->setBusyIndicatorPresentation(
-                adqt::widgets::AdButton::BusyIndicatorPresentation::IsolatedSurface);
-            addButton(button);
-        }
+        m_markdownButton->setBusyIndicatorPresentation(
+            adqt::widgets::AdButton::BusyIndicatorPresentation::IsolatedSurface);
+        addButton(m_markdownButton);
         connect(m_markdownButton, &adqt::widgets::AdButton::clicked, this,
                 [this]() { activateActionTool(QStringLiteral("convert-to-markdown")); });
-        connect(m_htmlButton, &adqt::widgets::AdButton::clicked, this,
-                [this]() { activateActionTool(QStringLiteral("convert-to-html")); });
     }
 
     if (options.showScreenRecordButton) {
@@ -9628,20 +9616,11 @@ void ScreenshotToolPalette::setImageConversionBusy(bool markdownBusy, bool htmlB
 
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
 void ScreenshotToolPalette::createImageConversionActionFamily() {
-    if (m_selectActionLayout == nullptr || m_conversionSettingsButton != nullptr) {
-        return;
-    }
-    createRecognitionModelSelect();
-    m_recognitionModelSpacer = addStyleToolbarSpacing(m_selectActionLayout, STYLE_ITEM_SPACING);
-    m_conversionSettingsButton = createScreenshotToolPaletteStyleActionButton(
-        m_selectActionPanel, QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Settings"),
-        outlined_icons::Setting(), actionButtonMetrics(m_physicalScale));
-    m_conversionSettingsButton->setObjectName(
-        QStringLiteral("screenshotImageConversionSettingsButton"));
-    m_selectActionLayout->addWidget(m_conversionSettingsButton);
-    connect(m_conversionSettingsButton, &adqt::widgets::AdButton::clicked, this,
-            &ScreenshotToolPalette::imageConversionSettingsRequested);
+    // Cloud OCR credentials/model are configured in Settings > Text recognition.
+    // Keep the original-image preview, but do not show a per-screenshot model
+    // selector or settings button that interrupts the async Markdown action.
 }
+
 #endif
 
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION

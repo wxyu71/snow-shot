@@ -53,6 +53,7 @@ jobs:
           python3 scripts/test-community-cpp-api-contract.py
           python3 scripts/test-community-nsis-toolchain.py
           python3 scripts/test-community-package-modes.py
+          python3 scripts/test-community-ocr-ui-contract.py
           python3 scripts/test-community-cargo-license-preflight.py
       - name: Reject unreviewed or incorrectly versioned beta tags
         if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
@@ -280,6 +281,42 @@ jobs:
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.manifest.json
           if-no-files-found: error
 
+      # Signing is optional until the fork has its own RSA-3072 key pair.
+      # Missing credentials do NOT publish an unverified update feed.
+      - name: Sign and verify Community Windows updater when configured
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+        id: community-beta-sign
+        shell: pwsh
+        env:
+          COMMUNITY_UPDATE_SIGNING_PRIVATE_KEY: ${{ secrets.COMMUNITY_UPDATE_SIGNING_PRIVATE_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:COMMUNITY_UPDATE_SIGNING_PRIVATE_KEY)) {
+            Write-Warning 'Community update signing key not configured; manual NSIS installs only.'
+            "signed=false" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          } else {
+            $key = Join-Path $env:RUNNER_TEMP 'community-update-private.pem'
+            try {
+              [IO.File]::WriteAllText($key, $env:COMMUNITY_UPDATE_SIGNING_PRIVATE_KEY,
+                  [Text.UTF8Encoding]::new($false))
+              ./scripts/sign-community-beta-update.ps1 -SigningKeyPath $key
+              if ($LASTEXITCODE -ne 0) { throw 'Community updater signing failed.' }
+              "signed=true" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+            } finally {
+              Remove-Item -LiteralPath $key -Force -ErrorAction SilentlyContinue
+            }
+          }
+      - name: Upload signed updater feed and verified update ZIPs
+        if: github.event_name == 'push' && steps.community-beta-sign.outputs.signed == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-signed-updater-${{ github.sha }}
+          path: |
+            build/snow-shot-msvc-release/latest-version.json
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-online-update.zip
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline-update.zip
+          if-no-files-found: error
+          retention-days: 7
+
   # Run the actual C++/Qt contract tests on PRs and tags, in parallel with
   # the fast Python preflight and before Windows dependency installation.
   verify-paddleocr-contract:
@@ -308,6 +345,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v4
         with:
@@ -316,6 +354,21 @@ jobs:
         with:
           name: community-windows-x64-${{ github.sha }}
           path: dist
+      - name: Retrieve signed update feed if this release has a trusted signer
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          artifact="community-signed-updater-$GITHUB_SHA"
+          if gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/artifacts" \
+              --jq '.artifacts[].name' | grep -Fxq "$artifact"; then
+            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" \
+              --name "$artifact" --dir signed
+            test -s signed/latest-version.json
+          else
+            echo "::warning::Public NSIS installers will be published without automatic updater metadata. Configure an independently trusted signing key."
+          fi
       - name: Verify release tag and downloaded installer integrity
         shell: bash
         run: |
@@ -329,13 +382,61 @@ jobs:
         run: |
           set -euo pipefail
           version="$(python3 scripts/community_release.py version)"
-          gh release create "$GITHUB_REF_NAME" \
-            "dist/snow-shot-$version-windows-x64-online.exe" \
-            "dist/snow-shot-$version-windows-x64-online.exe.sha256" \
-            "dist/snow-shot-$version-windows-x64-online.manifest.json" \
-            "dist/snow-shot-$version-windows-x64-offline.exe" \
-            "dist/snow-shot-$version-windows-x64-offline.exe.sha256" \
-            "dist/snow-shot-$version-windows-x64-offline.manifest.json" \
+          assets=(
+            "dist/snow-shot-$version-windows-x64-online.exe"
+            "dist/snow-shot-$version-windows-x64-online.exe.sha256"
+            "dist/snow-shot-$version-windows-x64-online.manifest.json"
+            "dist/snow-shot-$version-windows-x64-offline.exe"
+            "dist/snow-shot-$version-windows-x64-offline.exe.sha256"
+            "dist/snow-shot-$version-windows-x64-offline.manifest.json"
+          )
+          if [[ -f signed/latest-version.json ]]; then
+            assets+=(
+              "signed/latest-version.json"
+              "signed/snow-shot-$version-windows-x64-online-update.zip"
+              "signed/snow-shot-$version-windows-x64-offline-update.zip"
+            )
+          fi
+          gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
             --verify-tag --prerelease \
             --title "Snow Shot Community $version (Windows x64 Beta)" \
             --notes-file docs/community-release-notes.md
+
+      # The rolling public beta tag intentionally is not a signed updater feed.
+      # Signed in-app updates must use immutable SemVer tags with update ZIPs.
+      - name: Refresh rolling public Community Beta release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 scripts/community_release.py version)"
+          assets=(
+            "dist/snow-shot-$version-windows-x64-online.exe"
+            "dist/snow-shot-$version-windows-x64-online.exe.sha256"
+            "dist/snow-shot-$version-windows-x64-online.manifest.json"
+            "dist/snow-shot-$version-windows-x64-offline.exe"
+            "dist/snow-shot-$version-windows-x64-offline.exe.sha256"
+            "dist/snow-shot-$version-windows-x64-offline.manifest.json"
+          )
+          if ! gh release view community-beta --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release create community-beta --repo "$GITHUB_REPOSITORY" \
+              --target "$GITHUB_SHA" --prerelease --latest=false \
+              --title "Snow Shot Community Beta (Windows x64)" \
+              --notes-file docs/community-release-notes.md
+          fi
+          # Upload new files before pruning previous beta assets.
+          gh release upload community-beta "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+          expected="$(printf '%s\n' "${assets[@]##*/}")"
+          while IFS= read -r old; do
+            if ! grep -Fxq -- "$old" <<< "$expected"; then
+              gh release delete-asset community-beta "$old" \
+                --repo "$GITHUB_REPOSITORY" --yes
+            fi
+          done < <(gh release view community-beta --repo "$GITHUB_REPOSITORY" \
+                     --json assets --jq '.assets[].name')
+          gh release edit community-beta --repo "$GITHUB_REPOSITORY" \
+            --title "Snow Shot Community Beta $version (Windows x64)" \
+            --notes-file docs/community-release-notes.md
+

@@ -139,6 +139,7 @@ class ScreenshotOcrController final : public QObject {
     void textResultChanged(bool available);
     void textDraftChanged(const QString& text);
     void workflowStateChanged();
+    void markdownCopied();
 
   private:
     struct CanvasState {

@@ -220,6 +220,7 @@ class ScreenshotRecognitionSessionController final : public QObject {
     void textResultChanged(bool available);
     void textDraftChanged(const QString& text);
     void recognitionResultsChanged();
+    void markdownCopied();
     void workflowStateChanged() const;
 
   private:

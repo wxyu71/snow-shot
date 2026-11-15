@@ -189,6 +189,8 @@ ScreenshotRecognitionSessionController::ScreenshotRecognitionSessionController(
     });
     connect(m_conversion, &ScreenshotImageConversionController::resultsChanged, this,
             &ScreenshotRecognitionSessionController::recognitionResultsChanged);
+    connect(m_conversion, &ScreenshotImageConversionController::markdownCopied, this,
+            &ScreenshotRecognitionSessionController::markdownCopied);
 #endif
     setProviders(recognition, qrRecognition, tableRecognition);
     connect(

@@ -58,6 +58,7 @@ class ScreenshotImageConversionController final : public QObject {
   signals:
     void changed();
     void resultsChanged();
+    void markdownCopied();
 
   private:
     void bindProviderSignals();

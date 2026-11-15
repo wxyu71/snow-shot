@@ -347,6 +347,8 @@ ScreenshotOcrController::ScreenshotOcrController(ScreenshotOcrControllerContext 
             &ScreenshotOcrController::workflowStateChanged);
     connect(m_session.get(), &ScreenshotRecognitionSessionController::recognitionResultsChanged,
             this, &ScreenshotOcrController::workflowStateChanged);
+    connect(m_session.get(), &ScreenshotRecognitionSessionController::markdownCopied,
+            this, &ScreenshotOcrController::markdownCopied);
 }
 
 ScreenshotOcrController::~ScreenshotOcrController() {

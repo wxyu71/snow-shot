@@ -1336,6 +1336,9 @@ class ApplicationController::Impl {
                              &systemTray,
                              &presentation::SystemTrayController::showRecordingExportMessage);
             QObject::connect(screenshotController.get(),
+                             &ScreenshotController::markdownCopied, &systemTray,
+                             &presentation::SystemTrayController::showMarkdownCopiedMessage);
+            QObject::connect(screenshotController.get(),
                              &ScreenshotController::captureActivityChanged, &floatingToolbar,
                              &presentation::FloatingToolbarController::setCaptureActive);
 #ifdef Q_OS_MACOS

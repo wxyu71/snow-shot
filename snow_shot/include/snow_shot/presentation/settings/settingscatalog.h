@@ -424,6 +424,7 @@ enum class SettingsCustomRenderer {
     PermissionMicrophone,
     CustomAiModels,
     TextTranslationConfigurations,
+    CloudOcr,
     StorageStatus,
     DrawingToolbarEditor,
     ScreenshotToolbarEditor,

@@ -334,8 +334,11 @@ pub fn verify_release_for_platform(
                 "The release does not contain all required Windows packages",
             )
         })?;
+    // Community Full-only releases do not ship a public portable package.
+    // Preserve the legacy Full (five packages) and Mini (three packages) feeds.
     require(
-        packages.len() == if crate::edition::MINI { 3 } else { 5 },
+        if crate::edition::MINI { packages.len() == 3 }
+        else { packages.len() == 4 || packages.len() == 5 },
         "incomplete_windows_release",
         "The release does not contain all required Windows packages",
     )?;
@@ -401,6 +404,15 @@ pub fn verify_release_for_platform(
             sha256,
             files,
         });
+    }
+    if !crate::edition::MINI {
+        let required = ["online/installer", "online/update", "offline/installer", "offline/update"];
+        require(
+            required.iter().all(|entry| identities.contains(*entry)) &&
+                (packages.len() == 4 || identities.contains("portable/portable")),
+            "incomplete_windows_release",
+            "The release does not contain all required Windows packages",
+        )?;
     }
     Ok(UpdateRelease {
         platform: platform.to_owned(),
@@ -503,6 +515,23 @@ pub(crate) mod tests {
             }
             let signed = sign_payload(&payload, &private, 32);
             assert!(verify_release_for_platform(&signed, Some(&trusted), platform).is_ok());
+            if !crate::edition::MINI {
+                // The signed Windows Full-only community release intentionally has
+                // online/offline installers and update ZIPs, but no portable asset.
+                let mut full_only = payload.clone();
+                full_only["packages"].as_array_mut().unwrap().retain(|package| {
+                    package["variant"] != "portable"
+                });
+                let signed_full_only = sign_payload(&full_only, &private, 32);
+                assert!(verify_release_for_platform(
+                    &signed_full_only, Some(&trusted), platform
+                ).is_ok());
+                full_only["packages"].as_array_mut().unwrap().retain(|package| {
+                    package["kind"] != "update" || package["variant"] != "offline"
+                });
+                let missing = sign_payload(&full_only, &private, 32);
+                assert!(verify_release_for_platform(&missing, Some(&trusted), platform).is_err());
+            }
             assert_eq!(
                 verify_release(&signed, Some(&trusted)).is_ok(),
                 platform == crate::edition::PLATFORM

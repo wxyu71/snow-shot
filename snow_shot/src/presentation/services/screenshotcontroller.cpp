@@ -1404,6 +1404,8 @@ bool ScreenshotController::Impl::ensureRecognitionFeature() {
         &owner);
     QObject::connect(m_ocrController.get(), &ScreenshotOcrController::textResultChanged, &owner,
                      [this](bool available) { handleAutomaticTextRecognitionAction(available); });
+    QObject::connect(m_ocrController.get(), &ScreenshotOcrController::markdownCopied,
+                     &owner, &ScreenshotController::markdownCopied);
     return true;
 }
 

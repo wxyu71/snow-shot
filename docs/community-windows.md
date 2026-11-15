@@ -4,35 +4,37 @@ This fork keeps the upstream screenshot/element selection, global shortcuts,
 pinning and local PP-OCRv6 implementation. The **Convert to Markdown** screenshot
 action is the single cloud intelligent OCR entry point.
 
-## Cloud PaddleOCR — bring your own Access Token
+## Cloud PaddleOCR — configure once in application settings
 
-1. Open a screenshot and choose **Convert to Markdown**.
-2. Open the conversion settings and supply your **Baidu AI Studio API URL** and
-   **Access Token**. The default host is
-   `https://paddleocr.aistudio-app.com`. The client calls AI Studio's
-   `/api/v2/ocr/jobs` directly, without a Snow Shot account, local OCR model
-   for cloud requests, relay, proxy, or bridge.
-3. Select **PaddleOCR-VL-1.6** (mixed layout), **PP-StructureV3** (structured
-   tables and formulas), or **PP-OCRv6** (text). All three write their complete
-   response to the existing Markdown view.
-4. Completion automatically copies **complete Markdown** to the clipboard.
-   You may edit the Markdown preview and copy a selection in the existing UI.
+Open **Settings > Text recognition & translation > Cloud OCR for Markdown**.
+Enter your **PaddleOCR AI Studio API URL**, **Access Token** and a model:
+**PaddleOCR-VL-1.6**, **PP-StructureV3**, or **PP-OCRv6**.
+The default host is `https://paddleocr.aistudio-app.com`; requests go
+directly to `/api/v2/ocr/jobs` without the upstream Snow Shot account.
 
-The separate local text-recognition action uses the existing offline
-PP-OCRv6 modules. On successful recognition it copies all OCR text while
-keeping the selectable text overlay open. Cloud jobs send the selected image
-to Baidu AI Studio. Local OCR never needs the API token.
+Click **Test connection** to submit a small synthetic OCR image through the
+*actual authenticated asynchronous API*. The test may consume provider quota.
+Click **Save** to keep the selected endpoint/model/credentials. On Windows the
+Access Token is protected with user-scoped DPAPI; beta.1 plaintext token entries
+remain readable until the user saves/migrates the configuration.
 
-Security notes: only HTTPS hosts are accepted (localhost HTTP is permitted
-for tests); API token headers are sent to the configured job endpoints, never
-to the returned signed Markdown URL. The API token is currently saved in
-the user-local `SnowShot/CloudOcr.ini` via Qt QSettings **without encryption**.
-Use a scoped token and protect your Windows user profile. Credentials and
-screenshots must never be committed or included in bug reports.
+After capturing a selection, click the **single Convert to Markdown** action.
+There is no five-action popup or screenshot-local credential editor. The job
+runs in the background; success copies the complete Markdown to the clipboard
+and shows a short system-tray notification. Markdown can still be edited and
+partially copied in its viewer. **Ctrl+D, local text recognition, and the QR
+scanner in the selection toolbar stay independent and offline.** For now the
+supported cloud protocol is Baidu AI Studio's OCR jobs API; arbitrary third
+party APIs require individual protocol adapters, not just an arbitrary URL.
+
+Security: network endpoints require HTTPS except loopback for local testing.
+The image is transmitted to the configured provider; access tokens must not
+be included in screenshots or bug reports. Cloud result download URLs do not
+receive the API token.
 
 ## Independent Windows x64 release and compatibility
 
-This branch increments upstream 1.5.7 to **1.5.8-beta.1**. The full NSIS installer
+This branch increments upstream 1.5.7 to **1.5.8-beta.2**. The full NSIS installer
 continues to use upstream's `snow_shot.exe`, `SnowShot` installer registry
 key, `SnowShot` installation directory, and uninstall-before-install logic.
 These values are required for an in-place upgrade from the official installer.
@@ -50,21 +52,43 @@ The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
 `.github/workflows/community-windows-x64.yml` validates the build and
 uploads both installers as artifacts **on successful completion**. Only a beta tag pushed from the reviewed `main` history (for example,
-`v1.5.8-beta.1_snow-shot`) triggers automatic publication to this fork's
+`v1.5.8-beta.2_snow-shot`) triggers automatic publication to this fork's
 GitHub Releases **after** the Windows build, native packaging checks, the three-model
 C++ Qt contract tests and SHA-256/manifest verification pass. PR and manual CI runs only upload private
 workflow artifacts; they do not publish an installer. Releases contain only
 the x64 Full online/offline NSIS installers, checksums and manifests, never
 Mini, ARM64, macOS or portable builds.
 
-The embedded update-source defaults and Rust origin allowlist now point to
-`wxyu71/snow-shot` (including the fallback release host), preventing the
-community fork from silently downloading an upstream official binary that
-could restore removed features. **Signed community update publishing is not
-configured:** an independently trusted signing key and verified fork release
-metadata must be set up before automatic binary updates can function. The
-NSIS upgrade-over-official-installer path is separate from this future update
-channel.
+The embedded update-source defaults and Rust origin allowlist point only to
+`wxyu71/snow-shot`, preventing downloads from the former author's release
+service. Two GitHub release views serve different purposes:
+
+- **Rolling public downloads**: `releases/tag/community-beta` always contains the
+  latest verified online/offline x64 NSIS installers and their hashes/manifests.
+  Each new version replaces its previous artifacts. Publishing still requires
+  a reviewed main-branch SemVer tag and full Windows CI.
+- **In-app updater**: immutable SemVer tags (for example,
+  `v1.5.8-beta.2_snow-shot`) may additionally contain `latest-version.json`
+  and two verified `*-update.zip` archives. Only RSA-3072/PSS-signed metadata
+  from a **fork-owned key** already embedded in the client is trusted.
+
+Before enabling in-app updates, generate a *new community signing key* on a
+trusted Windows computer using `scripts/new-snow-shot-release-key.ps1`.
+Commit **only** its public JSON to
+`snow_shot/resources/update-trusted-keys.json` with a
+`snow-shot-community-*` key id; securely add the PRIVATE key PEM as the
+repository Actions secret `COMMUNITY_UPDATE_SIGNING_PRIVATE_KEY`.
+Never commit the private key. The tag workflow omits update metadata unless the
+secret is present, validates the key against embedded trust, and verifies the
+signed feed with the compiled updater. A missing/mismatched key must not be
+treated as a working auto-update.
+
+**Important upgrade boundary:** the already installed beta.1 binary trusts the
+older upstream update key; it cannot verify a new community signature. Users
+must first manually install a community-key-enabled version over beta.1.
+Subsequent version-incremented releases can be automatically checked/installed
+after signing is configured and verified. Replacing a binary under the *same*
+SemVer would rightly be rejected by the updater.
 
 **Verification required before public release:** actual Windows build and
 unit tests; NSIS upgrade over an installed official 1.5.7; preservation of

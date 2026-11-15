@@ -4579,8 +4579,21 @@ constexpr TranslatableText catalogPageScreenRecordingAliases[] = {
     settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Record video")),
 };
 
+SettingsItemDefinition communityCloudOcrSettingsItem() {
+    return {
+        QStringLiteral("text-recognition.cloud-ocr"),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Cloud OCR for Markdown")),
+        settingsText(QT_TRANSLATE_NOOP(
+            "SettingsCatalog", "Configure a provider URL, API key, model and connection test")),
+        {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "PaddleOCR AI Studio"))},
+        {},
+        SettingsCustomDefinition{SettingsCustomRenderer::CloudOcr},
+    };
+}
+
 constexpr CatalogItemFactory
     catalogPageTextRecognitionTranslationSectionTextRecognitionSettingsItems[] = {
+        {communityCloudOcrSettingsItem},
         {saveRecognitionResultAsImageItem},
         {defaultOcrFormattingItem},
         {defaultOcrPunctuationItem},
@@ -7012,6 +7025,9 @@ QStringList SettingsCatalog::validationErrors() const {
                     storage::ConfigurationValueKind expectedKind =
                         storage::ConfigurationValueKind::Structured;
                     switch (custom->renderer) {
+                    case SettingsCustomRenderer::CloudOcr:
+                        rendererSupported = true;
+                        break;
                     case SettingsCustomRenderer::CloudUploadConfigurations:
                         rendererSupported = true;
                         expectedKey = QStringLiteral("cloud_upload/configuration");

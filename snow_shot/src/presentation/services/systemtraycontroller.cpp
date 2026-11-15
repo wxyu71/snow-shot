@@ -987,6 +987,12 @@ void SystemTrayController::showUpdateMessage(const QString& message) {
     m_impl->showBalloon(tr("Update"), message, QSystemTrayIcon::Information, BalloonKind::Update);
 }
 
+void SystemTrayController::showMarkdownCopiedMessage() {
+    m_impl->showBalloon(tr("Markdown ready"),
+                        tr("The OCR result has been copied to the clipboard."),
+                        QSystemTrayIcon::Information, BalloonKind::Capture);
+}
+
 void SystemTrayController::showRecordingExportMessage(const QString& path) {
     if (path.isEmpty())
         return;

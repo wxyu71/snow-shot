@@ -819,6 +819,8 @@ add_library(snow_shot_translation STATIC
     src/presentation/services/selectedtexttranslationcontroller.cpp
     include/snow_shot/network/baidupaddleocrclient.h
     src/network/baidupaddleocrclient.cpp
+    include/snow_shot/network/communitycloudocrsettings.h
+    src/network/communitycloudocrsettings.cpp
     include/snow_shot/network/snowshotapiclient.h
     src/network/boundednetworkresponse.h
     src/network/freetranslationprotocol.h
@@ -1212,7 +1214,9 @@ if(APPLE)
 endif()
 target_sources(snow_shot_settings PRIVATE
     include/snow_shot/presentation/components/clouduploadsettingswidget.h
-    src/presentation/components/clouduploadsettingswidget.cpp)
+    src/presentation/components/clouduploadsettingswidget.cpp
+    include/snow_shot/presentation/components/cloudocrsettingswidget.h
+    src/presentation/components/cloudocrsettingswidget.cpp)
 target_link_libraries(snow_shot_settings PUBLIC snow_shot_permissions snow_shot_login_item
     snow_shot_store_lifecycle)
 qt_add_resources(snow_shot_settings "snow_shot_about_assets"

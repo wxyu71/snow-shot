@@ -202,125 +202,6 @@ class AboutArtwork final : public QWidget {
     QSvgRenderer m_renderer;
 };
 
-class AboutResourceButton final : public AdButton {
-  public:
-    AboutResourceButton(const QString& objectName, const adqt::icons::IconRef& icon,
-                        QWidget* parent)
-        : AdButton(parent), m_icon(icon) {
-        setObjectName(objectName);
-        setButtonStyle(ButtonStyle::Outline);
-        setAccentRole(AccentRole::Neutral);
-        setShape(Shape::Rounded);
-        setFocusPolicy(Qt::StrongFocus);
-        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Preferred);
-        auto* row = new QHBoxLayout(this);
-        m_iconLabel = new QLabel(this);
-        row->addWidget(m_iconLabel, 0, Qt::AlignVCenter);
-        auto* copy = new QVBoxLayout;
-        copy->setSpacing(3);
-        m_title = aboutLabel(objectName + QStringLiteral("Title"), this);
-        m_description = aboutLabel(objectName + QStringLiteral("Description"), this);
-        copy->addWidget(m_title);
-        copy->addWidget(m_description);
-        row->addLayout(copy, 1);
-        m_arrow = new QLabel(this);
-        row->addWidget(m_arrow, 0, Qt::AlignTop);
-        for (QLabel* label : {m_iconLabel, m_title, m_description, m_arrow}) {
-            label->setAttribute(Qt::WA_TransparentForMouseEvents);
-        }
-    }
-
-    void setCopy(const QString& title, const QString& description, const QUrl& url) {
-        setAccessibleName(title);
-        setAccessibleDescription(description);
-        setToolTip(url.toDisplayString());
-        m_title->setText(title);
-        m_description->setText(description);
-    }
-
-    void setTheme(const styles::ThemeColorScheme& scheme) {
-        m_scheme = scheme;
-        const auto& metric = scheme.metricAlias;
-        layout()->setContentsMargins(metric.paddingSM, metric.paddingXS, metric.paddingSM,
-                                     metric.paddingXS);
-        layout()->setSpacing(metric.paddingSM);
-        styleAboutLabel(m_title, metric.fontSizeSM, QFont::DemiBold, scheme.map.colorText);
-        styleAboutLabel(m_description, metric.fontSizeSM - 2, QFont::Normal, scheme.map.colorText);
-        const QSize iconSize(metric.fontSizeLG, metric.fontSizeLG);
-        m_iconLabel->setFixedSize(iconSize);
-        m_iconLabel->setPixmap(aboutIcon(m_icon, iconSize, this, scheme.map.colorTextSecondary));
-        m_arrow->setFixedSize(metric.fontSizeSM, metric.fontSizeSM);
-        m_arrow->setPixmap(
-            aboutIcon(outlined::Export(), m_arrow->size(), this, scheme.map.colorTextTertiary));
-        m_contentColor = {};
-        updateGeometry();
-        update();
-    }
-
-    QSize sizeHint() const override {
-        return layout()->sizeHint();
-    }
-    QSize minimumSizeHint() const override {
-        return {0, layout()->minimumSize().height()};
-    }
-
-  protected:
-    void hideEvent(QHideEvent* event) override {
-
-        AdButton::hideEvent(event);
-    }
-
-    void paintEvent(QPaintEvent* event) override {
-        // AdButton owns the surface, focus ring and click wave. Only the multiline
-        // child content needs its colors synchronized with the standard button state.
-        adqt::widgets::detail::ButtonStyleInput input;
-        input.buttonStyle = buttonStyle();
-        input.accentRole = accentRole();
-        input.sizeClass = sizeClass();
-        input.baseFont = font();
-        const auto visual = adqt::widgets::detail::resolveButtonVisualStyle(
-            input, adqt::theme::ThemeManager::instance().resolve(this));
-        const auto& state = !isEnabled()                                 ? visual.disabled
-                            : isDown()                                   ? visual.active
-                            : adqt::widgets::detail::widgetHovered(this) ? visual.hover
-                                                                         : visual.normal;
-        if (m_contentColor != state.text || m_contentDpr != devicePixelRatioF()) {
-            m_contentColor = state.text;
-            m_contentDpr = devicePixelRatioF();
-            const auto& metric = m_scheme.metricAlias;
-            styleAboutLabel(m_title, metric.fontSizeSM, QFont::DemiBold, state.text);
-            styleAboutLabel(m_description, metric.fontSizeSM - 2, QFont::Normal, state.text);
-            m_iconLabel->setPixmap(aboutIcon(m_icon, m_iconLabel->size(), this, state.text));
-            m_arrow->setPixmap(aboutIcon(outlined::Export(), m_arrow->size(), this, state.text));
-        }
-        AdButton::paintEvent(event);
-    }
-
-  private:
-    adqt::icons::IconRef m_icon;
-    QLabel* m_iconLabel = nullptr;
-    QLabel* m_title = nullptr;
-    QLabel* m_description = nullptr;
-    QLabel* m_arrow = nullptr;
-    styles::ThemeColorScheme m_scheme;
-    QColor m_contentColor;
-    qreal m_contentDpr = 0;
-};
-
-QUrl aboutChangelogUrl() {
-    return QUrl(QStringLiteral(SNOW_SHOT_PROJECT_URL) +
-                QStringLiteral("/blob/main/docs/community-changelog.md"));
-}
-
-QUrl aboutProjectUrl(const QString& suffix = {}) {
-    QUrl url(QStringLiteral(SNOW_SHOT_PROJECT_URL));
-    QString path = url.path();
-    while (path.endsWith(QLatin1Char('/'))) {
-        path.chop(1);
-    }
-    url.setPath(path + suffix);
-    return url;
-}
 } // namespace
 
 struct AboutPageWidget::Ui {
@@ -356,7 +237,6 @@ struct AboutPageWidget::Ui {
     QLabel* versionValue = nullptr;
     QLabel* previewBadge = nullptr;
     QBoxLayout* versionActions = nullptr;
-    AdButton* releaseNotes = nullptr;
     AdButton* copyButton = nullptr;
     AdButton* privacyPolicy = nullptr;
     AdButton* userAgreement = nullptr;
@@ -375,8 +255,6 @@ struct AboutPageWidget::Ui {
     AdButton* updateCancel = nullptr;
     QWidget* updateActionBlank = nullptr;
     QStackedLayout* updateActions = nullptr;
-    QGridLayout* resourceLayout = nullptr;
-    std::array<AboutResourceButton*, 4> resources{};
     QLabel* linkError = nullptr;
     AdDivider* footerDivider = nullptr;
     QBoxLayout* footerLayout = nullptr;
@@ -386,7 +264,6 @@ struct AboutPageWidget::Ui {
     QLabel* copyright = nullptr;
     QLabel* slogan = nullptr;
     int featureColumns = 0;
-    int resourceColumns = 0;
 };
 
 AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
@@ -499,14 +376,6 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
     versionText->addLayout(versionValue);
     m_ui->versionLayout->addLayout(versionText, 1);
     m_ui->versionActions = new QBoxLayout(QBoxLayout::LeftToRight);
-    m_ui->releaseNotes = new AdButton(m_ui->versionPanel);
-    m_ui->releaseNotes->setObjectName(QStringLiteral("aboutReleaseNotes"));
-    m_ui->releaseNotes->setButtonStyle(AdButton::ButtonStyle::Link);
-    m_ui->releaseNotes->setIconRef(outlined::Export());
-    m_ui->releaseNotes->setIconPosition(AdButton::IconPosition::Trailing);
-    m_ui->releaseNotes->setSizeClass(AdButton::SizeClass::Small);
-    m_ui->releaseNotes->setFocusPolicy(Qt::StrongFocus);
-    m_ui->versionActions->addWidget(m_ui->releaseNotes);
     m_ui->copyButton = new AdButton(m_ui->versionPanel);
     m_ui->copyButton->setObjectName(QStringLiteral("aboutCopyVersion"));
     m_ui->copyButton->setButtonStyle(AdButton::ButtonStyle::Outline);
@@ -600,13 +469,6 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
         });
     }
 
-    m_ui->resourceLayout = new QGridLayout;
-    m_ui->resources = {
-        new AboutResourceButton(QStringLiteral("aboutCommunityChangelog"), outlined::FileText(), m_ui->body),
-        new AboutResourceButton(QStringLiteral("aboutSourceCode"), outlined::Code(), m_ui->body),
-        new AboutResourceButton(QStringLiteral("aboutFeedback"), outlined::Comment(), m_ui->body),
-        new AboutResourceButton(QStringLiteral("aboutCommunityReleases"), outlined::CloudDownload(), m_ui->body)};
-    m_ui->bodyLayout->addLayout(m_ui->resourceLayout);
     m_ui->linkError = aboutLabel(QStringLiteral("aboutLinkError"), m_ui->body);
     m_ui->linkError->setTextInteractionFlags(Qt::TextSelectableByMouse |
                                              Qt::TextSelectableByKeyboard);
@@ -624,9 +486,10 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
     community->addWidget(m_ui->heart, 0, Qt::AlignTop);
     m_ui->community = aboutLabel(QStringLiteral("aboutCommunity"), m_ui->body);
     community->addWidget(m_ui->community, 1);
-    footerText->addLayout(community);
+    m_ui->heart->hide();
+    m_ui->community->hide();
     m_ui->license = aboutLabel(QStringLiteral("aboutLicense"), m_ui->body);
-    footerText->addWidget(m_ui->license);
+    m_ui->license->hide();
     m_ui->userAgreement = new AdButton(m_ui->body);
     m_ui->userAgreement->setObjectName(QStringLiteral("aboutUserAgreement"));
     m_ui->privacyPolicy = new AdButton(m_ui->body);
@@ -673,16 +536,6 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
         }
     });
     connect(m_ui->copyFeedbackTimer, &QTimer::timeout, this, &AboutPageWidget::retranslateUi);
-    connect(m_ui->releaseNotes, &AdButton::clicked, this,
-            [this]() { openProjectLink(aboutChangelogUrl()); });
-    connect(m_ui->resources[0], &QAbstractButton::clicked, this,
-            [this]() { openProjectLink(aboutChangelogUrl()); });
-    connect(m_ui->resources[1], &QAbstractButton::clicked, this,
-            [this]() { openProjectLink(aboutProjectUrl()); });
-    connect(m_ui->resources[2], &QAbstractButton::clicked, this,
-            [this]() { openProjectLink(aboutProjectUrl(QStringLiteral("/issues"))); });
-    connect(m_ui->resources[3], &QAbstractButton::clicked, this,
-            [this]() { openProjectLink(aboutProjectUrl(QStringLiteral("/releases"))); });
     connect(m_ui->privacyPolicy, &AdButton::clicked, this,
             [this] { openProjectLink(QUrl(snow_shot::app::distribution::privacyPolicyUrl())); });
     connect(m_ui->userAgreement, &AdButton::clicked, this,
@@ -719,8 +572,6 @@ void AboutPageWidget::applyTheme(const styles::ThemeColorScheme& scheme) {
     m_ui->bodyLayout->setSpacing(0);
     m_ui->featureLayout->setHorizontalSpacing(metric.paddingXS);
     m_ui->featureLayout->setVerticalSpacing(metric.paddingSM);
-    m_ui->resourceLayout->setSpacing(metric.paddingSM);
-    m_ui->resourceLayout->setContentsMargins(0, metric.paddingXS, 0, 0);
     m_ui->linkError->setContentsMargins(0, metric.paddingXS, 0, metric.paddingXS);
     m_ui->footerLayout->setSpacing(metric.paddingSM);
     m_ui->versionPanelLayout->setContentsMargins(metric.padding, metric.paddingXXS, metric.padding,
@@ -786,9 +637,6 @@ void AboutPageWidget::applyTheme(const styles::ThemeColorScheme& scheme) {
         m_ui->featureIcons[i]->setPixmap(
             aboutIcon(m_ui->featureRefs[i], m_ui->featureIcons[i]->size(), this, tones[i]));
         styleAboutLabel(m_ui->featureLabels[i], metric.fontSizeSM, QFont::Normal, colors.colorText);
-    }
-    for (auto* resource : m_ui->resources) {
-        resource->setTheme(scheme);
     }
     retranslateUi();
 }
@@ -882,24 +730,9 @@ void AboutPageWidget::retranslateUi() {
     m_ui->copyButton->setToolTip(tr("Copy the version number to the clipboard"));
     m_ui->copyButton->setIconRef(m_ui->copyFeedbackTimer->isActive() ? outlined::Check()
                                                                      : outlined::Copy());
-    m_ui->releaseNotes->setText(tr("Changelog"));
-    m_ui->releaseNotes->setAccessibleName(tr("Changelog"));
-    m_ui->releaseNotes->setToolTip(aboutChangelogUrl().toDisplayString());
-    m_ui->resources[0]->setCopy(tr("Changelog"),
-                                tr("View the source and improve it together"),
-                                aboutChangelogUrl());
-    m_ui->resources[1]->setCopy(tr("GitHub"), tr("View the source and improve it together"),
-                                aboutProjectUrl());
-    m_ui->resources[2]->setCopy(tr("Feedback and suggestions"),
-                                tr("Make the next experience better"),
-                                aboutProjectUrl(QStringLiteral("/issues")));
-    m_ui->resources[3]->setCopy(
-        tr("Download from GitHub"), tr("View the source and improve it together"),
-        aboutProjectUrl(QStringLiteral("/releases")));
-    m_ui->community->setText(tr("Built for daily work, and growing with the community"));
-    m_ui->license->setText(
-        tr("%1 · %2").arg(tr("GNU General Public License v3.0 or later"),
-                          tr("Free and open-source software. Distributed without any warranty")));
+    m_ui->community->clear();
+    // The full GPL notice remains in LICENSE and the distributed notices.
+    m_ui->license->clear();
     m_ui->privacyPolicy->setText(tr("Privacy policy"));
     m_ui->privacyPolicy->setAccessibleName(tr("Privacy policy"));
     m_ui->privacyPolicy->setToolTip(
@@ -908,8 +741,7 @@ void AboutPageWidget::retranslateUi() {
     m_ui->userAgreement->setAccessibleName(tr("User agreement"));
     m_ui->userAgreement->setToolTip(
         QUrl(snow_shot::app::distribution::userAgreementUrl()).toDisplayString());
-    m_ui->copyright->setText(
-        tr("Copyright © %1 %2").arg(QStringLiteral("2025–2026"), QStringLiteral("mg-chao")));
+    m_ui->copyright->setText(tr("© 2025–2026 mg-chao · © 2026 WXYU71"));
     m_ui->slogan->setText(
         snow_shot::app::edition::isMini
             ? tr("%1 · Make expression clearer").arg(snow_shot::app::edition::productName())
@@ -941,9 +773,7 @@ void AboutPageWidget::updateLayout() {
                              m_ui->bodyLayout->contentsMargins().right() -
                              m_ui->versionPanelLayout->contentsMargins().left() -
                              m_ui->versionPanelLayout->contentsMargins().right();
-    const int versionActionsWidth = m_ui->releaseNotes->sizeHint().width() +
-                                    m_ui->copyButton->sizeHint().width() +
-                                    m_ui->versionActions->spacing();
+    const int versionActionsWidth = m_ui->copyButton->sizeHint().width();
     // An oversized minimum width makes Qt calculate wrapped text heights at the wrong width.
     // Stack the version actions before they can force the shared card wider than its viewport.
     m_ui->versionActions->setDirection(tiny || versionWidth < versionActionsWidth
@@ -978,27 +808,6 @@ void AboutPageWidget::updateLayout() {
         separator->setVisible(!lastInRow);
         separator->setFixedHeight(separatorHeight);
     }
-    const int resourceColumns = wide ? 3 : 1;
-    if (m_ui->resourceColumns != resourceColumns) {
-        for (auto* resource : m_ui->resources) {
-            m_ui->resourceLayout->removeWidget(resource);
-        }
-        for (int i = 0; i < 3; ++i) {
-            m_ui->resourceLayout->setColumnStretch(i, i < resourceColumns ? 1 : 0);
-        }
-        if (wide) {
-            for (int i = 0; i < 3; ++i) {
-                m_ui->resourceLayout->addWidget(m_ui->resources[static_cast<size_t>(i)], 0, i);
-            }
-            m_ui->resourceLayout->addWidget(m_ui->resources[3], 1, 0, 1, 3);
-        } else {
-            for (size_t i = 0; i < m_ui->resources.size(); ++i) {
-                m_ui->resourceLayout->addWidget(m_ui->resources[i], static_cast<int>(i), 0);
-            }
-        }
-        m_ui->resourceColumns = resourceColumns;
-    }
-
     int artHeight = qRound(artWidth * 340.0 / 460.0);
     if (wide) {
         // The scroll area uses the content's preferred height. Budget decorative artwork
