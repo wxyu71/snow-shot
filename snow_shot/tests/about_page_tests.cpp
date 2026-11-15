@@ -1074,25 +1074,16 @@ void mainNavigationSearchThemesAndLanguages() {
             auto* icon = page->findChild<QLabel*>(QStringLiteral("aboutFeatureIcon%1").arg(i));
             require(icon != nullptr && !icon->pixmap().isNull(), "every feature icon renders");
         }
-        require(child<QAbstractButton>(*page, "aboutCommunityChangelog")->accessibleName() ==
-                        expectedTranslation(translator, locale, "AboutPageWidget",
-                                            "Changelog") &&
-                    child<QWidget>(*page, "aboutArtwork")->accessibleName() ==
-                        expectedTranslation(
-                            translator, locale, "AboutPageWidget",
-                            "Screenshot selection, annotation tools, and recognized text"),
-                "resource and illustration accessibility copy follows the active language");
-        const QString groupTitle =
-            expectedTranslation(translator, locale, "AboutPageWidget", "Download from GitHub");
-        const QString groupDescription =
-            expectedTranslation(translator, locale, "AboutPageWidget",
-                                "View the source and improve it together");
-        auto* group = child<QAbstractButton>(*page, "aboutCommunityReleases");
-        require(group->accessibleName() == groupTitle &&
-                    group->accessibleDescription() == groupDescription,
-                "the community release card retranslates its title and description");
-        require(child<QLabel>(*group, "aboutCommunityReleasesDescription")->text() == groupDescription,
-                "the community release card displays the translated description without unrelated QQ group details");
+        require(child<QWidget>(*page, "aboutArtwork")->accessibleName() ==
+                    expectedTranslation(
+                        translator, locale, "AboutPageWidget",
+                        "Screenshot selection, annotation tools, and recognized text"),
+                "About illustration accessibility copy follows the active language");
+        require(page->findChild<QAbstractButton*>(
+                    QStringLiteral("aboutCommunityChangelog")) == nullptr &&
+                    page->findChild<QAbstractButton*>(
+                    QStringLiteral("aboutCommunityReleases")) == nullptr,
+                "removed promotional resource cards stay absent across language changes");
         require(sidebar->currentRoute() == QStringLiteral("/about"),
                 "translated navigation preserves About selection");
         auto* scroll = page->findChild<adqt::widgets::AdScrollArea*>();
