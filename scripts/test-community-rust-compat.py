@@ -53,14 +53,13 @@ class RustAtomicCompatibility(unittest.TestCase):
 
     def test_native_ci_is_triggered_by_rust_source_changes(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        for tracked_tree in (
-            "snow-crates/**",
-            "snow-draw-engine-gpui/**",
-            "snow_draw_engine_qt/**",
-            "snow-image-rs/**",
-            "snow_rust_ffi/**",
-        ):
-            self.assertIn(f"      - {tracked_tree}", workflow)
+        # Every PR enters the Community workflow. The classifier only exempts
+        # documentation, so all tracked Rust workspaces reach the native gate
+        # without maintaining a second path allowlist that can drift.
+        self.assertNotIn("pull_request:\n    paths:", workflow)
+        self.assertIn("Classify whether this ref needs the native Windows gate", workflow)
+        self.assertIn("*.md|*.markdown|*.rst|docs/*) ;;", workflow)
+        self.assertIn("*) native=true ;;", workflow)
         self.assertIn("actions/cache/restore@v4", workflow)
         self.assertIn("actions/cache/save@v4", workflow)
         self.assertLess(
@@ -71,7 +70,8 @@ class RustAtomicCompatibility(unittest.TestCase):
 
     def test_native_windows_build_is_gated_and_skips_redundant_bootstrap(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("needs: [preflight, verify-paddleocr-contract]", workflow)
+        self.assertIn("needs: [changes, preflight, verify-paddleocr-contract]", workflow)
+        self.assertIn("needs.changes.outputs.native == 'true'", workflow)
         self.assertIn("python3 scripts/test-community-cpp-api-contract.py", workflow)
         self.assertIn("run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap", workflow)
         self.assertIn("VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite", workflow)
