@@ -3203,6 +3203,13 @@ void abortObserversMayDestroyApiClient() {
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
 
+    if (application.arguments().contains(QStringLiteral("--community-service-only"))) {
+        customServerDefaultsAndValidation();
+        officialHttpErrorsDescribeTheFailure();
+        customModelsUseIndependentOpenAiConnections();
+        return 0;
+    }
+
     if (application.arguments().contains(QStringLiteral("--cancel-destruction-only"))) {
         abortObserversMayDestroyApiClient();
         return 0;

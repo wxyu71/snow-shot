@@ -1140,6 +1140,19 @@ int main(int argc, char** argv) {
         storage.shutdown();
         return 0;
     }
+    if (application.arguments().contains(QStringLiteral("--community-only"))) {
+        projectLinkSurfacesMatchStandardButtons();
+        projectLinksAreExplicitAccessibleAndRecoverable();
+        storeUpdatesOpenMicrosoftStore();
+        updatePolicyAndUnavailableCopy();
+        updateStatesFitTheVersionPanel();
+        checkLinkStartsManualUpdateCheck();
+        dividersFollowTheComponentLibraryAndUpdatesBreathe();
+        mainNavigationSearchThemesAndLanguages();
+        largerTypeKeepsEveryActionReachable();
+        storage.shutdown();
+        return 0;
+    }
     if (application.arguments().contains(QStringLiteral("--tray-click-settings-only"))) {
         traySettingsAndFunctionNavigation();
         storage.shutdown();

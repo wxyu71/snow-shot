@@ -3250,10 +3250,16 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_test(NAME snow-shot-about-page-tests COMMAND snow-shot-about-page-tests)
     target_link_libraries(snow-shot-about-page-tests PRIVATE snow_shot_updates)
     set_tests_properties(snow-shot-about-page-tests PROPERTIES
-        LABELS "unit;community"
+        LABELS "unit"
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
+    add_test(NAME snow-shot-community-about-tests
+        COMMAND snow-shot-about-page-tests --community-only -platform offscreen)
+    set_tests_properties(snow-shot-community-about-tests PROPERTIES
+        LABELS "unit;community" TIMEOUT 90
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-tray-click-settings-tests
         COMMAND snow-shot-about-page-tests --tray-click-settings-only -platform offscreen)
     set_tests_properties(snow-shot-tray-click-settings-tests PROPERTIES LABELS "unit" TIMEOUT 60
@@ -10039,6 +10045,11 @@ if(SNOW_SHOT_BUILD_TESTS)
         NAME snow-shot-api-client-tests
         COMMAND snow-shot-api-client-tests
     )
+    add_test(NAME snow-shot-community-api-client-tests
+        COMMAND snow-shot-api-client-tests --community-service-only)
+    set_tests_properties(snow-shot-community-api-client-tests PROPERTIES
+        LABELS "unit;community" TIMEOUT 60
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-api-client-table-vision-tests
         COMMAND snow-shot-api-client-tests --table-vision-only)
     set_tests_properties(snow-shot-api-client-table-vision-tests PROPERTIES LABELS "unit" TIMEOUT 60
@@ -14609,6 +14620,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     add_custom_target(snow-shot-community-tests DEPENDS
         snow_shot
         snow-shot-paddleocr-client-tests
+        snow-shot-api-client-tests
         snow-shot-recognition-session-controller-tests
         snow-shot-application-storage-tests
         snow-shot-screenshot-tool-palette-tests
