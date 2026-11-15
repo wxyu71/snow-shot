@@ -363,7 +363,7 @@ jobs:
               --notes-file docs/community-release-notes.md --prerelease --latest=false
           else
             gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
-              --repo "$GITHUB_REPOSITORY" --verify-tag --target "$GITHUB_SHA" \
+              --repo "$GITHUB_REPOSITORY" --verify-tag \
               --prerelease --latest=false \
               --title "Snow Shot Community $version (Windows x64)" \
               --notes-file docs/community-release-notes.md
