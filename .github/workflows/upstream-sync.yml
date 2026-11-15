@@ -44,6 +44,10 @@ jobs:
           upstream_sha="$(jq -r .upstream_commit "$RUNNER_TEMP/sync.json")"
           reasons="$(jq -r '.reasons[]? | "- " + .' "$RUNNER_TEMP/sync.json")"
 
+          if [[ "$CLASSIFIED_MODE" == "noop" ]]; then
+            exit 0
+          fi
+
           if [[ "$CLASSIFIED_MODE" == "auto" ]]; then
             if git merge --no-commit --no-ff upstream/main; then
               if python3 scripts/upstream_sync.py verify-deletions; then
@@ -70,7 +74,7 @@ jobs:
             cat > .github/upstream-review-pending.md <<EOF
 # Upstream synchronization requires conflict resolution
 
-Upstream commit: `$upstream_sha`
+Upstream commit: $upstream_sha
 
 $reasons
 EOF
@@ -79,7 +83,7 @@ EOF
           fi
 
           git push --force origin "$branch"
-          body="Upstream commit: `$upstream_sha`
+          body="Upstream commit: $upstream_sha
 
 $candidate
 
