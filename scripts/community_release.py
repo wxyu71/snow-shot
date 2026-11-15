@@ -22,9 +22,26 @@ def source_version(root: Path = ROOT) -> str:
     return match.group(1)
 
 
+def release_tag(version: str) -> str:
+    if not BETA_VERSION.fullmatch(version):
+        raise ValueError(f"Expected beta version, got {version!r}")
+    return f"v{version}_snow-shot"
+
+
 def validate_tag(tag: str, version: str) -> None:
-    if not BETA_VERSION.fullmatch(version) or tag != f"v{version}_snow-shot":
-        raise ValueError(f"Refusing release: tag {tag!r} must exactly match v{version}_snow-shot")
+    expected = release_tag(version)
+    if tag != expected:
+        raise ValueError(f"Refusing release: tag {tag!r} must exactly match {expected}")
+
+
+def render_release_notes(version: str, root: Path = ROOT) -> str:
+    template = (root / "docs" / "community-release-notes.md").read_text(encoding="utf-8")
+    if template.count("@VERSION@") != 1:
+        raise ValueError("Release notes must contain exactly one @VERSION@ placeholder")
+    rendered = template.replace("@VERSION@", version)
+    if "@VERSION@" in rendered:
+        raise ValueError("Unresolved release notes version placeholder")
+    return rendered
 
 
 def filenames(version: str) -> set[str]:
@@ -77,7 +94,10 @@ def verify_assets(directory: Path, version: str, *, allow_build_intermediates: b
 
 def selftest() -> None:
     version = "1.5.8-beta.1"
+    assert release_tag(version) == "v1.5.8-beta.1_snow-shot"
     validate_tag("v1.5.8-beta.1_snow-shot", version)
+    notes = render_release_notes(version)
+    assert "Release version: **1.5.8-beta.1**" in notes and "@VERSION@" not in notes
     for tag in ("v1.5.7_snow-shot", "v1.5.8-beta.1", "v1.5.8-beta.1_snow-shot-mini"):
         try:
             validate_tag(tag, version)
@@ -139,9 +159,13 @@ def selftest() -> None:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=["version", "validate-tag", "verify-assets", "selftest"])
+    parser.add_argument(
+        "command",
+        choices=["version", "tag", "validate-tag", "verify-assets", "render-notes", "selftest"],
+    )
     parser.add_argument("--tag", default="")
     parser.add_argument("--directory", type=Path)
+    parser.add_argument("--output", type=Path)
     parser.add_argument("--allow-build-intermediates", action="store_true")
     args = parser.parse_args()
     try:
@@ -149,8 +173,14 @@ def main() -> int:
             selftest()
         elif args.command == "version":
             print(source_version())
+        elif args.command == "tag":
+            print(release_tag(source_version()))
         elif args.command == "validate-tag":
             validate_tag(args.tag, source_version())
+        elif args.command == "render-notes":
+            if args.output is None:
+                parser.error("--output is required for render-notes")
+            args.output.write_text(render_release_notes(source_version()), encoding="utf-8")
         elif args.command == "verify-assets":
             if args.directory is None:
                 parser.error("--directory is required for verify-assets")

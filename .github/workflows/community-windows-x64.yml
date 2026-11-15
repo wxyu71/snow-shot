@@ -2,10 +2,13 @@ name: Community Windows x64 installer and beta release
 
 on:
   workflow_dispatch:
+    inputs:
+      publish_prerelease:
+        description: Build main, then create the version tag and publish a GitHub prerelease
+        required: true
+        default: false
+        type: boolean
   pull_request:
-  push:
-    tags:
-      - 'v*.*.*-beta.*_snow-shot'
 
 # PR builds never receive publication credentials.
 permissions:
@@ -13,7 +16,7 @@ permissions:
 
 concurrency:
   group: community-windows-x64-${{ github.ref }}
-  # Supersede outdated PR builds; release tag builds must never be interrupted.
+  # Supersede outdated PR builds; manual clean/release builds are never interrupted.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -70,14 +73,23 @@ jobs:
           python3 scripts/test-community-package-modes.py
           python3 scripts/test-community-ocr-ui-contract.py
           python3 scripts/test-community-cargo-license-preflight.py
-      - name: Reject unreviewed or incorrectly versioned beta tags
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+      - name: Validate manual prerelease target
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
         shell: bash
         run: |
           set -euo pipefail
-          python3 scripts/community_release.py validate-tag --tag "$GITHUB_REF_NAME"
+          if [[ "$GITHUB_REF" != "refs/heads/main" ]]; then
+            echo "Prereleases must be started from the main branch." >&2
+            exit 1
+          fi
           git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
+          main_sha="$(git rev-parse refs/remotes/origin/main)"
+          if [[ "$GITHUB_SHA" != "$main_sha" ]]; then
+            echo "Prerelease source must be the current origin/main HEAD." >&2
+            exit 1
+          fi
+          tag="$(python3 scripts/community_release.py tag)"
+          python3 scripts/community_release.py validate-tag --tag "$tag"
 
   build-full-installer:
     # Failure of either fast gate skips the costly native build, not its tests.
@@ -108,14 +120,6 @@ jobs:
           $prefix = "community-windows-native-x64-v2-$($env:NATIVE_TOOLCHAIN_HASH)-"
           "prefix=$prefix" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
           "key=$prefix$($env:NATIVE_SOURCES_HASH)" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-      - name: Verify release tag is reviewed and matches CMake
-        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
-        shell: bash
-        run: |
-          set -euo pipefail
-          python scripts/community_release.py validate-tag --tag "$GITHUB_REF_NAME"
-          git fetch --no-tags origin main
-          git merge-base --is-ancestor "$GITHUB_SHA" refs/remotes/origin/main
       # #30 already compiled successfully but failed at package-time due to a
       # mismatched Mini=ON cache expectation. Execute real PowerShell mode
       # expressions with synthetic cases before expensive dependency bootstrap.
@@ -318,54 +322,109 @@ jobs:
       - name: Run three-model contract and Markdown clipboard tests
         run: ctest --test-dir build/community-paddleocr-contract --output-on-failure
 
-  # Only reviewed main-branch tags may publish verified installers.
+  # A prerelease is an explicit manual action from current main. Build and verify
+  # everything before creating the version tag, then assemble a draft release and
+  # publish it only after all six assets are present.
   publish-beta-release:
     needs: [build-full-installer]
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true && needs.build-full-installer.result == 'success'
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
       - uses: actions/checkout@v4
         with:
+          fetch-depth: 0
           persist-credentials: false
       - uses: actions/download-artifact@v4
         with:
           name: community-windows-x64-${{ github.sha }}
           path: dist
-      - name: Verify release tag and downloaded installer integrity
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 scripts/community_release.py validate-tag --tag "$GITHUB_REF_NAME"
-          python3 scripts/community_release.py verify-assets --directory dist
-      # Publish one versioned prerelease per reviewed beta tag.
-      - name: Publish versioned GitHub prerelease
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Verify release inputs and render versioned notes
+        id: release
         shell: bash
         run: |
           set -euo pipefail
           version="$(python3 scripts/community_release.py version)"
-          assets=(
-            "dist/snow-shot-$version-windows-x64-online.exe"
-            "dist/snow-shot-$version-windows-x64-online.exe.sha256"
-            "dist/snow-shot-$version-windows-x64-online.manifest.json"
-            "dist/snow-shot-$version-windows-x64-offline.exe"
-            "dist/snow-shot-$version-windows-x64-offline.exe.sha256"
-            "dist/snow-shot-$version-windows-x64-offline.manifest.json"
-          )
-          if gh release view "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release upload "$GITHUB_REF_NAME" "${assets[@]}" \
-              --repo "$GITHUB_REPOSITORY" --clobber
-            gh release edit "$GITHUB_REF_NAME" --repo "$GITHUB_REPOSITORY" \
-              --title "Snow Shot Community $version (Windows x64)" \
-              --notes-file docs/community-release-notes.md --prerelease --latest=false
-          else
-            gh release create "$GITHUB_REF_NAME" "${assets[@]}" \
-              --repo "$GITHUB_REPOSITORY" --verify-tag \
-              --prerelease --latest=false \
-              --title "Snow Shot Community $version (Windows x64)" \
-              --notes-file docs/community-release-notes.md
+          tag="$(python3 scripts/community_release.py tag)"
+          python3 scripts/community_release.py validate-tag --tag "$tag"
+          python3 scripts/community_release.py verify-assets --directory dist
+          python3 scripts/community_release.py render-notes --output release-notes.md
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Create tag after the verified build
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          existing_sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$RELEASE_TAG" --jq '.sha' 2>/dev/null || true)"
+          if [[ -n "$existing_sha" && "$existing_sha" != "$GITHUB_SHA" ]]; then
+            echo "Tag $RELEASE_TAG already points to $existing_sha, not $GITHUB_SHA." >&2
+            exit 1
           fi
+          if [[ -z "$existing_sha" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" \
+              -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+      - name: Assemble and publish verified prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          assets=(
+            "dist/snow-shot-$RELEASE_VERSION-windows-x64-online.exe"
+            "dist/snow-shot-$RELEASE_VERSION-windows-x64-online.exe.sha256"
+            "dist/snow-shot-$RELEASE_VERSION-windows-x64-online.manifest.json"
+            "dist/snow-shot-$RELEASE_VERSION-windows-x64-offline.exe"
+            "dist/snow-shot-$RELEASE_VERSION-windows-x64-offline.exe.sha256"
+            "dist/snow-shot-$RELEASE_VERSION-windows-x64-offline.manifest.json"
+          )
+          expected="$(printf '%s\n' "${assets[@]##*/}" | sort)"
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+            if [[ "$draft" != "true" ]]; then
+              actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --json assets --jq '.assets[].name' | sort)"
+              if [[ "$actual" != "$expected" ]]; then
+                echo "Published prerelease assets do not match the release allowlist." >&2
+                diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+                exit 1
+              fi
+              prerelease="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+                --json isPrerelease --jq '.isPrerelease')"
+              [[ "$prerelease" == "true" ]]
+              exit 0
+            fi
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+              --verify-tag --draft --prerelease --latest=false \
+              --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" \
+              --notes-file release-notes.md
+          fi
+
+          gh release upload "$RELEASE_TAG" "${assets[@]}" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+          actual="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --json assets --jq '.assets[].name' | sort)"
+          if [[ "$actual" != "$expected" ]]; then
+            echo "Draft prerelease assets do not match the release allowlist." >&2
+            diff -u <(printf '%s\n' "$expected") <(printf '%s\n' "$actual") || true
+            exit 1
+          fi
+
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" \
+            --draft=false --prerelease --latest=false \
+            --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" \
+            --notes-file release-notes.md
+
+          draft="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')"
+          prerelease="$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq '.isPrerelease')"
+          [[ "$draft" == "false" && "$prerelease" == "true" ]]
 

@@ -110,10 +110,10 @@ class CommunityFullOnlyPackagingTests(unittest.TestCase):
         self.assertIn("restore-keys:", workflow)
         self.assertIn("community-windows-native-x64-v2-", workflow)
         self.assertIn(
-            "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')",
+            "if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true",
             workflow,
         )
-        self.assertNotIn("if: startsWith(github.ref, 'refs/tags/')", workflow)
+        self.assertNotIn("\n  push:\n", workflow)
         self.assertNotIn("pull_request:\n    paths:", workflow)
         self.assertIn("Classify whether this ref needs the native Windows gate", workflow)
 

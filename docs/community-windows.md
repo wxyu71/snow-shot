@@ -53,11 +53,15 @@ ctest --test-dir build/snow-shot-msvc-release -C Release --output-on-failure
 The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
 `.github/workflows/community-windows-x64.yml` validates the build and
-uploads both installers as artifacts **on successful completion**. Only a beta tag pushed from the reviewed `main` history (for example,
-`v1.5.8-beta.1_snow-shot`) triggers automatic publication to this fork's
-GitHub Releases **after** the Windows build, native packaging checks, the three-model
-C++ Qt contract tests and SHA-256/manifest verification pass. PR and manual CI runs only upload private
-workflow artifacts; they do not publish an installer. Releases contain only
+uploads both installers as artifacts **on successful completion**. A prerelease is
+started manually from **Actions > Community Windows x64 installer and beta release**
+on the current `main` branch with `publish_prerelease=true`. The workflow first
+performs the clean Windows build, native packaging checks, three-model C++ Qt contract
+tests and SHA-256/manifest verification. Only after those pass does it create the
+version tag (for example, `v1.5.8-beta.1_snow-shot`), assemble a draft GitHub
+Release, verify that all six expected assets are attached, and publish it as a
+prerelease. PR runs and manual runs with `publish_prerelease=false` only upload
+private workflow artifacts. Releases contain only
 the x64 Full online/offline NSIS installers, checksums and manifests, never
 Mini, ARM64, macOS or portable builds.
 
@@ -69,11 +73,14 @@ https://github.com/wxyu71/snow-shot/releases
 The **About > Check updates on GitHub** button opens this page in the
 default web browser; it does **not** download, unpack, or execute software.
 Choose the latest online/offline NSIS installer and install it manually.
-Each reviewed beta tag creates its own versioned GitHub prerelease (for example,
-`v1.5.8-beta.1_snow-shot`) after the native Windows build, installer, and
-SHA-256 manifest checks pass. Workflow retries update only that tag's prerelease
-assets; later beta versions publish separate prereleases instead of mutating a
-rolling release.
+Each beta version creates its own versioned GitHub prerelease (for example,
+`v1.5.8-beta.1_snow-shot`). The tag is created **after** the clean native build
+and installer verification, so failed builds do not leave release tags behind.
+Publication uses a draft-first flow: create/reuse the draft, upload the six allowed
+assets, verify the exact asset-name set, then switch the draft to a prerelease.
+If publication fails after the tag or draft was created, rerun the same failed
+workflow so it resumes against the same commit; a new manual release run from a
+different main commit refuses to move the existing version tag.
 
 The Windows Community build no longer starts the legacy automatic updater
 on launch, nor offers automatic download/install controls. GitHub HTTPS
@@ -182,8 +189,8 @@ standalone safety/PaddleOCR workflows. The Windows build waits for **both** the
 fast Python preflight and the real C++ Qt PaddleOCR contract before provisioning
 vcpkg and compiling. It reuses pinned vcpkg binary archives and Cargo sources,
 retains the audited static Qt cache, and avoids a duplicate
-`build.ps1`-invoked bootstrap. Native compilation, installer verification and
-tag-based publication rules are unchanged and cannot be skipped by a cache.
+`build.ps1`-invoked bootstrap. Native compilation and installer verification cannot be skipped by a cache.
+Prerelease publication is an explicit manual mode and never consumes the PR-only native build cache.
 
 ## Early NSIS packaging-toolchain check
 
