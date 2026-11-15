@@ -169,3 +169,24 @@ vcpkg/Rust/C++ initialization. `scripts/test-community-nsis-toolchain.py`
 checks this ordering in the Linux fast preflight. See
 [CI triage](community-ci-triage.md) for evidence. Native end-to-end
 installation, offline payload and release checksum checks remain mandatory.
+
+## FullOnly Mini policy and native compilation checkpoints
+
+Windows run #30 again linked the complete Full executable, but the
+packaging script (rather than CMake) incorrectly demanded
+`SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=ON`. Community x64 Full must
+always have Mini=OFF. The packaging code now uses a shared
+`$miniEnabled` decision for both CMake cache enforcement and optional
+native build targets; `-FullOnly` suppresses Mini, while legacy
+Full+Mini standalone packaging remains available outside the community
+release. Python and actual early Windows PowerShell tests validate all
+four Store/FullOnly combinations before vcpkg/Rust initialization.
+
+Build outputs from a previous failed hosted run are not retained unless
+explicitly saved; #30 had no artifacts. For future native-success /
+packaging-failure cases the PR workflow now saves a source-keyed,
+PR-only cache of the CMake/MSVC/Rust build directory immediately after
+successful native build and the Mini=OFF guard; packaging-only edits
+do not invalidate that key. A diagnostic x64 Full executable artifact
+is also uploaded before attempting NSIS packaging. The native CMake
+build still runs, and tagged releases never consume the PR build cache.

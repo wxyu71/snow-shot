@@ -14,6 +14,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $store = $DistributionChannel -eq 'store'
+# Full-only community releases must never require or build the Mini target.
+# Keep the release cache contract and the selected native targets aligned.
+$miniEnabled = -not ($store -or $FullOnly)
 if ($store -and $Architecture -ne 'x64') { throw 'The Snow Shot Store channel supports x64 only.' }
 if ($PrepareOcrRuntimeOnly) {
     & (Join-Path $PSScriptRoot 'prepare-snow-shot-ocr-runtime.ps1') -Architecture $Architecture -BuildDirectory $BuildDirectory -Parallelism $Parallelism -SkipBuild:$SkipBuild
@@ -447,7 +450,7 @@ $requiredCacheEntries = @(
     "SNOW_APPS_RELEASE_STATIC:BOOL=ON",
     "SNOW_APPS_QT_STATIC:BOOL=ON",
     "SNOW_APPS_PACKAGE_SNOW_SHOT:BOOL=$(if ($store) { 'OFF' } else { 'ON' })",
-    "SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=$(if ($store) { 'OFF' } else { 'ON' })",
+    "SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=$(if ($miniEnabled) { 'ON' } else { 'OFF' })",
     "SNOW_SHOT_IMAGE_CODEC_BACKEND_STATIC:INTERNAL=ON",
     "QT_FEATURE_static:INTERNAL=ON",
     "QT_FEATURE_timezone:INTERNAL=ON",
@@ -473,7 +476,11 @@ foreach ($entry in $requiredCacheEntries) {
 }
 
 if (-not $SkipBuild) {
-    [string[]]$releaseTargets = if ($store) { @('snow_shot') } else { @('snow_shot', 'snow_shot_mini') }
+    [string[]]$releaseTargets = if ($miniEnabled) {
+        @('snow_shot', 'snow_shot_mini')
+    } else {
+        @('snow_shot')
+    }
     & cmake --build $buildDirectory --config Release --target @releaseTargets --parallel $Parallelism
     if ($LASTEXITCODE -ne 0) {
         throw "Snow Shot release build failed."

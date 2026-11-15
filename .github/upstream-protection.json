@@ -67,6 +67,8 @@
     "snow_shot/src/app/translationservice.cpp",
     "scripts/test-community-cpp-api-contract.py",
     "scripts/bootstrap-community-nsis.ps1",
-    "scripts/test-community-nsis-toolchain.py"
+    "scripts/test-community-nsis-toolchain.py",
+    "scripts/test-community-package-mode.ps1",
+    "scripts/test-community-package-modes.py"
   ]
 }

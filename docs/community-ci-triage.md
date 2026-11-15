@@ -12,6 +12,7 @@ after MSBuild aborts.
 | [#27](https://github.com/wxyu71/snow-shot/actions/runs/43670691161) | build-full-installer / Verify version, safety policy and offline API contracts | New full-tree Rust preflight reported 5 more deprecated calls | Same Rust API category, now caught early |
 | [#28](https://github.com/wxyu71/snow-shot/actions/runs/43670848752) | build-full-installer / Build full Windows x64 | translationservice.cpp:128 connects deleted SnowShotApiClient::accountIdentityChanged | Removed account API / C++ |
 | [#29](https://github.com/wxyu71/snow-shot/actions/runs/43675295729) | build-full-installer / Package full Windows x64 NSIS installers only | package-snow-shot.ps1:141 cannot find makensis after successfully linking snow_shot.exe and staging PP-OCRv6 assets | Missing packaging tool, unrelated to compiler/API failures |
+| [#30](https://github.com/wxyu71/snow-shot/actions/runs/43683967993) | build-full-installer / Package full Windows x64 NSIS installers only | package-snow-shot.ps1:471 requires `SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=ON` despite release preset and CI guard requiring OFF | Inconsistent FullOnly/Store packaging contract; native x64 Full build succeeded |
 
 All tracked Rust `.rs` files were checked for the deprecated atomic call
 and repaired with `try_update` while preserving memory order. The
@@ -91,3 +92,40 @@ CPack online/offline NSIS packaging and native probing must still succeed.
 subsequent attempts may reuse them, subject to key validity. The successful
 Windows binary from #29 was **not uploaded** because final packaging failed,
 so no installable release artifact exists from that run.
+
+## Windows run #30: Full-only release contract
+
+Run #30 passed both Linux gates, compiled `snow_shot.exe` for x64 Full,
+staged the OCR assets, and passed the explicit Mini=OFF verification. The
+packaging script alone retained legacy assumptions at lines 450 and 476:
+it required Mini=ON whenever `-DistributionChannel standalone`, and
+would select `snow_shot_mini` for a build with `-FullOnly`. The error at
+line 471 was not a genuine unsafe CMake cache or a compiler failure.
+
+The packaging script now derives one `$miniEnabled = -not ($store -or
+$FullOnly)` value, shared by the strict cache check and the optional native
+target list. All existing static Qt/CRT, OCR manifest, native startup and
+installer SHA-256/manifest release checks remain enforced.
+
+Fast Python source-contract tests and an **actual Windows PowerShell
+four-mode test** (legacy standalone, standalone FullOnly, Store, Store
+FullOnly) run before dependency installation. The PowerShell test evaluates
+expressions extracted from the *production package script* to prevent
+future disagreement between cache requirements and build target selection.
+
+### Build output reuse limitation and mitigation
+
+Run #30 did not upload any build artifacts because installation packaging
+failed; its hosted runner workspace is ephemeral. The successful executable
+cannot be recovered from that run for an immediate packaging-only retry.
+The next successful native compilation saves its entire
+`build/snow-shot-msvc-release` CMake/MSVC/Rust build directory to a
+source-keyed **PR-only** GitHub Actions cache *before* packaging. A
+subsequent packaging-script-only change can restore this exact native state
+and run the same native build command incrementally. A diagnostic copy
+of the compiled Full executable is also uploaded before packaging, even
+if the installer step fails. Neither mechanism bypasses native compilation
+verification, trusted dependencies, installer integrity checks or release
+gates. Tag releases cannot reuse this PR-native cache. Cache size/quota
+limitations and initial cache misses may still require a full rebuild;
+there is no claimed speedup until a cache restore proves it.
