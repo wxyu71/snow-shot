@@ -106,3 +106,18 @@ The NSIS CompanyName metadata identifies **Snow Shot Community** rather
 than the upstream vendor; the executable, registry key and installation
 directory stay identical for upgrade compatibility. Original license and
 copyright attributions remain in the bundled notices.
+
+## Windows CI Rust compatibility and Qt caching
+
+Windows CI run #25 passed static Qt 6.12.0 but failed when the pinned Rust
+nightly treated deprecated `AtomicU32::fetch_update` in the screenshot
+capture pause/revision state as an error (`-D warnings`). The implementation
+uses `AtomicU32::try_update` with identical AcqRel/Acquire orderings and the
+same conditional revision transition. `scripts/test-community-rust-compat.py`
+checks the source contract, and changes to `snow-crates/**` now trigger the
+Windows installer workflow. The release keeps warnings-as-errors enabled.
+
+The validated Qt kit is saved immediately after the Qt build, rather than only
+at successful job completion; a subsequent unrelated application build failure
+no longer wastes the already successful Qt compilation. Cache upload failures
+cannot bypass native release tests or turn a failed build green.

@@ -55,6 +55,8 @@
     "CMakePresets.json",
     "scripts/build-static-qt.ps1",
     "scripts/community_release.py",
-    "docs/community-release-notes.md"
+    "docs/community-release-notes.md",
+    "snow-crates/crates/snow-capture/src/follow_mouse.rs",
+    "scripts/test-community-rust-compat.py"
   ]
 }

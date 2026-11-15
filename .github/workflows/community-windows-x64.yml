@@ -7,6 +7,7 @@ on:
       - CMakeLists.txt
       - CMakePresets.json
       - snow_shot/**
+      - snow-crates/**
       - cmake/**
       - scripts/**
       - .github/workflows/community-windows-x64.yml
@@ -41,6 +42,7 @@ jobs:
           python scripts/test-community-branding.py
           python scripts/paddleocr_live_e2e.py --selftest
           python scripts/community_release.py selftest
+          python scripts/test-community-rust-compat.py
       - name: Verify release tag is reviewed and matches CMake
         if: startsWith(github.ref, 'refs/tags/')
         shell: bash
@@ -53,7 +55,8 @@ jobs:
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
       - name: Restore previously built static Qt cache
-        uses: actions/cache@v4
+        id: qt-cache
+        uses: actions/cache/restore@v4
         with:
           path: .tools/qt/6.12.0/x64-static-release
           key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
@@ -69,6 +72,15 @@ jobs:
           }
           "SNOW_QT_STATIC_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           "Qt6_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+      # Cache the validated kit *before* the full C++/Rust compilation. GitHub
+      # would otherwise skip its post-job cache save when a later build fails.
+      - name: Save audited static Qt kit for future Windows builds
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .tools/qt/6.12.0/x64-static-release
+          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
       - name: Build full Windows x64 (Mini disabled in release preset)
         shell: pwsh
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release
