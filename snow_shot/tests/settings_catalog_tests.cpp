@@ -824,7 +824,11 @@ void builtInCatalogIsCompleteAndValid() {
     require(itemIds.contains(QStringLiteral("pin-to-screen.confirm-before-closing-window")) &&
                 itemIds.contains(QStringLiteral("pin-to-screen.confirm-before-destroying-window")),
             "catalog must retain both independent pinned window confirmation settings");
+#ifdef Q_OS_WIN
+    require(!foundUpdates, "Community Windows uses a direct GitHub Releases link, not an update mode");
+#else
     require(foundUpdates, "catalog must contain the update mode item");
+#endif
     const auto* pinnedEditor =
         catalog.item({QStringLiteral("pinned-windows"), QStringLiteral("pin-to-screen-toolbar"),
                       QStringLiteral("interface.pin-to-screen.pinned-toolbar-editor")});
@@ -3297,6 +3301,11 @@ void searchIndexIsGeneratedAndRanked() {
                 edit.first().location.itemId == QStringLiteral("quick.edit-selected-images"),
             "selected-image editing is searchable by its action title");
     const auto updates = index.search(QStringLiteral("Software updates"));
+#ifdef Q_OS_WIN
+    require(updates.isEmpty() &&
+                index.search(QStringLiteral("Auto-update on next launch")).isEmpty(),
+            "Community Windows hides the obsolete automatic update controls");
+#else
     require(!updates.isEmpty() &&
                 updates.constFirst().location.itemId == QStringLiteral("updates.mode"),
             "update policy is directly discoverable through settings search");
@@ -3305,6 +3314,7 @@ void searchIndexIsGeneratedAndRanked() {
     require(!nextLaunchUpdates.isEmpty() &&
                 nextLaunchUpdates.constFirst().location.itemId == QStringLiteral("updates.mode"),
             "next-launch updates must be searchable by their option label");
+#endif
 #endif
     const auto selectedText = index.search(QStringLiteral("Translate selected text"));
     require(!selectedText.isEmpty() &&

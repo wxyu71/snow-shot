@@ -34,7 +34,7 @@ receive the API token.
 
 ## Independent Windows x64 release and compatibility
 
-This branch increments upstream 1.5.7 to **1.5.8-beta.2**. The full NSIS installer
+This branch increments upstream 1.5.7 to **1.5.8-beta.1**. The full NSIS installer
 continues to use upstream's `snow_shot.exe`, `SnowShot` installer registry
 key, `SnowShot` installation directory, and uninstall-before-install logic.
 These values are required for an in-place upgrade from the official installer.
@@ -52,43 +52,38 @@ The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
 `.github/workflows/community-windows-x64.yml` validates the build and
 uploads both installers as artifacts **on successful completion**. Only a beta tag pushed from the reviewed `main` history (for example,
-`v1.5.8-beta.2_snow-shot`) triggers automatic publication to this fork's
+`v1.5.8-beta.1_snow-shot`) triggers automatic publication to this fork's
 GitHub Releases **after** the Windows build, native packaging checks, the three-model
 C++ Qt contract tests and SHA-256/manifest verification pass. PR and manual CI runs only upload private
 workflow artifacts; they do not publish an installer. Releases contain only
 the x64 Full online/offline NSIS installers, checksums and manifests, never
 Mini, ARM64, macOS or portable builds.
 
-The embedded update-source defaults and Rust origin allowlist point only to
-`wxyu71/snow-shot`, preventing downloads from the former author's release
-service. Two GitHub release views serve different purposes:
+### Simple GitHub Releases updates
 
-- **Rolling public downloads**: `releases/tag/community-beta` always contains the
-  latest verified online/offline x64 NSIS installers and their hashes/manifests.
-  Each new version replaces its previous artifacts. Publishing still requires
-  a reviewed main-branch SemVer tag and full Windows CI.
-- **In-app updater**: immutable SemVer tags (for example,
-  `v1.5.8-beta.2_snow-shot`) may additionally contain `latest-version.json`
-  and two verified `*-update.zip` archives. Only RSA-3072/PSS-signed metadata
-  from a **fork-owned key** already embedded in the client is trusted.
+Community Windows releases use one public download page:
+https://github.com/wxyu71/snow-shot/releases
 
-Before enabling in-app updates, generate a *new community signing key* on a
-trusted Windows computer using `scripts/new-snow-shot-release-key.ps1`.
-Commit **only** its public JSON to
-`snow_shot/resources/update-trusted-keys.json` with a
-`snow-shot-community-*` key id; securely add the PRIVATE key PEM as the
-repository Actions secret `COMMUNITY_UPDATE_SIGNING_PRIVATE_KEY`.
-Never commit the private key. The tag workflow omits update metadata unless the
-secret is present, validates the key against embedded trust, and verifies the
-signed feed with the compiled updater. A missing/mismatched key must not be
-treated as a working auto-update.
+The **About > Check updates on GitHub** button opens this page in the
+default web browser; it does **not** download, unpack, or execute software.
+Choose the latest online/offline NSIS installer and install it manually.
+A rolling prerelease tagged `community-beta` is created only when a reviewed
+main-branch beta tag passes native Windows build, installer, and SHA-256
+manifest checks. New releases replace the attachments on that rolling
+release instead of creating another signed update channel.
 
-**Important upgrade boundary:** the already installed beta.1 binary trusts the
-older upstream update key; it cannot verify a new community signature. Users
-must first manually install a community-key-enabled version over beta.1.
-Subsequent version-incremented releases can be automatically checked/installed
-after signing is configured and verified. Replacing a binary under the *same*
-SemVer would rightly be rejected by the updater.
+The Windows Community build no longer starts the legacy automatic updater
+on launch, nor offers automatic download/install controls. GitHub HTTPS
+protects transport, but alone does not establish source provenance or
+protect against a compromised GitHub account; review the repository and
+optionally compare the published SHA-256 checksums. The original updater's
+legacy code may remain linked for installer compatibility, but it is not
+used to check or apply Community updates. No dedicated signing keys,
+`latest-version.json`, or `*-update.zip` release assets are required.
+The embedded legacy updater is not enabled by this workflow.
+
+This branch remains `1.5.8-beta.1` while the PR is under review; a future
+version bump is a separate release decision.
 
 **Verification required before public release:** actual Windows build and
 unit tests; NSIS upgrade over an installed official 1.5.7; preservation of

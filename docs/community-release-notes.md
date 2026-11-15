@@ -12,6 +12,6 @@ Choose the offline installer for bundled local PP-OCRv6 OCR resources, or the on
 - Windows NSIS executable name, install location and uninstall identity remain compatible with the official installer, although **an actual installed-over-1.5.7 upgrade must still be manually validated**.
 - SHA-256 checksums and build/native packaging verification manifests are attached.
 
-**Security and limitations:** Cloud screenshots are sent to the user's configured PaddleOCR API. The token is stored unencrypted in user-local Qt settings. A community signing/update trust chain has not been provisioned, so the **in-app signed auto-updater is not validated**. No live PaddleOCR credentials were provided; API mock tests pass but the three live models require testing by the user.
+**Security and limitations:** Cloud screenshots are sent to the user's configured PaddleOCR API. On Windows the Access Token is saved using user-scoped DPAPI protection (older beta settings are readable until the next save). Updates are **manual**: the in-app button opens this fork's public GitHub Releases page; no signed update feed, automatic download, or background install is required. GitHub HTTPS does not replace independent artifact signing; optional SHA-256 hashes are provided for manual comparison. Live PaddleOCR API behavior must be tested with real credentials.
 
 Source code, original author copyright and licensing notices are preserved. Please report verified issues to the [community fork](https://github.com/wxyu71/snow-shot/issues).

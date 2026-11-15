@@ -1126,6 +1126,7 @@ SettingsItemDefinition proxyItem() {
     };
 }
 
+#ifndef Q_OS_WIN
 SettingsItemDefinition updateModeItem() {
     SettingsSelectDefinition payload;
     payload.binding = SettingsSelectBinding::UpdateMode;
@@ -1153,6 +1154,7 @@ SettingsItemDefinition updateModeItem() {
             QStringLiteral("updates/mode"),
             payload};
 }
+#endif // !Q_OS_WIN
 
 #ifndef Q_OS_MACOS
 SettingsItemDefinition screenshotApiModeItem() {
@@ -4110,7 +4112,9 @@ constexpr CatalogItemFactory catalogPageGeneralSectionSystemGeneralItems[] = {
 #if defined(Q_OS_MACOS)
     {loginItemSettingsItem},
 #endif
+#ifndef Q_OS_WIN
     {updateModeItem},
+#endif
 };
 
 constexpr CatalogItemFactory catalogPageGeneralSectionCoreItems[] = {

@@ -1308,7 +1308,16 @@ class ApplicationController::Impl {
     }
 
     void finishStartup(std::function<void()> maintenance) {
-        deferredStartup.start({[this] { updates->start(); }, std::move(maintenance),
+        deferredStartup.start({[this] {
+#ifdef Q_OS_WIN
+                                   // Community Windows downloads are opened on GitHub.
+                                   // Never launch the legacy signed-update helper automatically.
+                                   if (distribution::isStoreManaged())
+                                       updates->start();
+#else
+                                   updates->start();
+#endif
+                               }, std::move(maintenance),
                                [this] {
                                    if (auto* controller = ensureScreenshotController())
                                        controller->prewarmResources();

@@ -442,11 +442,26 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
         m_ui->updateLayout->addLayout(m_ui->updateActions);
         connect(m_ui->updates, &snow_shot::update::UpdateService::statusChanged, this,
                 &AboutPageWidget::refreshUpdateStatus);
-        connect(m_ui->updateCheck, &AdButton::clicked, m_ui->updates,
-                [service = m_ui->updates] { service->check(); });
+        connect(m_ui->updateCheck, &AdButton::clicked, this, [this] {
+#ifdef Q_OS_WIN
+            if (!m_ui->updates->managedByStore()) {
+                openProjectLink(QUrl(QStringLiteral(
+                    "https://github.com/wxyu71/snow-shot/releases")));
+                return;
+            }
+#endif
+            m_ui->updates->check();
+        });
         connect(m_ui->updateCancel, &adqt::widgets::AdButton::clicked, m_ui->updates,
                 &snow_shot::update::UpdateService::cancel);
         connect(m_ui->updateAction, &adqt::widgets::AdButton::clicked, this, [this] {
+#ifdef Q_OS_WIN
+            if (!m_ui->updates->managedByStore()) {
+                openProjectLink(QUrl(QStringLiteral(
+                    "https://github.com/wxyu71/snow-shot/releases")));
+                return;
+            }
+#endif
             if (m_ui->updates->managedByStore()) {
                 openProjectLink(QUrl(QStringLiteral("ms-windows-store://downloadsandupdates")));
                 return;
@@ -843,6 +858,36 @@ void AboutPageWidget::refreshUpdateStatus() {
     if (m_ui->updates == nullptr || m_ui->updateStatus == nullptr) {
         return;
     }
+#ifdef Q_OS_WIN
+    if (!m_ui->updates->managedByStore()) {
+        // No background updater, metadata signing, or executable auto-install.
+        // The current beta is always available from this fork's public Releases.
+        const QUrl releases(QStringLiteral("https://github.com/wxyu71/snow-shot/releases"));
+        const QString explanation = tr(
+            "Community beta updates are on GitHub Releases. Download and install manually.");
+        const QColor color = m_ui->scheme.map.colorTextSecondary;
+        styleAboutLabel(m_ui->updateStatus, m_ui->scheme.metricAlias.fontSizeSM,
+                        QFont::Normal, color);
+        const int iconSize = m_ui->scheme.metricAlias.fontSize;
+        m_ui->updateIcon->setFixedSize(iconSize, iconSize);
+        m_ui->updateIcon->setPixmap(
+            aboutIcon(outlined::CloudDownload(), m_ui->updateIcon->size(), this, color));
+        m_ui->updateStatus->setText(explanation);
+        m_ui->updateStatus->setAccessibleName(explanation);
+        m_ui->updateCheck->hide();
+        m_ui->updateAction->setText(tr("Check updates on GitHub"));
+        m_ui->updateAction->setAccessibleName(tr("Open GitHub Releases"));
+        m_ui->updateAction->setToolTip(releases.toDisplayString());
+        m_ui->updateAction->setIconRef(outlined::Export());
+        m_ui->updateAction->setEnabled(true);
+        m_ui->updateAction->setButtonStyle(AdButton::ButtonStyle::Outline);
+        m_ui->updateAction->setAccentRole(AdButton::AccentRole::Neutral);
+        m_ui->updateActions->setCurrentWidget(m_ui->updateActionRow);
+        m_ui->updateRail->setCurrentWidget(m_ui->updateDivider);
+        updateLayout();
+        return;
+    }
+#endif
     using snow_shot::update::UpdateState;
     const auto& status = m_ui->updates->status();
     const bool storeManaged = m_ui->updates->managedByStore();

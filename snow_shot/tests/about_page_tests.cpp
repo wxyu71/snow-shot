@@ -209,76 +209,16 @@ void stableVersionsDoNotClaimToBePreviews() {
 }
 
 void projectLinkSurfacesMatchStandardButtons() {
-    using adqt::widgets::AdButton;
-    auto& manager = styles::ThemeManager::instance();
+    // Community About removes the historical four promotional cards entirely.
     AboutPageWidget page;
-    page.resize(700, 540);
-    page.show();
-    flushEvents();
-    const auto surface = [](QWidget& widget, qreal dpr) {
-        QImage image(QSize(qRound(widget.width() * dpr), qRound(widget.height() * dpr)),
-                     QImage::Format_ARGB32_Premultiplied);
-        image.setDevicePixelRatio(dpr);
-        image.fill(Qt::transparent);
-        widget.render(&image, QPoint(), QRegion(), QWidget::DrawWindowBackground);
-        return image;
-    };
-    for (const auto appearance : {styles::ThemeAppearance::Light, styles::ThemeAppearance::Dark}) {
-        manager.setThemeAppearance(appearance);
-        flushEvents();
-        for (const char* name :
-             {"aboutCommunityChangelog", "aboutSourceCode", "aboutFeedback", "aboutCommunityReleases"}) {
-            auto* button = child<AdButton>(page, name);
-            require(button->buttonStyle() == AdButton::ButtonStyle::Outline &&
-                        button->accentRole() == AdButton::AccentRole::Neutral,
-                    "resource links use standard neutral outline buttons");
-            AdButton reference(button->parentWidget());
-            reference.resize(button->size());
-            reference.show();
-            reference.clearFocus();
-            button->clearFocus();
-            for (const int state : {0, 1, 2, 3}) {
-                for (AdButton* target : {button, &reference}) {
-                    target->setEnabled(state != 3);
-                    target->setDown(state == 2);
-                    if (state == 1) {
-                        QEnterEvent enter(QPointF(2, 2), QPointF(2, 2), QPointF(2, 2));
-                        QCoreApplication::sendEvent(target, &enter);
-                    } else {
-                        QEvent leave(QEvent::Leave);
-                        QCoreApplication::sendEvent(target, &leave);
-                    }
-                }
-                for (const qreal dpr : {1.0, 1.25, 1.5, 1.75, 2.0}) {
-                    require(surface(*button, dpr) == surface(reference, dpr),
-                            "resource link surfaces match AdButton in both themes, all "
-                            "interaction states and fractional scales");
-                }
-                adqt::widgets::detail::ButtonStyleInput input;
-                input.buttonStyle = reference.buttonStyle();
-                input.accentRole = reference.accentRole();
-                input.sizeClass = reference.sizeClass();
-                input.baseFont = reference.font();
-                const auto visual = adqt::widgets::detail::resolveButtonVisualStyle(
-                    input, adqt::theme::ThemeManager::instance().resolve(&reference));
-                const QColor expected = state == 3   ? visual.disabled.text
-                                        : state == 2 ? visual.active.text
-                                        : state == 1 ? visual.hover.text
-                                                     : visual.normal.text;
-                for (const auto* suffix : {"Title", "Description"}) {
-                    auto* label = button->findChild<QLabel*>(QString::fromLatin1(name) +
-                                                             QString::fromLatin1(suffix));
-                    require(label != nullptr &&
-                                label->palette().color(label->foregroundRole()) == expected,
-                            "resource link titles and descriptions follow AdButton text colors "
-                            "in both themes and every interaction state");
-                }
-            }
-            button->setEnabled(true);
-            button->setDown(false);
-        }
+    for (const char* name : {"aboutCommunityChangelog", "aboutSourceCode",
+                             "aboutFeedback", "aboutCommunityReleases",
+                             "aboutReleaseNotes"}) {
+        require(page.findChild<QAbstractButton*>(QString::fromLatin1(name)) == nullptr,
+                "obsolete resource buttons are absent rather than merely hidden");
     }
-    manager.setThemeAppearance(styles::ThemeAppearance::Light);
+    require(child<QAbstractButton>(page, "aboutCopyVersion") != nullptr,
+            "About retains version copying without promotional resource cards");
 }
 
 void storeUpdatesOpenMicrosoftStore() {
@@ -318,68 +258,48 @@ void storeUpdatesOpenMicrosoftStore() {
 void projectLinksAreExplicitAccessibleAndRecoverable() {
     QList<QUrl> opened;
     bool canOpen = true;
+    snow_shot::update::UpdateService updates({});
     AboutPageWidget page(nullptr, [&](const QUrl& url) {
         opened.append(url);
         return canOpen;
-    });
+    }, &updates);
     page.resize(700, 540);
     page.show();
     flushEvents();
-    require(opened.isEmpty(), "About does not open links or check for updates on construction");
-    require(page.findChild<QAbstractButton*>(QStringLiteral("aboutQqGroup2")) == nullptr,
-            "About no longer offers QQ Group 2");
-    require(page.findChild<QAbstractButton*>(QStringLiteral("aboutQqGroup3")) == nullptr,
-            "About no longer offers QQ Group 3");
-    auto* group4 = child<QAbstractButton>(page, "aboutCommunityReleases");
-    auto* website = child<QAbstractButton>(page, "aboutCommunityChangelog");
-    auto* feedback = child<QAbstractButton>(page, "aboutFeedback");
-    require(group4->geometry().left() == website->geometry().left() &&
-                group4->geometry().right() == feedback->geometry().right() &&
-                group4->geometry().top() > website->geometry().bottom(),
-            "community releases span the second project link row");
-    snapshot(page, QStringLiteral("about-actions"));
-    const QUrl websiteUrl(QStringLiteral(SNOW_SHOT_TEST_PROJECT_URL) +
-                          QStringLiteral("/blob/main/docs/community-changelog.md"));
-    const QString project = QStringLiteral(SNOW_SHOT_TEST_PROJECT_URL);
-    const std::array<std::pair<const char*, QUrl>, 7> links{{
-        {"aboutCommunityChangelog", websiteUrl},
-        {"aboutSourceCode", QUrl(project)},
-        {"aboutFeedback", QUrl(project + QStringLiteral("/issues"))},
-        {"aboutReleaseNotes", websiteUrl},
-        {"aboutCommunityReleases", QUrl(project + QStringLiteral("/releases"))},
+    require(opened.isEmpty(), "About does not open external links during construction");
+    const std::array<std::pair<const char*, QUrl>, 2> links{{
         {"aboutPrivacyPolicy", QUrl(snow_shot::app::distribution::privacyPolicyUrl())},
-        {"aboutUserAgreement", QUrl(snow_shot::app::distribution::userAgreementUrl())},
+        {"aboutUserAgreement", QUrl(snow_shot::app::distribution::userAgreementUrl())}
     }};
     for (const auto& [name, url] : links) {
         auto* button = child<QAbstractButton>(page, name);
-        require(button->focusPolicy() == Qt::StrongFocus && !button->accessibleName().isEmpty(),
-                "every project action is named and keyboard accessible");
-        require(button->toolTip() == url.toDisplayString(),
-                "project actions expose their exact destinations");
-        button->setFocus();
-        for (const auto key : {Qt::Key_Space, Qt::Key_Return}) {
-            const auto previousCount = opened.size();
-            QKeyEvent press(QEvent::KeyPress, key, Qt::NoModifier);
-            QKeyEvent release(QEvent::KeyRelease, key, Qt::NoModifier);
-            QCoreApplication::sendEvent(button, &press);
-            QCoreApplication::sendEvent(button, &release);
-            require(opened.size() == previousCount + 1 && opened.back() == url,
-                    "Space and Enter open exactly the requested project destination");
-        }
+        require(button->focusPolicy() == Qt::StrongFocus &&
+                    !button->accessibleName().isEmpty() &&
+                    button->toolTip() == url.toDisplayString(),
+                "retained legal links are keyboard accessible and describe their destination");
+        button->click();
+        require(opened.last() == url, "legal links open the configured community destination");
     }
+#ifdef Q_OS_WIN
+    const QUrl releases(QStringLiteral("https://github.com/wxyu71/snow-shot/releases"));
+    auto* check = child<QAbstractButton>(page, "aboutUpdateAction");
+    require(check->isEnabled() && check->toolTip() == releases.toDisplayString(),
+            "Community Windows update control goes straight to the public GitHub Releases");
+    check->click();
+    require(opened.last() == releases, "GitHub update button opens the canonical fork URL");
+#endif
+    snapshot(page, QStringLiteral("about-actions"));
     page.resize(360, 240);
     flushEvents();
     canOpen = false;
-    child<QAbstractButton>(page, "aboutCommunityChangelog")->click();
+    child<QAbstractButton>(page, "aboutPrivacyPolicy")->click();
     flushEvents();
     auto* error = child<QLabel>(page, "aboutLinkError");
-    require(!error->isHidden() && error->text().contains(links.front().second.toDisplayString()) &&
+    const QUrl failedUrl = links.front().second;
+    require(!error->isHidden() &&
+                error->text().contains(failedUrl.toDisplayString()) &&
                 error->textInteractionFlags().testFlag(Qt::TextSelectableByKeyboard),
-            "failed browser launches show the selectable destination without a modal dialog");
-    auto* scroll = child<adqt::widgets::AdScrollArea>(page, "pageScrollArea");
-    require(scroll->viewport()->rect().contains(
-                QRect(error->mapTo(scroll->viewport(), QPoint()), error->size())),
-            "link failures are scrolled into view after the narrow layout has settled");
+            "failed link shows its exact destination as selectable text");
     for (const QString& locale :
          {QStringLiteral("en_US"), QStringLiteral("zh_CN"), QStringLiteral("zh_TW")}) {
         QTranslator translator;
@@ -391,14 +311,15 @@ void projectLinksAreExplicitAccessibleAndRecoverable() {
         require(error->text() ==
                     expectedTranslation(translator, locale, "AboutPageWidget",
                                         "Could not open the link. Open %1 in your browser")
-                        .arg(links.front().second.toDisplayString()),
-                "an existing link error retranslates and preserves its destination");
+                        .arg(failedUrl.toDisplayString()),
+                "link failure retranslates while preserving its original destination");
         QCoreApplication::removeTranslator(&translator);
         flushEvents();
     }
     canOpen = true;
-    child<QAbstractButton>(page, "aboutCommunityChangelog")->click();
-    require(error->isHidden() && error->text().isEmpty(), "successful retries clear link errors");
+    child<QAbstractButton>(page, "aboutPrivacyPolicy")->click();
+    require(error->isHidden() && error->text().isEmpty(),
+            "successful link retries clear the error");
     page.hide();
 }
 
@@ -430,9 +351,8 @@ void largerTypeKeepsEveryActionReachable() {
     require(artwork->width() <= scroll->viewport()->width() && artwork->height() > 0,
             "artwork scales down to the available width with larger fonts");
     for (const char* name :
-         {"aboutCopyVersion", "aboutReleaseNotes", "aboutUpdateCheck", "aboutUpdateAction",
-          "aboutCommunityChangelog", "aboutSourceCode", "aboutFeedback", "aboutCommunityReleases", "aboutPrivacyPolicy",
-          "aboutUserAgreement"}) {
+         {"aboutCopyVersion", "aboutUpdateAction", "aboutPrivacyPolicy",
+         "aboutUserAgreement"}) {
         auto* button = child<QAbstractButton>(page, name);
         scroll->ensureWidgetVisible(button);
         flushEvents();
@@ -447,6 +367,26 @@ void largerTypeKeepsEveryActionReachable() {
 }
 
 void updatePolicyAndUnavailableCopy() {
+#ifdef Q_OS_WIN
+    const auto& catalog = settings::builtInSettingsRegistry().catalog();
+    require(catalog.item({QStringLiteral("general"), QStringLiteral("system-general"),
+                          QStringLiteral("updates.mode")}) == nullptr,
+            "Community Windows has no inactive auto-update setting");
+    snow_shot::update::UpdateService updates({});
+    QList<QUrl> opened;
+    AboutPageWidget page(nullptr,
+        [&opened](const QUrl& url) { opened.append(url); return true; }, &updates);
+    auto* action = child<adqt::widgets::AdButton>(page, "aboutUpdateAction");
+    require(action->isEnabled() &&
+                action->text() == QStringLiteral("Check updates on GitHub") &&
+                child<QLabel>(page, "aboutUpdateStatus")->text().contains(
+                    QStringLiteral("Download and install manually")),
+            "Community Windows makes manual GitHub downloads explicit");
+    action->click();
+    require(opened == QList<QUrl>{
+                QUrl(QStringLiteral("https://github.com/wxyu71/snow-shot/releases"))},
+            "Community update never starts the legacy signed updater");
+#else
     snow_shot::presentation::GlobalShortcutManager shortcuts;
     settings::BuiltInSettingsBackend backend(shortcuts);
     const auto binding = settings::SettingsSelectBinding::UpdateMode;
@@ -514,9 +454,33 @@ void updatePolicyAndUnavailableCopy() {
                 QStringLiteral("Automatic updates are unavailable for this copy"),
             "unavailable update status explains the disabled action");
 #endif
+#endif
 }
 
 void updateStatesFitTheVersionPanel() {
+#ifdef Q_OS_WIN
+    using namespace snow_shot::update;
+    UpdateService updates({});
+    QCoreApplication::setApplicationVersion(QStringLiteral(SNOW_SHOT_TEST_VERSION));
+    AboutPageWidget page(nullptr, [](const QUrl&) { return true; }, &updates);
+    auto* action = child<adqt::widgets::AdButton>(page, "aboutUpdateAction");
+    auto* progress = child<QProgressBar>(page, "aboutUpdateProgress");
+    auto* check = child<adqt::widgets::AdButton>(page, "aboutUpdateCheck");
+    page.show();
+    for (const auto state : {UpdateState::Idle, UpdateState::Checking,
+                             UpdateState::Available, UpdateState::Downloading,
+                             UpdateState::Verifying, UpdateState::Ready,
+                             UpdateState::Applying, UpdateState::Failed}) {
+        auto& snapshot = const_cast<UpdateStatus&>(updates.status());
+        snapshot.state = state;
+        emit updates.statusChanged();
+        flushEvents();
+        require(action->text() == QStringLiteral("Check updates on GitHub") &&
+                    action->isEnabled() && !check->isVisible() && !progress->isVisible(),
+                "GitHub-only Community updater is independent of legacy download states");
+    }
+    page.hide();
+#else
     using namespace snow_shot::update;
     using adqt::widgets::AdButton;
     UpdateService updates({});
@@ -681,9 +645,27 @@ void updateStatesFitTheVersionPanel() {
 #endif
     page.hide();
     styles::ThemeManager::instance().setThemeAppearance(styles::ThemeAppearance::Light);
+#endif
 }
 
 void checkLinkStartsManualUpdateCheck() {
+#ifdef Q_OS_WIN
+    using namespace snow_shot::update;
+    UpdateService::Options options;
+    options.storeManaged = false;
+    UpdateService updates(std::move(options));
+    QList<QUrl> opened;
+    AboutPageWidget page(nullptr,
+        [&opened](const QUrl& url) { opened.append(url); return true; }, &updates);
+    auto* action = child<adqt::widgets::AdButton>(page, "aboutUpdateAction");
+    require(child<adqt::widgets::AdButton>(page, "aboutUpdateCheck")->isHidden(),
+            "the old update check operation is no longer exposed");
+    action->click();
+    require(opened == QList<QUrl>{
+                QUrl(QStringLiteral("https://github.com/wxyu71/snow-shot/releases"))} &&
+                !updates.busy(),
+            "manual community update checks open the fixed GitHub HTTPS page");
+#else
     using namespace snow_shot::update;
     QTemporaryDir directory;
     require(directory.isValid(), "create isolated update directory");
@@ -710,6 +692,7 @@ void checkLinkStartsManualUpdateCheck() {
         loop.exec();
     }
     require(operation == QStringLiteral("check"), "the check link begins a manual update check");
+#endif
 }
 
 void updateModuleKeepsItsHeightAcrossStates() {
@@ -788,7 +771,7 @@ void dividersFollowTheComponentLibraryAndUpdatesBreathe() {
             "the updates module keeps bottom breathing room inside the version card");
     auto* value = child<QLabel>(page, "aboutVersionValue");
     int rowBottom = value->mapTo(panel, QPoint()).y() + value->height();
-    for (const char* name : {"aboutCopyVersion", "aboutReleaseNotes"}) {
+    for (const char* name : {"aboutCopyVersion"}) {
         auto* button = child<AdButton>(page, name);
         rowBottom = std::max(rowBottom, button->mapTo(panel, QPoint()).y() + button->height());
     }
