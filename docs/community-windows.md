@@ -121,3 +121,14 @@ The validated Qt kit is saved immediately after the Qt build, rather than only
 at successful job completion; a subsequent unrelated application build failure
 no longer wastes the already successful Qt compilation. Cache upload failures
 cannot bypass native release tests or turn a failed build green.
+
+## Windows CI #26 follow-up
+
+Windows CI run #26 got beyond the screenshot capture deprecation fix from
+#25, but the same pinned Rust nightly rejected two further deprecated atomic
+calls at `snow-crates/crates/snow-audio-recorder/src/control.rs:149,248`.
+They now use `AtomicU64::try_update`, retaining the same conditional
+compare-and-swap updates and `Ordering::AcqRel`/`Ordering::Acquire` memory
+orderings. `scripts/test-community-rust-compat.py` scans **all git-tracked
+Rust sources** before the expensive Qt and Windows builds for new uses of
+the deprecated method. This preflight does not replace actual native CI.

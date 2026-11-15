@@ -57,6 +57,7 @@
     "scripts/community_release.py",
     "docs/community-release-notes.md",
     "snow-crates/crates/snow-capture/src/follow_mouse.rs",
-    "scripts/test-community-rust-compat.py"
+    "scripts/test-community-rust-compat.py",
+    "snow-crates/crates/snow-audio-recorder/src/control.rs"
   ]
 }

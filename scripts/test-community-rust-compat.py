@@ -1,17 +1,40 @@
 #!/usr/bin/env python3
-"""Guard against reintroducing the Rust 1.99+ deprecated atomic call that broke CI #25."""
+"""Preflight check for the deprecated atomic API that failed Windows CI #25/#26."""
 from pathlib import Path
+import re
+import subprocess
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-SOURCE = ROOT / "snow-crates/crates/snow-capture/src/follow_mouse.rs"
+CAPTURE = ROOT / "snow-crates/crates/snow-capture/src/follow_mouse.rs"
+AUDIO = ROOT / "snow-crates/crates/snow-audio-recorder/src/control.rs"
 WORKFLOW = ROOT / ".github/workflows/community-windows-x64.yml"
 
 
-class RustPauseRevisionCompatibility(unittest.TestCase):
-    def test_atomic_pause_transition_is_not_deprecated(self):
-        source = SOURCE.read_text(encoding="utf-8")
-        self.assertNotIn(".fetch_update(", source)
+class RustAtomicCompatibility(unittest.TestCase):
+    def test_all_git_tracked_rust_sources_avoid_deprecated_atomic_method(self):
+        # Scan every tracked .rs file, not merely the first two failing crates.
+        # Using git ls-files excludes downloaded dependencies and submodule internals.
+        names = subprocess.check_output(
+            ["git", "ls-files", "-z", "--", "*.rs"], cwd=ROOT
+        ).decode("utf-8").split("\0")
+        paths = [ROOT / name for name in names if name]
+        self.assertGreater(len(paths), 400, "Rust source scan must cover the repository")
+        outdated = []
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            for match in re.finditer(r"\.fetch_update\s*\(", content):
+                line = content.count("\n", 0, match.start()) + 1
+                outdated.append(f"{path.relative_to(ROOT)}:{line}")
+        self.assertEqual(
+            outdated, [],
+            "Deprecated Atomic::fetch_update (Rust nightly warnings-as-errors); "
+            "replace with Atomic::try_update while preserving memory order: "
+            + ", ".join(outdated),
+        )
+
+    def test_capture_pause_transition_preserves_atomic_ordering(self):
+        source = CAPTURE.read_text(encoding="utf-8")
         self.assertIn(
             ".try_update(Ordering::AcqRel, Ordering::Acquire, |revision| {\n"
             "                ((revision & 1 != 0) != paused).then(|| revision.wrapping_add(1))",
@@ -19,7 +42,16 @@ class RustPauseRevisionCompatibility(unittest.TestCase):
         )
         self.assertIn(".is_ok()", source)
 
-    def test_native_ci_is_triggered_by_capture_changes(self):
+    def test_audio_peak_and_status_transitions_preserve_atomic_ordering(self):
+        source = AUDIO.read_text(encoding="utf-8")
+        self.assertEqual(
+            source.count("meter.try_update(Ordering::AcqRel, Ordering::Acquire, |old| {"),
+            2,
+        )
+        self.assertIn("if AudioSourceStatus::from_word(old) == status", source)
+        self.assertIn("if !self.metering_enabled(source)", source)
+
+    def test_native_ci_is_triggered_by_rust_source_changes(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
         self.assertIn("      - snow-crates/**", workflow)
         self.assertIn("actions/cache/restore@v4", workflow)
