@@ -30,7 +30,7 @@ impl Cancellation {
         #[cfg(test)]
         if let Some(remaining) = &self.remaining
             && remaining
-                .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
+                .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_sub(1))
                 .is_err()
         {
             self.cancel();

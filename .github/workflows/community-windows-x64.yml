@@ -8,6 +8,10 @@ on:
       - CMakePresets.json
       - snow_shot/**
       - snow-crates/**
+      - snow-draw-engine-gpui/**
+      - snow_draw_engine_qt/**
+      - snow-image-rs/**
+      - snow_rust_ffi/**
       - cmake/**
       - scripts/**
       - .github/workflows/community-windows-x64.yml

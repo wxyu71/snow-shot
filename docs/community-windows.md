@@ -132,3 +132,13 @@ compare-and-swap updates and `Ordering::AcqRel`/`Ordering::Acquire` memory
 orderings. `scripts/test-community-rust-compat.py` scans **all git-tracked
 Rust sources** before the expensive Qt and Windows builds for new uses of
 the deprecated method. This preflight does not replace actual native CI.
+
+## Rust atomic compatibility preflight coverage
+
+The new repository-wide test caught five more pre-existing deprecated calls
+before Windows could reach them: `snow-recording-export/src/gpu.rs`,
+`snow-ui-selector/src/windows/msaa.rs`, `snow-draw-engine-gpui/src/gpu_wake.rs`,
+`snow-draw-engine-gpui/src/smart_erase.rs`, and
+`snow-image-rs/src/animation.rs`. They now use `try_update` with their
+original memory orderings, closures and error handling. Windows PR builds
+are triggered by changes in all tracked Rust workspace source trees.

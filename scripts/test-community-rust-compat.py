@@ -53,7 +53,14 @@ class RustAtomicCompatibility(unittest.TestCase):
 
     def test_native_ci_is_triggered_by_rust_source_changes(self):
         workflow = WORKFLOW.read_text(encoding="utf-8")
-        self.assertIn("      - snow-crates/**", workflow)
+        for tracked_tree in (
+            "snow-crates/**",
+            "snow-draw-engine-gpui/**",
+            "snow_draw_engine_qt/**",
+            "snow-image-rs/**",
+            "snow_rust_ffi/**",
+        ):
+            self.assertIn(f"      - {tracked_tree}", workflow)
         self.assertIn("actions/cache/restore@v4", workflow)
         self.assertIn("actions/cache/save@v4", workflow)
         self.assertLess(

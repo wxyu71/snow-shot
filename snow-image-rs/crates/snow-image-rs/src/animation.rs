@@ -101,7 +101,7 @@ struct SessionPermit(Arc<LiveSessions>);
 impl SessionPermit {
     fn acquire(live: &Arc<LiveSessions>) -> Result<Self> {
         live.count
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |count| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |count| {
                 (count < live.maximum).then_some(count + 1)
             })
             .map_err(|count| Error::ResourceLimit {

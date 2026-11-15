@@ -58,6 +58,11 @@
     "docs/community-release-notes.md",
     "snow-crates/crates/snow-capture/src/follow_mouse.rs",
     "scripts/test-community-rust-compat.py",
-    "snow-crates/crates/snow-audio-recorder/src/control.rs"
+    "snow-crates/crates/snow-audio-recorder/src/control.rs",
+    "snow-crates/crates/snow-recording-export/src/gpu.rs",
+    "snow-crates/crates/snow-ui-selector/src/windows/msaa.rs",
+    "snow-draw-engine-gpui/src/gpu_wake.rs",
+    "snow-draw-engine-gpui/src/smart_erase.rs",
+    "snow-image-rs/crates/snow-image-rs/src/animation.rs"
   ]
 }
