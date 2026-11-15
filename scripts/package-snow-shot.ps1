@@ -847,27 +847,7 @@ if (-not $store) {
     }
 
     $cpackConfiguration = Get-Content -LiteralPath $cpackConfig -Raw
-    $requiredCpackSettings = @{
-        CPACK_CREATE_DESKTOP_LINKS = "snow_shot"
-        CPACK_PACKAGE_EXECUTABLES = "snow_shot;Snow Shot"
-        CPACK_PACKAGE_HOMEPAGE_URL = "https://snowshot.top"
-        CPACK_PACKAGE_INSTALL_DIRECTORY = "SnowShot"
-        CPACK_PACKAGE_INSTALL_REGISTRY_KEY = "SnowShot"
-        CPACK_NSIS_INSTALLED_ICON_NAME = "bin\\snow_shot.exe"
-    }
-    foreach ($setting in $requiredCpackSettings.Keys) {
-        $escapedSetting = [regex]::Escape($setting)
-        $escapedValue = [regex]::Escape($requiredCpackSettings[$setting])
-        $settingPresent = if ($setting -eq "CPACK_NSIS_INSTALLED_ICON_NAME") {
-            $cpackConfiguration -match 'set\(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\+snow_shot\.exe"\)'
-        }
-        else {
-            $cpackConfiguration -match "set\($escapedSetting `"$escapedValue`"\)"
-        }
-        if (-not $settingPresent) {
-            throw "CPack configuration is missing '$setting=$($requiredCpackSettings[$setting])'."
-        }
-    }
+    & (Join-Path $PSScriptRoot 'assert-community-release-config.ps1') -BuildDirectory $buildDirectory -ExpectedMini $(if ($miniEnabled) { 'ON' } else { 'OFF' })
     if ($cpackConfiguration -notmatch 'set\(CPACK_PACKAGE_VERSION "([^"]+)"\)') {
         throw "CPack configuration does not declare the Snow Shot package version."
     }

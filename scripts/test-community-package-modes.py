@@ -86,5 +86,44 @@ class CommunityFullOnlyPackagingTests(unittest.TestCase):
         self.assertIn("verify-assets --directory dist", workflow)
 
 
+    def test_real_cpack_contract_runs_before_native_build(self):
+        workflow = WINDOWS.read_text(encoding="utf-8")
+        package = PACKAGE.read_text(encoding="utf-8")
+        policy = (ROOT / "scripts/assert-community-release-config.ps1").read_text(encoding="utf-8")
+        build = (ROOT / "scripts/build.ps1").read_text(encoding="utf-8")
+        self.assertLess(
+            workflow.index("Check actual CPack and FullOnly release configuration"),
+            workflow.index("Build full Windows x64 (Mini disabled in release preset)"),
+        )
+        self.assertIn("-SkipBootstrap -ConfigureOnly", workflow)
+        self.assertIn("[switch]$ConfigureOnly", build)
+        self.assertIn("assert-community-release-config.ps1", package)
+        self.assertIn("CPACK_PACKAGE_HOMEPAGE_URL = $homepage", policy)
+        self.assertIn("https://github.com/wxyu71/snow-shot", policy)
+        self.assertNotIn('CPACK_PACKAGE_HOMEPAGE_URL = "https://snowshot.top"', package)
+
+    def test_stable_native_cache_keys_and_release_trigger(self):
+        workflow = WINDOWS.read_text(encoding="utf-8")
+        self.assertLess(
+            workflow.index("Freeze native cache key before build-side file generation"),
+            workflow.index("Install pinned vcpkg, Rust and OCR build dependencies"),
+        )
+        self.assertEqual(workflow.count("key: ${{ steps.native-build-key.outputs.key }}"), 2)
+        self.assertIn("restore-keys:", workflow)
+        self.assertIn("community-windows-native-x64-v2-", workflow)
+        self.assertIn(
+            "if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')",
+            workflow,
+        )
+        self.assertNotIn("if: startsWith(github.ref, 'refs/tags/')", workflow)
+
+    def test_release_build_presets_exclude_disabled_mini(self):
+        presets = json.loads(PRESET.read_text(encoding="utf-8"))
+        for name in ("build-snow-shot-msvc-release", "build-snow-shot-msvc-fast"):
+            entries = [p for p in presets["buildPresets"] if p["name"] == name]
+            self.assertEqual(len(entries), 1)
+            self.assertEqual(entries[0]["targets"], ["snow_shot"])
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -55,7 +55,7 @@ jobs:
           python3 scripts/test-community-package-modes.py
           python3 scripts/test-community-cargo-license-preflight.py
       - name: Reject unreviewed or incorrectly versioned beta tags
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           set -euo pipefail
@@ -74,8 +74,25 @@ jobs:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
+      # Freeze native hashes before CMake/Cargo create generated files.
+      - name: Freeze native cache key before build-side file generation
+        if: github.event_name == 'pull_request'
+        id: native-build-key
+        shell: pwsh
+        env:
+          NATIVE_TOOLCHAIN_HASH: ${{ hashFiles('scripts/build-toolchain.json', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          NATIVE_SOURCES_HASH: ${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg*.json', 'cmake/**', 'snow_shot/**', 'snow-crates/**', 'snow-draw-engine-gpui/**', 'snow_draw_engine_qt/**', 'snow-image-rs/**', 'snow_rust_ffi/**', 'ant_design_qt/**', 'scripts/build.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch') }}
+        run: |
+          foreach ($value in @($env:NATIVE_TOOLCHAIN_HASH, $env:NATIVE_SOURCES_HASH)) {
+            if ($value -cnotmatch '^[a-f0-9]{64}$') {
+              throw 'Native input hash missing before compilation.'
+            }
+          }
+          $prefix = "community-windows-native-x64-v2-$($env:NATIVE_TOOLCHAIN_HASH)-"
+          "prefix=$prefix" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          "key=$prefix$($env:NATIVE_SOURCES_HASH)" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
       - name: Verify release tag is reviewed and matches CMake
-        if: startsWith(github.ref, 'refs/tags/')
+        if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
         shell: bash
         run: |
           set -euo pipefail
@@ -192,7 +209,17 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: build/snow-shot-msvc-release
-          key: community-windows-native-x64-v1-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg*.json', 'cmake/**', 'snow_shot/**', 'snow-crates/**', 'snow-draw-engine-gpui/**', 'snow_draw_engine_qt/**', 'snow-image-rs/**', 'snow_rust_ffi/**', 'ant_design_qt/**', 'scripts/build.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch') }}
+          key: ${{ steps.native-build-key.outputs.key }}
+          restore-keys: |
+            ${{ steps.native-build-key.outputs.prefix }}
+            community-windows-native-x64-v1-
+      # Check real CPackConfig and FullOnly settings before the expensive build.
+      - name: Configure production Windows release without compiling
+        shell: pwsh
+        run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap -ConfigureOnly
+      - name: Check actual CPack and FullOnly release configuration
+        shell: pwsh
+        run: ./scripts/assert-community-release-config.ps1 -BuildDirectory build/snow-shot-msvc-release -ExpectedMini OFF
       - name: Build full Windows x64 (Mini disabled in release preset)
         shell: pwsh
         # bootstrap.ps1 already installed and validated pinned dependencies.
@@ -223,7 +250,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: build/snow-shot-msvc-release
-          key: community-windows-native-x64-v1-${{ hashFiles('CMakeLists.txt', 'CMakePresets.json', 'vcpkg*.json', 'cmake/**', 'snow_shot/**', 'snow-crates/**', 'snow-draw-engine-gpui/**', 'snow_draw_engine_qt/**', 'snow-image-rs/**', 'snow_rust_ffi/**', 'ant_design_qt/**', 'scripts/build.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch') }}
+          key: ${{ steps.native-build-key.outputs.key }}
       # A failed packaging step must not erase evidence that compilation did
       # succeed. This EXE is diagnostic, NOT a distributable installer.
       - name: Preserve compiled Full EXE after native build
@@ -277,7 +304,7 @@ jobs:
   # actual PaddleOCR contract tests, may obtain contents:write.
   publish-beta-release:
     needs: [build-full-installer, verify-paddleocr-contract]
-    if: startsWith(github.ref, 'refs/tags/')
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     permissions:
       contents: write

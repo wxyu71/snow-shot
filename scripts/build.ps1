@@ -16,7 +16,8 @@ param(
     [string]$Target = "",
     [switch]$Clean,
     [switch]$Reconfigure,
-    [switch]$SkipBootstrap
+    [switch]$SkipBootstrap,
+    [switch]$ConfigureOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -70,6 +71,11 @@ try {
         Save-SnowConfigureState -BuildDirectory $buildDirectory -Fingerprint $fingerprint
     } else {
         Write-Host "Configuration unchanged for preset $Preset; building incrementally."
+    }
+
+    if ($ConfigureOnly) {
+        Write-Host "CMake configuration verified for $Preset; skipping native compilation."
+        return
     }
 
     $buildArguments = @("--build", "--preset", "build-$Preset", "--parallel")
