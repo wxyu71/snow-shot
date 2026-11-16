@@ -850,7 +850,7 @@ void builtInCatalogIsCompleteAndValid() {
             : nullptr;
     require(cloudOcr != nullptr && cloudOcrCustom != nullptr &&
                 cloudOcrCustom->renderer == settings::SettingsCustomRenderer::CloudOcr &&
-                cloudOcr->title.translated() == QStringLiteral("Cloud OCR for Markdown"),
+                cloudOcr->title.translated() == QStringLiteral("Online OCR"),
             "Text recognition settings expose the Cloud OCR custom renderer");
 
     const auto* pinnedEditor =

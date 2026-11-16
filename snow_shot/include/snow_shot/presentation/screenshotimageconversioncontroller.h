@@ -8,12 +8,7 @@
 
 #include <memory>
 
-class QWidget;
 namespace snow_shot::network { class BaiduPaddleOcrClient; }
-namespace adqt::widgets {
-class AdModal;
-}
-
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
 class ScreenshotImageConversionController final : public QObject {
     Q_OBJECT
@@ -84,7 +79,6 @@ class ScreenshotImageConversionController final : public QObject {
     };
     QPointer<SnowShotApiClient> m_api;
     std::unique_ptr<snow_shot::network::BaiduPaddleOcrClient> m_baidu;
-    QPointer<adqt::widgets::AdModal> m_modal;
     QVector<CacheEntry> m_cache;
     QTimer m_previewTimer;
     QString m_key;

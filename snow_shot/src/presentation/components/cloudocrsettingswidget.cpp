@@ -136,8 +136,9 @@ void CloudOcrSettingsWidget::applyTheme(
 void CloudOcrSettingsWidget::retranslateUi() {
     m_explanation->setText(
         tr("The Online OCR button uses the engine and output selected here. PaddleOCR connects "
-           "directly to AI Studio; large-model OCR uses your configured OpenAI-compatible vision "
-           "model. Local text recognition remains offline."));
+           "directly to AI Studio and returns Markdown with formulas preserved as LaTeX; "
+           "large-model OCR can produce Markdown, HTML, or LaTeX through your configured "
+           "OpenAI-compatible vision model. Local text recognition remains offline."));
     m_engineLabel->setText(tr("OCR engine"));
     m_outputLabel->setText(tr("Output format"));
     m_endpointLabel->setText(tr("PaddleOCR AI Studio API URL"));
@@ -182,7 +183,10 @@ void CloudOcrSettingsWidget::rebuildOutputFormats(const QString& preferred) {
     const QString previous = preferred.isEmpty() ? selectedOutputFormat() : preferred;
     QSignalBlocker blocker(m_output);
     m_output->clear();
-    m_output->addItem(tr("Markdown"), QStringLiteral("markdown"));
+    m_output->addItem(selectedEngine() == QStringLiteral("paddleocr")
+                          ? tr("Markdown (formulas preserved as LaTeX)")
+                          : tr("Markdown"),
+                      QStringLiteral("markdown"));
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
     if (selectedEngine() == QStringLiteral("vision")) {
         m_output->addItem(tr("HTML"), QStringLiteral("html"));

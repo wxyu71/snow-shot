@@ -76,6 +76,19 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_current_tree_has_no_account_telemetry_or_upstream_runtime_endpoints(self):
         upstream_sync.assert_forbidden_runtime_content_absent()
 
+    def test_forbidden_content_guard_catches_upstream_identity_and_telemetry(self):
+        forbidden = upstream_sync.FORBIDDEN_COMMUNITY_CONTENT
+        for value in (
+            "mg-chao/snow-shot",
+            "mg-chao.snow-shot",
+            "releases@snowshot.top",
+            "120.79.232.67",
+            "telemetry",
+            "posthog",
+        ):
+            self.assertRegex(value, forbidden)
+        self.assertNotRegex("const qreal amplitude = 1.0;", forbidden)
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)

@@ -6,7 +6,7 @@ require "shellwords"
 require "tmpdir"
 
 wrapper = Pathname(ARGV.fetch(0)).realpath
-fixtures = ARGV[1] ? Pathname(ARGV[1]) : Tap.fetch("mg-chao/preflight").path/"Casks"
+fixtures = ARGV[1] ? Pathname(ARGV[1]) : Tap.fetch("wxyu71/preflight").path/"Casks"
 
 Dir.mktmpdir("snow-homebrew-installer-") do |directory|
   temporary = Pathname(directory)

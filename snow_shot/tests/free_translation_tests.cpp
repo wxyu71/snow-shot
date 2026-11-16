@@ -50,7 +50,6 @@ void requestAndStreaming() {
     Server server;
     SnowShotApiClient client{QString()};
     configure(server, client);
-    client.setAccountAccessToken("private-account-token");
     QObject owner;
     QString output;
     int completions = 0;

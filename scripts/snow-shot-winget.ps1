@@ -69,7 +69,7 @@ function New-SnowShotWingetManifest([string]$Tag, [string]$OutputDirectory,
     [ValidateSet('Full')][string]$Edition = 'Full') {
     $product = Get-SnowShotEdition $Edition
     $version = Get-SnowShotWingetVersion $Tag
-    $repository = 'mg-chao/snow-shot'
+    $repository = 'wxyu71/snow-shot'
     $release = Invoke-SnowShotWingetApi "repos/$repository/releases/tags/$Tag"
     if ($release.draft -or $release.tag_name -cne $Tag) { throw 'Expected the requested published release.' }
     $releaseDate = ([DateTimeOffset]$release.published_at).UtcDateTime.ToString('yyyy-MM-dd')
@@ -99,7 +99,7 @@ function New-SnowShotWingetManifest([string]$Tag, [string]$OutputDirectory,
     $installerEntries += "  - Architecture: $architecture`n    InstallerUrl: $url`n    InstallerSha256: $hash"
     }
     $installers = $installerEntries -join "`n"
-    $directory = Join-Path $OutputDirectory "manifests/m/mg-chao/$($product.Product)/$version"
+    $directory = Join-Path $OutputDirectory "manifests/m/wxyu71/$($product.Product)/$version"
     $null = New-Item -ItemType Directory -Force -Path $directory
     $common = "PackageIdentifier: $($product.Winget)`nPackageVersion: '$version'"
     $tags = @(
@@ -141,7 +141,7 @@ InstallationMetadata:
   DefaultInstallLocation: '%ProgramFiles%\$($product.Registry)'
 AppsAndFeaturesEntries:
   - DisplayName: $($product.Name)
-    Publisher: Snow Apps
+    Publisher: Snow Shot Community
     ProductCode: $($product.Registry)
 ExpectedReturnCodes:
   - InstallerReturnCode: 10
@@ -155,11 +155,11 @@ ManifestVersion: 1.12.0
 # yaml-language-server: `$schema=https://aka.ms/winget-manifest.defaultLocale.1.12.0.schema.json
 $common
 PackageLocale: en-US
-Publisher: Snow Apps
-PublisherUrl: https://github.com/mg-chao
+Publisher: Snow Shot Community
+PublisherUrl: https://github.com/wxyu71
 PublisherSupportUrl: https://github.com/$repository/issues
 PackageName: $($product.Name)
-PackageUrl: https://snowshot.top
+PackageUrl: https://github.com/wxyu71/snow-shot
 License: GPL-3.0-or-later
 LicenseUrl: https://github.com/$repository/blob/$Tag/snow_shot/COPYRIGHT
 ShortDescription: A screenshot utility for capturing, annotating, pinning, and recognizing screen content.
@@ -182,7 +182,7 @@ ManifestVersion: 1.12.0
 
 function Get-SnowShotWingetSubmission([string]$Version, [ValidateSet('Full')][string]$Edition = 'Full') {
     $product = Get-SnowShotEdition $Edition
-    $path = "manifests/m/mg-chao/$($product.Product)/$Version"
+    $path = "manifests/m/wxyu71/$($product.Product)/$Version"
     try {
         $null = Invoke-SnowShotWingetApi "repos/microsoft/winget-pkgs/contents/$path"
         return "Already merged: https://github.com/microsoft/winget-pkgs/tree/master/$path"

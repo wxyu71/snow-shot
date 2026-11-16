@@ -30,13 +30,13 @@ COMMERCIAL_CONTENT = re.compile(
 FORBIDDEN_COMMUNITY_CONTENT = re.compile(
     r"AccountSessionService|AccountPageWidget|AccountSecretStore|"
     r"accountAccessToken|setAccountAccessToken|accountIdentityChanged|officialCallSettled|"
-    r"\b(?:sentry|posthog|amplitude|telemetry)\b|"
-    r"https?://(?:www\.)?snowshot\.top|"
-    r"https?://(?:www\.)?github\.com/mg-chao/snow-shot|"
-    r"https?://(?:www\.)?gitee\.com/mg-chao/snow-apps",
+    r"\btelemetry\b|\b(?:sentry|posthog|mixpanel|firebase_analytics)\b|segment\.io|"
+    r"\bmg-chao/(?:snow-shot|snow-apps)\b|\bmg-chao\.snow-shot\b|"
+    r"\bsnowshot\.top\b|\b120\.79\.232\.67\b",
     re.I,
 )
 COMMUNITY_SCAN_ROOTS = (
+    ".github/workflows",
     "cmake",
     "scripts",
     "snow_shot/include",
@@ -46,7 +46,7 @@ COMMUNITY_SCAN_ROOTS = (
 )
 COMMUNITY_SCAN_SUFFIXES = {
     ".c", ".cc", ".cpp", ".h", ".hpp", ".mm", ".m",
-    ".py", ".js", ".ts", ".rs", ".cmake", ".txt", ".json", ".sh", ".ps1",
+    ".py", ".js", ".ts", ".rs", ".cmake", ".txt", ".json", ".yml", ".yaml", ".sh", ".ps1",
 }
 COMMUNITY_SCAN_EXCLUSIONS = {
     "scripts/upstream_sync.py",

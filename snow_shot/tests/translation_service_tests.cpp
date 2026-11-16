@@ -67,7 +67,6 @@ void fastTranslationBatchesAndRetriesInOrder() {
     Server server;
     server.fastAvailable = true;
     SnowShotApiClient client(server.url());
-    client.setAccountAccessToken("account-session");
     QTemporaryDir directory;
     require(directory.isValid(), "create temporary translation configuration directory");
     ConfigurationStore settings(directory.filePath(QStringLiteral("settings.json")), true, true);

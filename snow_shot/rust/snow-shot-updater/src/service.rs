@@ -3509,7 +3509,7 @@ mod tests {
             clock: Arc::new(FakeClock::new(fixed_time(), Vec::new())),
             network: Arc::new(network.clone()),
             github_api_url: Url::parse(github::API).unwrap(),
-            gitee_api_url: Url::parse("https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases")
+            gitee_api_url: Url::parse("https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases")
                 .unwrap(),
             system_proxy: false,
             http_proxy: None,
@@ -3575,7 +3575,7 @@ mod tests {
             (github_list, vec![reply(StatusCode::OK, &releases)]),
             (github_manifest, vec![reply(StatusCode::OK, signed)]),
             (
-                "https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases?per_page=100&page=1"
+                "https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases?per_page=100&page=1"
                     .to_owned(),
                 vec![FakeReply::Pending],
             ),
@@ -3614,7 +3614,7 @@ mod tests {
             ),
             (github_manifest, vec![reply(StatusCode::OK, signed)]),
             (
-                "https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases?per_page=100&page=1"
+                "https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases?per_page=100&page=1"
                     .to_owned(),
                 vec![reply(StatusCode::SERVICE_UNAVAILABLE, b"")],
             ),
@@ -3678,7 +3678,7 @@ mod tests {
             let version = rejected["version"].as_str().unwrap();
             let tag = format!("v{version}_snow-shot");
             let manifest = format!(
-                "https://gitee.com/mg-chao/snow-apps/releases/download/{tag}/{feed}",
+                "https://gitee.com/wxyu71/snow-shot/releases/download/{tag}/{feed}",
                 feed = crate::edition::FEED_NAME
             );
             let mut files = github_fixture(version, &[crate::edition::FEED_NAME])["assets"].clone();
@@ -3687,15 +3687,15 @@ mod tests {
                     file["browser_download_url"]
                         .as_str()
                         .unwrap()
-                        .replace(github::REPOSITORY, "https://gitee.com/mg-chao/snow-apps")
+                        .replace(github::REPOSITORY, "https://gitee.com/wxyu71/snow-shot")
                 );
             }
             let rejected_signed = crate::contract::tests::sign_payload(&rejected, &private, 32);
             let network = FakeNetwork::routed([
                 (format!("{}?per_page=100&page=1", github::API), vec![reply(StatusCode::OK, &serde_json::to_vec(&json!([github_fixture("2.0.0", &[crate::edition::FEED_NAME])] )).unwrap())]),
                 (format!("{}/releases/download/v2.0.0_snow-shot/{feed}", github::REPOSITORY, feed = crate::edition::FEED_NAME), vec![reply(StatusCode::OK, &signed)]),
-                ("https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases?per_page=100&page=1".to_owned(), vec![reply(StatusCode::OK, &serde_json::to_vec(&json!([{"id":123,"tag_name":tag}])).unwrap())]),
-                ("https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases/123/attach_files?per_page=100".to_owned(), vec![reply(StatusCode::OK, &serde_json::to_vec(&files).unwrap())]),
+                ("https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases?per_page=100&page=1".to_owned(), vec![reply(StatusCode::OK, &serde_json::to_vec(&json!([{"id":123,"tag_name":tag}])).unwrap())]),
+                ("https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases/123/attach_files?per_page=100".to_owned(), vec![reply(StatusCode::OK, &serde_json::to_vec(&files).unwrap())]),
                 (manifest.clone(), vec![reply(StatusCode::OK, &rejected_signed)]),
             ]);
             let mut inputs = metadata_inputs(&network);
@@ -3734,11 +3734,11 @@ mod tests {
     async fn first_valid_signed_release_wins_the_race() {
         let (signed, keys) = signed_fixture();
         let github_list = format!("{}?per_page=100&page=1", github::API);
-        let gitee_api = "https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases";
+        let gitee_api = "https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases";
         let gitee_list = format!("{gitee_api}?per_page=100&page=1");
         let gitee_assets = format!("{gitee_api}/123/attach_files?per_page=100");
         let gitee_manifest = format!(
-            "https://gitee.com/mg-chao/snow-apps/releases/download/v2.0.0_snow-shot/{}",
+            "https://gitee.com/wxyu71/snow-shot/releases/download/v2.0.0_snow-shot/{}",
             crate::edition::FEED_NAME
         );
         let release = serde_json::to_vec(
@@ -3774,7 +3774,7 @@ mod tests {
             ),
         ];
         let assets = serde_json::to_vec(&names.iter().map(|name| json!({"name":name,
-            "browser_download_url":format!("https://gitee.com/mg-chao/snow-apps/releases/download/v2.0.0_snow-shot/{name}")})).collect::<Vec<_>>()).unwrap();
+            "browser_download_url":format!("https://gitee.com/wxyu71/snow-shot/releases/download/v2.0.0_snow-shot/{name}")})).collect::<Vec<_>>()).unwrap();
         for gitee_wins in [true, false] {
             let github_release = serde_json::to_vec(&json!([github_fixture(
                 "2.0.0",
@@ -3940,7 +3940,7 @@ mod tests {
             crate::edition::PLATFORM
         );
         let gitee_url = format!(
-            "https://gitee.com/mg-chao/snow-apps/releases/download/v2.0.0_snow-shot/{asset}"
+            "https://gitee.com/wxyu71/snow-shot/releases/download/v2.0.0_snow-shot/{asset}"
         );
         let gitee_release = serde_json::to_vec(&json!([
             {"id":456,"tag_name":"v3.0.0_snow-shot"},

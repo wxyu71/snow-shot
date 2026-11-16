@@ -27,7 +27,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add upstream https://github.com/mg-chao/snow-shot.git
+          upstream_repo="$(python3 -c 'import json; print(json.load(open(".github/upstream-protection.json", encoding="utf-8"))["upstream"])')"
+          git remote add upstream "https://github.com/${upstream_repo}.git"
           git fetch --no-tags upstream main
           python3 scripts/test-upstream-sync.py
           python3 scripts/upstream_sync.py verify-deletions

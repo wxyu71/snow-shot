@@ -28,7 +28,7 @@ function Expect-Failure([scriptblock]$Action, [string]$Pattern) {
 }
 function Invoke-SnowShotWingetApi([string]$Path) {
     $script:requests += $Path
-    if ($Path -like 'repos/mg-chao/snow-shot/releases/tags/*') { return $script:release }
+    if ($Path -like 'repos/wxyu71/snow-shot/releases/tags/*') { return $script:release }
     if ($Path -like '*/contents/*') {
         if ($script:mode -eq 'merged') { return @(@{ name = 'manifest.yaml' }) }
         $status = if ($script:mode -eq 'rate-limit') { 403 } else { 404 }
@@ -42,8 +42,8 @@ function Invoke-SnowShotWingetApi([string]$Path) {
         incomplete_results = ($script:mode -eq 'incomplete')
         total_count = 1
         items = @(@{
-            title = if ($script:mode -in @('pending', 'paginated')) { 'New version: mg-chao.snow-shot version 1.1.5-beta' }
-                    else { 'New version: mg-chao.snow-shot version 1.1.5-beta.2' }
+            title = if ($script:mode -in @('pending', 'paginated')) { 'New version: wxyu71.snow-shot version 1.1.5-beta' }
+                    else { 'New version: wxyu71.snow-shot version 1.1.5-beta.2' }
             html_url = 'https://github.com/microsoft/winget-pkgs/pull/123'
         })
     }
@@ -84,7 +84,7 @@ function Set-FixtureRelease([string]$Tag) {
         published_at = '2026-09-28T01:30:00+02:00'
         body = "## Changes`r`n`r`n- Fix: screenshot capture`r`n  Nested text`r`n---`r`n雪`r`n"
         assets = @(@{ name = $name; size = 4
-            browser_download_url = "https://github.com/mg-chao/snow-shot/releases/download/$Tag/$name" })
+            browser_download_url = "https://github.com/wxyu71/snow-shot/releases/download/$Tag/$name" })
     }
 }
 try {
@@ -121,7 +121,7 @@ try {
             $directory = New-SnowShotWingetManifest 'v1.3.6_snow-shot' (Join-Path $root 'recovered')
             Require ($script:downloadAttempts -eq 3) 'Transient downloads must recover within the attempt limit'
             Require (($script:retrySleeps -join ',') -ceq '2,4') 'Retries must use bounded backoff'
-            $installer = Get-Content -LiteralPath (Join-Path $directory 'mg-chao.snow-shot.installer.yaml') -Raw
+            $installer = Get-Content -LiteralPath (Join-Path $directory 'wxyu71.snow-shot.installer.yaml') -Raw
             $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]](1, 2, 3, 4)))
             Require ($installer.Contains("InstallerSha256: $hash")) 'Recovered installer hash is incorrect'
             Require (@(Get-ChildItem -LiteralPath (Join-Path $root 'recovered') -Filter '*.exe').Count -eq 0) 'Recovered downloads must be cleaned up'
@@ -172,7 +172,7 @@ try {
             function Invoke-SnowShotWingetApi([string]$Path) { return $script:release }
             Set-FixtureRelease 'v1.2.0_snow-shot'
             $directory = New-SnowShotWingetManifest 'v1.2.0_snow-shot' $sourceDirectory
-            $locale = Get-Content (Join-Path $directory 'mg-chao.snow-shot.locale.en-US.yaml') -Raw
+            $locale = Get-Content (Join-Path $directory 'wxyu71.snow-shot.locale.en-US.yaml') -Raw
             Require ($locale.Contains('PackageName: Snow Shot')) "$checkout package name mismatch."
             foreach ($tag in @('chatbot', 'screen-capture', 'screenshot', 'snowshot', 'translate', 'annotation', 'ocr')) {
                 Require ($locale.Contains("  - $tag`n")) "$checkout is missing retained tag: $tag"
@@ -185,7 +185,7 @@ try {
             }
             $script:release.body = "- chatbot`n- translate"
             $directory = New-SnowShotWingetManifest 'v1.2.0_snow-shot' $sourceDirectory
-            $locale = Get-Content (Join-Path $directory 'mg-chao.snow-shot.locale.en-US.yaml') -Raw
+            $locale = Get-Content (Join-Path $directory 'wxyu71.snow-shot.locale.en-US.yaml') -Raw
             Require ($locale.Contains("ReleaseNotes: |2-`n  - chatbot`n  - translate`nReleaseNotesUrl:")) "$checkout release notes must remain literal."
         }
     }
@@ -200,7 +200,7 @@ try {
             Require ($content.Contains('ManifestVersion: 1.12.0')) 'Schema mismatch'
             Require (-not $content.Contains("`r")) 'Manifests must use LF'
         }
-        $installer = Get-Content -LiteralPath (Join-Path $directory 'mg-chao.snow-shot.installer.yaml') -Raw
+        $installer = Get-Content -LiteralPath (Join-Path $directory 'wxyu71.snow-shot.installer.yaml') -Raw
         $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData([byte[]](1, 2, 3, 4)))
         Require ($installer.Contains("InstallerSha256: $hash")) 'Incorrect SHA-256'
         Require ($installer.Contains("/$tag/")) 'Wrong release URL'
@@ -208,7 +208,7 @@ try {
         Require ($installer.Contains('InstallerLocale: en-US')) 'Missing installer locale'
         Require ($installer.Contains('ReleaseDate: 2026-09-27')) 'Release date must use the publication date in UTC'
         Require ($installer.Contains("InstallationMetadata:`n  DefaultInstallLocation: '%ProgramFiles%\SnowShot'")) 'Incorrect default install location'
-        $locale = Get-Content -LiteralPath (Join-Path $directory 'mg-chao.snow-shot.locale.en-US.yaml') -Raw
+        $locale = Get-Content -LiteralPath (Join-Path $directory 'wxyu71.snow-shot.locale.en-US.yaml') -Raw
         foreach ($keyword in @('chatbot', 'ocr', 'screen-capture', 'screenshot', 'snowshot', 'translate', 'annotation')) {
             Require ($locale.Contains("  - $keyword`n")) "Missing package tag: $keyword"
         }
@@ -238,7 +238,7 @@ try {
     $script:release.assets[0].size = 5
     Expect-Failure { New-SnowShotWingetManifest 'v1.1.5-beta' $root } 'size does not match'
     Set-FixtureRelease 'v1.1.5-beta'
-    $script:release.assets[0].browser_download_url = 'https://snowshot.top/setup/latest.exe'
+    $script:release.assets[0].browser_download_url = 'https://github.com/wxyu71/snow-shot/setup/latest.exe'
     Expect-Failure { New-SnowShotWingetManifest 'v1.1.5-beta' $root } 'Unexpected installer asset URL'
     Set-FixtureRelease 'v1.1.5-beta'
     $script:release.assets += @{ name = 'snow-shot-1.1.5-beta-windows-x64-online.exe' }

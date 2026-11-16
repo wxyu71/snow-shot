@@ -7,7 +7,7 @@
 
 namespace snow_shot::app {
 [[nodiscard]] inline bool editionActionToolAvailable(const QString& id) {
-    // The Community screenshot action bar has one cloud action: Markdown.
+    // The Community screenshot action bar has one configurable Online OCR action.
     // QR scanning remains in the selection toolbar and Ctrl+D/local OCR is
     // independent of this configurable action list.
     if (id == QStringLiteral("barcode-recognition") ||

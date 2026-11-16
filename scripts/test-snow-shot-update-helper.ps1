@@ -112,7 +112,7 @@ foreach ($variant in $variants) {
         $results = $root
         try {
             if ($testElevation) {
-                $results = Join-Path $testRoot "telemetry-$mode"
+                $results = Join-Path $testRoot "helper-results-$mode"
                 $null = New-Item -ItemType Directory -Path $results
                 $key = $registry.CreateSubKey($registrationPath)
                 try { $key.SetValue('', $root) } finally { $key.Dispose() }
