@@ -130,7 +130,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
       - name: Build or validate static Qt
         shell: pwsh
         run: |
@@ -147,12 +147,13 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
 
       - name: Configure focused native tests
         shell: pwsh
         run: cmake --preset snow-shot-msvc-test
       - name: Build focused native tests
+        timeout-minutes: 120
         shell: pwsh
         run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
       - name: Run focused native tests
