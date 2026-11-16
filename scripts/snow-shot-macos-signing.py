@@ -19,7 +19,7 @@ CERTIFICATE = ROOT / 'snow_shot/packaging/macos/release-signing.pem'
 INSTALLER = ROOT / 'scripts/install-snow-shot-macos.sh'
 PRODUCTS = {'snow-shot': 'com.snowshot.snow_shot',
             'snow-shot-mini': 'com.snowshot.snow_shot_mini'}
-REPOSITORY = 'mg-chao/snow-shot'
+REPOSITORY = 'wxyu71/snow-shot'
 # The last ad-hoc release is the only allowed migration boundary. These are
 # downloaded GitHub asset digests, not arbitrary unsigned predecessor exceptions.
 LEGACY_PACKAGES = {

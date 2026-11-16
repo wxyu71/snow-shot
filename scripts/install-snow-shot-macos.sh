@@ -7,7 +7,7 @@ PROJECT_SIGNING_CERTIFICATE_SHA1='A531FC00F5E11AC6AD38E5923401313F45A7CEAD'
 
 # Community release discovery must never silently fall back to upstream release infrastructure.
 github_repository='wxyu71/snow-shot'
-gitee_repository="${SNOW_SHOT_GITEE_REPOSITORY:-}"
+gitee_repository="${SNOW_SHOT_GITEE_REPOSITORY:-wxyu71/snow-shot}"
 if [[ -n "$gitee_repository" && ! "$gitee_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
     printf 'SNOW_SHOT_GITEE_REPOSITORY must use owner/repository form\n' >&2
     exit 2

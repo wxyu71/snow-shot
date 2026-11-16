@@ -20,13 +20,13 @@ SCRIPT = Path(__file__).resolve().with_name('install-snow-shot-macos.sh')
 PREFLIGHT = SCRIPT.with_name('prepare-snow-shot-homebrew.sh')
 FINGERPRINT = re.search(r"PROJECT_SIGNING_CERTIFICATE_SHA1='([A-F0-9]{40})'", SCRIPT.read_text())[1]
 REQUIREMENT = 'identifier "com.snowshot.snow_shot" and anchor = H"' + FINGERPRINT + '"'
-API = 'https://api.github.com/repos/mg-chao/snow-shot/releases?per_page=100&page=1'
-GITEE_API = 'https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases?per_page=100&page=1'
-GITEE_ATTACH = 'https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases/123/attach_files?per_page=100'
+API = 'https://api.github.com/repos/wxyu71/snow-shot/releases?per_page=100&page=1'
+GITEE_API = 'https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases?per_page=100&page=1'
+GITEE_ATTACH = 'https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases/123/attach_files?per_page=100'
 ASSET = 'snow-shot-1.2.3-macos-arm64.dmg'
 TAG = 'v1.2.3_snow-shot'
-GITHUB = 'https://github.com/mg-chao/snow-shot/releases/download/' + TAG + '/' + ASSET
-GITEE = 'https://gitee.com/mg-chao/snow-apps/releases/download/' + TAG + '/' + ASSET
+GITHUB = 'https://github.com/wxyu71/snow-shot/releases/download/' + TAG + '/' + ASSET
+GITEE = 'https://gitee.com/wxyu71/snow-shot/releases/download/' + TAG + '/' + ASSET
 
 MOCK = r'''#!/usr/bin/env python3
 import hashlib, json, os, pathlib, plistlib, shutil, signal, subprocess, sys, time
