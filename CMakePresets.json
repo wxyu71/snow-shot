@@ -635,7 +635,7 @@
       },
       "filter": {
         "include": {
-          "label": "community"
+          "name": "^(snow-shot-paddleocr-client-tests|snow-shot-community-cloud-ocr-tests)$"
         }
       }
     },
