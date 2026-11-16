@@ -213,7 +213,7 @@ void jsonResponsesAreBoundedDuringTransfer() {
     }
 }
 
-void officialHttpErrorsDescribeTheFailure() {
+void configuredServiceHttpErrorsDescribeTheFailure() {
     enum class Kind { Table, Latex, Translation };
     const struct {
         Kind kind;
@@ -222,16 +222,16 @@ void officialHttpErrorsDescribeTheFailure() {
         QString code;
         QString expected;
     } cases[]{
-        {Kind::Table, 401, R"({"code":"account_required","detail":"Unauthorized"})",
-         QStringLiteral("account_required"), QStringLiteral("HTTP 401")},
-        {Kind::Latex, 401, R"({"code":"invalid_session"})", QStringLiteral("invalid_session"),
+        {Kind::Table, 401, R"({"code":"access_denied","detail":"Unauthorized"})",
+         QStringLiteral("access_denied"), QStringLiteral("HTTP 401")},
+        {Kind::Latex, 401, R"({"code":"token_rejected"})", QStringLiteral("token_rejected"),
          QStringLiteral("HTTP 401")},
-        {Kind::Translation, 402, R"({"error":{"code":"insufficient_credits"}})",
-         QStringLiteral("insufficient_credits"), QStringLiteral("HTTP 402")},
-        {Kind::Latex, 402, R"({"code":"outstanding_balance"})",
-         QStringLiteral("outstanding_balance"), QStringLiteral("HTTP 402")},
-        {Kind::Table, 429, R"({"code":"funds_temporarily_reserved"})",
-         QStringLiteral("funds_temporarily_reserved"), QStringLiteral("429")},
+        {Kind::Translation, 402, R"({"error":{"code":"request_not_allowed"}})",
+         QStringLiteral("request_not_allowed"), QStringLiteral("HTTP 402")},
+        {Kind::Latex, 402, R"({"code":"service_restriction"})",
+         QStringLiteral("service_restriction"), QStringLiteral("HTTP 402")},
+        {Kind::Table, 429, R"({"code":"quota_temporarily_locked"})",
+         QStringLiteral("quota_temporarily_locked"), QStringLiteral("429")},
         {Kind::Translation, 429, R"({"code":"allowance_exhausted"})",
          QStringLiteral("allowance_exhausted"),
          QStringLiteral("daily allowance is exhausted")},
@@ -3412,7 +3412,7 @@ int main(int argc, char** argv) {
 
     if (application.arguments().contains(QStringLiteral("--community-service-only"))) {
         customServerDefaultsAndValidation();
-        officialHttpErrorsDescribeTheFailure();
+        configuredServiceHttpErrorsDescribeTheFailure();
         customModelsUseIndependentOpenAiConnections();
         return 0;
     }
@@ -3476,7 +3476,7 @@ int main(int argc, char** argv) {
             "transport failures without a code should remain concise");
     customServerDefaultsAndValidation();
     jsonResponsesAreBoundedDuringTransfer();
-    officialHttpErrorsDescribeTheFailure();
+    configuredServiceHttpErrorsDescribeTheFailure();
     boundedResponsesMeasureDecodedBodiesAndFollowRedirects();
     requestsKeepTheirOriginalServer();
     oldCatalogCannotReplaceNewServerModels();
