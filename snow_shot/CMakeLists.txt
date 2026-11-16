@@ -14614,11 +14614,10 @@ if(SNOW_SHOT_BUILD_BENCHMARKS)
     endif()
 endif()
 
-# Keep Community CI selection in the native build graph. The workflow builds one
-# aggregate target and CTest selects the matching label, like other focused suites.
+# Keep Community CI focused on the native executables it actually runs.
+# The production snow_shot executable is built only by the release workflow.
 if(SNOW_SHOT_BUILD_TESTS)
     add_custom_target(snow-shot-community-tests DEPENDS
-        snow_shot
         snow-shot-paddleocr-client-tests
         snow-shot-api-client-tests
         snow-shot-recognition-session-controller-tests
