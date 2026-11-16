@@ -4028,7 +4028,7 @@ mod tests {
             release.update_package("portable").unwrap().sha256.clone();
         service.persisted.source = Some(ReleaseSource::GitHub);
         service.persisted.partial_url =
-            "https://github.com/mg-chao/snow-shot/releases/download/v2.0.0_snow-shot/package.zip"
+            "https://github.com/wxyu71/snow-shot/releases/download/v2.0.0_snow-shot/package.zip"
                 .to_owned();
         write_persisted(&service.options, &service.persisted).unwrap();
         service.persisted = read_persisted(&cache_path(&service.options, "state.json"));

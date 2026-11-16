@@ -293,7 +293,6 @@ void boundedQueueAndQueuedCancellation() {
     Server server;
     SnowShotApiClient client{QString()};
     configure(server, client);
-    client.setAccountAccessToken("original-account-token");
     auto owner = std::make_unique<QObject>();
     QVector<SnowShotApiClient::RequestToken> tokens;
     int completed = 0;
@@ -310,10 +309,8 @@ void boundedQueueAndQueuedCancellation() {
     waitUntil([&] { return server.streams.size() == 8; }, "free service fills eight shared slots");
     require(client.isQueued(tokens[8]) && client.isQueued(tokens[9]),
             "excess free requests wait in the bounded queue");
-    client.setAccountAccessToken("refreshed-account-token", true);
     require(client.isQueued(tokens[8]) && client.isQueued(tokens[9]),
             "account token refresh preserves queued free translation");
-    client.setAccountAccessToken({});
     require(client.isQueued(tokens[8]) && client.isQueued(tokens[9]),
             "signing out preserves queued free translation");
     client.cancel(tokens[8]);

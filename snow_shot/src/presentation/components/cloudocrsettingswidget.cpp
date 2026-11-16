@@ -158,10 +158,14 @@ void CloudOcrSettingsWidget::retranslateUi() {
     }
     for (int i = 0; i < m_output->count(); ++i) {
         const QString value = m_output->itemData(i).toString();
-        m_output->setItemText(i, value == QStringLiteral("latex")
-                                     ? tr("LaTeX")
-                                     : value == QStringLiteral("html") ? tr("HTML")
-                                                                       : tr("Markdown"));
+        m_output->setItemText(
+            i, value == QStringLiteral("latex")
+                   ? tr("LaTeX")
+                   : value == QStringLiteral("html")
+                         ? tr("HTML")
+                         : selectedEngine() == QStringLiteral("paddleocr")
+                               ? tr("Markdown (formulas preserved as LaTeX)")
+                               : tr("Markdown"));
     }
     if (m_visionModel->count() == 1 && m_visionModel->itemData(0).toString().isEmpty())
         m_visionModel->setItemText(0, tr("No custom vision models configured"));

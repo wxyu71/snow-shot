@@ -81,7 +81,7 @@ int wmain(int argc, wchar_t** argv) {
     const std::wstring helper(argv[2]);
     const bool cancel = std::wstring(argv[3]) == L"cancel";
     const bool elevationCancel = std::wstring(argv[3]) == L"elevation-cancel";
-    const std::wstring results = resultDirectoryLength > 0 && resultDirectoryLength < 32768 ? telemetry : root;
+    const std::wstring results = resultDirectoryLength > 0 && resultDirectoryLength < 32768 ? resultDirectory : root;
     writeFile(results + L"\\.canary-parent-elevation.txt", isElevated() ? "elevated" : "standard");
     const std::wstring name = L"snow-shot-helper-canary-" + std::to_wstring(GetCurrentProcessId());
     const std::wstring pipePath = L"\\\\.\\pipe\\" + name;

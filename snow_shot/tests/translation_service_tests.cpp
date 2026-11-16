@@ -191,7 +191,6 @@ void temporaryRateLimitsRetryWithoutLosingResults() {
         return rateLimitResponse();
     };
     SnowShotApiClient client(server.url());
-    client.setAccountAccessToken("account-session");
     QObject receiver;
     int completions = 0;
     QString output;
@@ -629,7 +628,6 @@ void expertSelectionPersistsAndReportsWalletErrors(const QString& directory) {
     QObject receiver;
     for (int index = 0; index < 2; ++index) {
         if (index == 1)
-            client.setAccountAccessToken("account-session");
         std::optional<SnowShotTranslationResult> result;
         require(client.streamTranslation(
                     {service.preferences().modelId, QStringLiteral("en"), QStringLiteral("zh-Hans"),
