@@ -2448,7 +2448,9 @@ void communityCloudOcrUsesHistoryAndOwnsEdits() {
             "token rotation does not invalidate same endpoint/model history");
 
     first.markdown = QStringLiteral("# Explicit retry");
-    session.retryRecognition();
+    // Exercise the same retry signal emitted by the conversion UI. Markdown conversions
+    // have their own retry path; retryRecognition() is reserved for Table/LaTeX.
+    window.imageConversionRetryRequested();
     until([&] { return !session.busy(Mode::Markdown); }, "Cloud OCR retry did not complete");
     snapshot = session.recognitionResultsSnapshot();
     require(first.submissions == completedSubmissions + 1 && snapshot.visibleConversion &&
