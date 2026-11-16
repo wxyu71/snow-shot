@@ -21,7 +21,7 @@ static NEXT_ID: AtomicU64 = AtomicU64::new(1);
 // as command.spawn, since output handoff creates its socket pair beforehand.
 static SPAWN_LOCK: Mutex<()> = Mutex::new(());
 
-/// Process telemetry, separate from deterministic reservation accounting.
+/// Local process statistics, separate from deterministic reservation accounting; never transmitted.
 #[derive(Clone, Copy, Debug, Default)]
 pub struct WorkerStatistics {
     pub spawned: u64,

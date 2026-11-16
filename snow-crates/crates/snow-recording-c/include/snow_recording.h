@@ -317,7 +317,7 @@ SnowRecordingResult snow_recording_source_discard(SnowRecordingSource* source);
  * removes source media. Do not discard a source until its render task has ended. */
 void snow_recording_source_destroy(SnowRecordingSource* source);
 /* Initialize version/struct_size before polling. Poll is nonblocking and returns
- * the latest snapshot, without building an unbounded telemetry queue. */
+ * the latest snapshot, without building an unbounded progress queue. */
 SnowRecordingResult snow_recording_render_task_poll(const SnowRecordingRenderTask* task,
                                                     SnowRecordingRenderProgress* progress);
 /* Cancellation synchronizes with publication and can wait for filesystem work.
