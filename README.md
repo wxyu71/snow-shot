@@ -21,18 +21,20 @@ an upstream original-author release expecting these community changes.
   pin-to-screen; retain the existing screenshot engine.
 - **Fast local PP-OCRv6**: no network required; automatically copies the
   complete recognized text and keeps the selectable overlay.
-- **Cloud intelligent OCR**: direct, optional [Baidu AI Studio PaddleOCR
-  API](https://ai.baidu.com/ai-doc/AISTUDIO/fml7mozw5) with your own
-  API URL and Access Token. Choose PP-OCRv6, PP-StructureV3 or
-  PaddleOCR-VL-1.6. Download structured Markdown, automatically copy it,
-  preview, edit and copy any selection.
-- No Snow Shot login, registration, membership or paid credits.
+- **One configurable Online OCR button**: choose the provider in Settings.
+  Baidu AI Studio PaddleOCR uses your own HTTPS API URL and Access Token
+  (PP-OCRv6, PP-StructureV3 or PaddleOCR-VL-1.6) and returns structured
+  Markdown with formulas preserved as LaTeX. The inherited large-model OCR
+  pipeline can instead use a user-configured OpenAI-compatible vision model
+  and output Markdown, HTML or LaTeX.
+- No Snow Shot login, registration, membership, paid credits, analytics or telemetry.
 - Protected scheduled upstream synchronization; changes requiring full
   Windows verification are sent for human review.
 
-Screenshots submitted to cloud OCR go **directly to the configured API
-endpoint**, not to an account service. The API token is currently stored
-unencrypted in the user's local Qt settings file. See
+Screenshots submitted to Online OCR go **directly to the provider selected by
+the user**, not to a Snow Shot account service. On Windows the PaddleOCR Access
+Token is protected with user-scoped DPAPI; on other platforms it is currently
+stored in the user's Qt settings and should be treated as sensitive. See
 [privacy](docs/community-privacy.md).
 
 ## Build and test
