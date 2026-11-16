@@ -59,8 +59,8 @@ jobs:
             else
               git merge --abort
             fi
-            reasons="${reasons}
-- Automatic documentation merge could not be verified; inspect the real merge candidate."
+            reasons="$(printf '%s\n- %s' "$reasons" \
+              'Automatic documentation merge could not be verified; inspect the real merge candidate.')"
           fi
 
           branch="automation/upstream-review"
