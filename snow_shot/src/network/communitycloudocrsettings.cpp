@@ -45,6 +45,20 @@ QString unprotect(const QString& value) {
     return QString::fromUtf8(clear);
 }
 #endif
+
+QString normalizedEngine(QString value) {
+    value = value.trimmed().toLower();
+    return value == QStringLiteral("vision") ? value : QStringLiteral("paddleocr");
+}
+
+QString normalizedOutputFormat(QString value, const QString& engine) {
+    value = value.trimmed().toLower();
+    if (engine == QStringLiteral("paddleocr"))
+        return QStringLiteral("markdown");
+    if (value == QStringLiteral("html") || value == QStringLiteral("latex"))
+        return value;
+    return QStringLiteral("markdown");
+}
 } // namespace
 
 CommunityCloudOcrSettings readCommunityCloudOcrSettings() {
@@ -52,6 +66,11 @@ CommunityCloudOcrSettings readCommunityCloudOcrSettings() {
     CommunityCloudOcrSettings result;
     result.apiUrl = settings.value(QStringLiteral("api_url"), result.apiUrl).toString();
     result.model = settings.value(QStringLiteral("model"), result.model).toString();
+    result.engine =
+        normalizedEngine(settings.value(QStringLiteral("engine"), result.engine).toString());
+    result.outputFormat = normalizedOutputFormat(
+        settings.value(QStringLiteral("output_format"), result.outputFormat).toString(),
+        result.engine);
 #ifdef Q_OS_WIN
     const QString secured = settings.value(QStringLiteral("access_token_dpapi_v1")).toString();
     if (!secured.isEmpty())
@@ -75,6 +94,10 @@ bool writeCommunityCloudOcrSettings(const CommunityCloudOcrSettings& values) {
 #endif
     settings.setValue(QStringLiteral("api_url"), values.apiUrl);
     settings.setValue(QStringLiteral("model"), values.model);
+    const QString engine = normalizedEngine(values.engine);
+    settings.setValue(QStringLiteral("engine"), engine);
+    settings.setValue(QStringLiteral("output_format"),
+                      normalizedOutputFormat(values.outputFormat, engine));
     settings.sync();
     return settings.status() == QSettings::NoError;
 }
