@@ -80,12 +80,8 @@ jobs:
           fi
 
           git push --force origin "$branch"
-          body="Upstream commit: $upstream_sha
-
-$candidate
-
-Reasons reported by the fork policy:
-$reasons"
+          body="$(printf 'Upstream commit: %s\n\n%s\n\nReasons reported by the fork policy:\n%s' \
+            "$upstream_sha" "$candidate" "$reasons")"
 
           number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main \
             --state open --json number --jq '.[0].number // empty')"
