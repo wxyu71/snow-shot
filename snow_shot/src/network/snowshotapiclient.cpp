@@ -753,7 +753,6 @@ SnowShotApiClient::RequestToken SnowShotApiClient::extractDocument(const QImage&
         return 0;
     const auto token = ++m_nextToken;
     auto* state = new Request(Request::Kind::DocumentExtract);
-    state->accountAccessToken = m_accountAccessToken;
     state->endpoint = m_baseUrl + QStringLiteral("/api/v1/document/extract");
     state->receiver = receiver;
     state->documentCompletion = std::move(completion);
@@ -802,8 +801,6 @@ void SnowShotApiClient::startDocumentUpload(RequestToken token, const QByteArray
         return;
     }
     QNetworkRequest request{QUrl(state->endpoint)};
-    if (!state->accountAccessToken.isEmpty())
-        request.setRawHeader("Authorization", "Bearer " + state->accountAccessToken);
     request.setRawHeader("X-Request-ID", state->operation.toUtf8());
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::ManualRedirectPolicy);
@@ -880,11 +877,7 @@ void SnowShotApiClient::finishDocument(RequestToken token, SnowShotDocumentResul
     const QPointer<QObject> receiver = state->receiver;
     const QPointer<SnowShotApiClient> guard(this);
     auto completion = std::move(state->documentCompletion);
-    const bool account =
-        !state->accountAccessToken.isEmpty() && state->accountAccessToken == m_accountAccessToken;
     cleanupRequest(state);
-    if (guard && account)
-        emit officialCallSettled();
     if (guard && receiver && completion)
         completion(std::move(result));
 }

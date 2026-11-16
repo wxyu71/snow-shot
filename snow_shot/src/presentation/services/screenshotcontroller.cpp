@@ -88,6 +88,7 @@
 #include "snow_shot/presentation/screenshothistoryservice.h"
 #include "snow_shot/storage/applicationstorage.h"
 #include "snow_shot/storage/capturehistorytypes.h"
+#include "snow_shot/customaimodelconfiguration.h"
 #include "snow_shot/storage/settingsadapters.h"
 #include "snow_shot/presentation/screenshotintelligentselectionmodel.h"
 #include "snow_shot/presentation/screenshotinteractionstate.h"
@@ -1322,6 +1323,13 @@ bool ScreenshotController::Impl::ensureRecognitionFeature() {
             std::make_unique<SnowShotApiClient>(SnowShotApiClient::configuredBaseUrl());
         m_tableRecognition = static_cast<SnowShotApiClient*>(m_ownedApiClient.get());
     }
+#if SNOW_SHOT_ENABLE_API_CONFIGURATION
+    if (applicationStorage.isInitialized()) {
+        m_tableRecognition->setCustomModels(snow_shot::customAiModelsFromJson(
+            applicationStorage.configuration().value(
+                QStringLiteral("api_configuration/custom_models"))));
+    }
+#endif
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION
     snow_shot::translation::TranslationService::forClient(
         *m_tableRecognition, applicationStorage.configuration(),
@@ -1330,9 +1338,12 @@ bool ScreenshotController::Impl::ensureRecognitionFeature() {
 
     QObject::connect(
         &applicationStorage.configuration(), &snow_shot::storage::ConfigurationStore::valueChanged,
-        &owner, [this](const QString& key, const QJsonValue&) {
+        &owner, [this](const QString& key, const QJsonValue& value) {
             if (key == QStringLiteral("api_configuration/custom_models") &&
                 m_tableRecognition != nullptr) {
+#if SNOW_SHOT_ENABLE_API_CONFIGURATION
+                m_tableRecognition->setCustomModels(snow_shot::customAiModelsFromJson(value));
+#endif
                 const auto conversion = snow_shot::storage::ScreenshotImageConversionSettings();
                 const QString visionId = conversion.visionModel();
                 if (visionId.startsWith(QStringLiteral("custom:")) &&

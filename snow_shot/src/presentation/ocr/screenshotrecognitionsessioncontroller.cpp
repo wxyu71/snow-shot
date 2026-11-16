@@ -465,8 +465,6 @@ void ScreenshotRecognitionSessionController::setProviders(
             failModelRecognition(
                 tr("Recognition service changed. Retry to use the updated settings"));
         };
-        connect(tableRecognition, &SnowShotApiClient::accountIdentityChanged, this,
-                documentProviderChanged);
         connect(tableRecognition, &SnowShotApiClient::baseUrlChanged, this, documentProviderChanged);
 #endif
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION || SNOW_SHOT_ENABLE_LATEX_RECOGNITION ||                    \
