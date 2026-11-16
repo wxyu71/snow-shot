@@ -60,7 +60,9 @@ def fingerprint(certificate=None):
 
 def project_identity():
     if not CERTIFICATE.is_file():
-        raise ValueError('Project certificate is missing; restore release-signing.pem')
+        raise ValueError(
+            'Project certificate is missing; initialize an independent community release '
+            'identity with snow-shot-macos-signing.py initialize')
     value = fingerprint()
     match = re.search(r"^PROJECT_SIGNING_CERTIFICATE_SHA1='([A-F0-9]{40})'$",
                       INSTALLER.read_text(), re.MULTILINE)
