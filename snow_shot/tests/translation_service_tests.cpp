@@ -96,9 +96,9 @@ void fastTranslationBatchesAndRetriesInOrder() {
                     QJsonArray{QStringLiteral("one"), QStringLiteral("two"), firstPart} &&
                 first.body.value(QStringLiteral("type")).toInt() == 1 &&
                 first.body.value(QStringLiteral("to")).toString() == QStringLiteral("zh-CHS") &&
-                first.headers.toLower().contains("authorization: bearer account-session") &&
+                !first.headers.toLower().contains("authorization:") &&
                 first.headers.toLower().contains("x-request-id:"),
-            "batch distinct inputs, split at a paragraph, and attach the account and request IDs");
+            "batch distinct inputs, split at a paragraph, and attach only the request ID");
 
     server.finishFast(0, {QStringLiteral("first"), QStringLiteral("second"), QStringLiteral("A")});
     waitUntil([&] { return server.fastRequests.size() == 2; }, "send the remaining long input");
@@ -211,8 +211,8 @@ void temporaryRateLimitsRetryWithoutLosingResults() {
     require(rejectedAt.elapsed() >= 1000, "automatic retry respects Retry-After");
     require(server.streams[0].body == server.streams[1].body &&
                 server.streams[0].headers == server.streams[1].headers &&
-                server.streams[0].headers.contains("Authorization: Bearer account-session"),
-            "retry preserves the billing identity and official account authorization");
+                !server.streams[0].headers.toLower().contains("authorization:"),
+            "retry preserves request identity without injecting application credentials");
     server.delta(1, QStringLiteral("translated"));
     server.finish(1);
     waitUntil([&] { return completions == 1; }, "retried translation completes once");
@@ -453,28 +453,25 @@ void builtInConcurrencyUsesEightRequests(const QString& directory) {
             "built-in translation completes after replenishing capacity");
 }
 
-void accountRejectionStopsTheBatchAndKeepsItsError(const QString& directory) {
+void serviceRejectionStopsTheBatchAndKeepsItsError(const QString& directory) {
     struct Scenario {
-        bool billing;
+        int status;
         bool expert;
-        QStringView message;
+        QStringView expected;
     };
     const Scenario scenarios[] = {
-        {false, false, u"Sign in to your Snow Shot account to use this service"},
-        {true, false,
-         u"Your available credits cannot cover this request. Purchase credits in Account"},
-        {true, true,
-         u"Your credits cannot cover this Expert Model request. "
-         u"Purchase credits from Account to continue"},
+        {401, false, u"HTTP 401"},
+        {402, false, u"HTTP 402"},
+        {402, true, u"HTTP 402"},
     };
-    for (const auto& [billing, expert, message] : scenarios) {
+    for (const auto& [status, expert, expected] : scenarios) {
         Server server;
         const auto model = expert ? QStringLiteral("expert-model") : QStringLiteral("general");
         if (expert)
             server.models.append(
                 QJsonObject{{QStringLiteral("model"), model},
                             {QStringLiteral("name"), QStringLiteral("Expert Model")}});
-        const QByteArray code = billing ? "insufficient_credits" : "account_required";
+        const QByteArray code = status == 401 ? "access_denied" : "request_not_allowed";
         SnowShotApiClient client(server.url());
         ConfigurationStore settings(
             directory + QStringLiteral("/%1-%2.json").arg(model, QString::fromLatin1(code)), true,
@@ -494,12 +491,12 @@ void accountRejectionStopsTheBatchAndKeepsItsError(const QString& directory) {
         job->start();
         waitUntil([&] { return server.streams.size() >= 2; }, "start the first translation units");
         require(server.streams.first().body.value(QStringLiteral("model")) == model,
-                "account rejection fixture uses the selected model");
+                "service rejection fixture uses the selected model");
         server.send(0,
-                    "event: error\ndata: {\"status\":" + QByteArray::number(billing ? 402 : 401) +
+                    "event: error\ndata: {\"status\":" + QByteArray::number(status) +
                         ",\"error\":{\"code\":\"" + code + "\"}}\n\n");
         waitUntil([&] { return job->result().code == QString::fromLatin1(code); },
-                  "nested streaming error preserves its account code");
+                  "nested streaming error preserves its service code");
         const auto started = server.streams.size();
         server.delta(1, QStringLiteral("partial output"));
         for (int index = 1; index < started; ++index)
@@ -508,10 +505,10 @@ void accountRejectionStopsTheBatchAndKeepsItsError(const QString& directory) {
         require(server.streams.size() == started && started <= 8 &&
                     job->state() == TranslationJob::State::Failed &&
                     job->result().code == QString::fromLatin1(code) &&
-                    job->result().httpStatus == (billing ? 402 : 401) &&
+                    job->result().httpStatus == status &&
                     job->units().at(1).text == QStringLiteral("partial output") &&
-                    job->errorText().contains(message),
-                "account rejection stops unsent units and remains visible after later failures");
+                    job->errorText().contains(expected),
+                "terminal service rejection stops unsent units and remains visible after later failures");
     }
 }
 
@@ -585,7 +582,7 @@ void aiModelSelectionMigratesOnlyAfterDiscovery(const QString& directory) {
     }
 }
 
-void expertSelectionPersistsAndReportsWalletErrors(const QString& directory) {
+void expertSelectionPersistsAndReportsServiceErrors(const QString& directory) {
     Server server;
     const auto fast = QStringLiteral("ai-model");
     const auto expert = QStringLiteral("expert-model");
@@ -597,7 +594,7 @@ void expertSelectionPersistsAndReportsWalletErrors(const QString& directory) {
                                            {QStringLiteral("supports_vision"), true}}};
     server.streamRejection = [](int index) {
         const QByteArray status = index == 0 ? "401 Unauthorized" : "402 Payment Required";
-        const QByteArray code = index == 0 ? "account_required" : "insufficient_credits";
+        const QByteArray code = index == 0 ? "access_denied" : "request_not_allowed";
         const QByteArray body = "{\"error\":{\"code\":\"" + code + "\"}}";
         return "HTTP/1.1 " + status +
                "\r\nContent-Type: application/problem+json\r\nContent-Length: " +
@@ -627,7 +624,6 @@ void expertSelectionPersistsAndReportsWalletErrors(const QString& directory) {
 
     QObject receiver;
     for (int index = 0; index < 2; ++index) {
-        if (index == 1)
         std::optional<SnowShotTranslationResult> result;
         require(client.streamTranslation(
                     {service.preferences().modelId, QStringLiteral("en"), QStringLiteral("zh-Hans"),
@@ -635,20 +631,18 @@ void expertSelectionPersistsAndReportsWalletErrors(const QString& directory) {
                     &receiver, [](const QString&) {},
                     [&](auto value) { result = std::move(value); }) != 0,
                 "dispatch an Expert translation");
-        waitUntil([&] { return result.has_value(); }, "receive the Expert account error");
+        waitUntil([&] { return result.has_value(); }, "receive the Expert service error");
         require(server.streams.at(index).body.value(QStringLiteral("model")) == expert &&
-                    server.streams.at(index).headers.contains(
-                        "Authorization: Bearer account-session") == (index == 1),
-                "Expert uses the selected model and current account authorization");
+                    !server.streams.at(index).headers.toLower().contains("authorization:"),
+                "Expert uses the selected model without injected application credentials");
         if (index == 0)
-            require(result->httpStatus == 401 && result->code == u"account_required" &&
-                        result->error == u"Sign in to your Snow Shot account to use Expert Model",
-                    "Expert requests show a sign-in message");
+            require(result->httpStatus == 401 && result->code == u"access_denied" &&
+                        result->error.contains(QStringLiteral("HTTP 401")),
+                    "Expert requests preserve a generic 401 service rejection");
         else
-            require(result->httpStatus == 402 && result->code == u"insufficient_credits" &&
-                        result->error == u"Your credits cannot cover this Expert Model request. "
-                                         u"Purchase credits from Account to continue",
-                    "Expert requests show a wallet-only balance message");
+            require(result->httpStatus == 402 && result->code == u"request_not_allowed" &&
+                        result->error.contains(QStringLiteral("HTTP 402")),
+                    "Expert requests preserve a generic 402 service rejection");
     }
 }
 
@@ -1826,7 +1820,7 @@ int main(int argc, char** argv) {
     if (application.arguments().contains(QStringLiteral("--notification-lifetime-only")))
         return 0;
     builtInConcurrencyUsesEightRequests(directory.path());
-    accountRejectionStopsTheBatchAndKeepsItsError(directory.path());
+    serviceRejectionStopsTheBatchAndKeepsItsError(directory.path());
     fastTranslationDiscoveryRecoversFromFailure();
     fastTranslationBatchesAndRetriesInOrder();
     fastTranslationHardSplitAndCancellation();
@@ -1837,7 +1831,7 @@ int main(int argc, char** argv) {
     retryHintsRespectDatesBodyMetadataAndTheDeadline();
     partialTranslationsDoNotReplayAndRetainTheFailureReason();
     aiModelSelectionMigratesOnlyAfterDiscovery(directory.path());
-    expertSelectionPersistsAndReportsWalletErrors(directory.path());
+    expertSelectionPersistsAndReportsServiceErrors(directory.path());
     discoverySharesRequestsAndCancellation(directory.path());
     additionalLanguagesPersistAndTranslate(directory.path());
     secondaryTargetsPersistAndReachEveryUnit(directory.path());
