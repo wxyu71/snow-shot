@@ -152,11 +152,11 @@ jobs:
       - name: Configure focused native tests
         shell: pwsh
         run: cmake --preset snow-shot-msvc-test
-      - name: Build focused native tests
+      - name: Build core Community native tests
         timeout-minutes: 120
         shell: pwsh
         run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
-      - name: Run focused native tests
+      - name: Run core Community native tests
         shell: pwsh
         run: ctest --preset test-snow-shot-msvc-community
 
