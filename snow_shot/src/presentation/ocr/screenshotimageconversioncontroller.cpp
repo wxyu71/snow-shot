@@ -48,6 +48,11 @@ ConversionRequestIdentity cloudRequestIdentity(const CloudSettings& settings) {
 bool isCloudRequestModel(const QString& model) {
     return model.startsWith(QStringLiteral("paddleocr:"));
 }
+
+bool usesPaddleCloudOcr(const CloudSettings& settings, SnowShotImageConversionFormat format) {
+    return format == SnowShotImageConversionFormat::Markdown &&
+           settings.engine == QStringLiteral("paddleocr");
+}
 } // namespace
 
 ScreenshotImageConversionController::ScreenshotImageConversionController(QObject* parent)
@@ -96,8 +101,11 @@ void ScreenshotImageConversionController::setProvider(SnowShotApiClient* provide
     // Complete them before any observer can reset a conversion or replace the provider again.
     bindProviderSignals();
     m_cache.removeIf([this](const auto& cached) { return !entryMatchesProvider(cached.result); });
+    const bool paddleActive =
+        m_active && usesPaddleCloudOcr(snow_shot::network::readCommunityCloudOcrSettings(),
+                                      m_format);
     const bool failedToRestore =
-        m_active && (busy() || !restoreCachedResult(Settings().visionModel()));
+        m_active && !paddleActive && (busy() || !restoreCachedResult(Settings().visionModel()));
     if (!lifetime || providerGeneration != m_providerGeneration)
         return;
     if (failedToRestore) {
@@ -128,7 +136,8 @@ void ScreenshotImageConversionController::bindProviderSignals() {
             m_cache.removeIf([](const auto& cached) {
                 return !cached.result.model.startsWith(QStringLiteral("custom:"));
             });
-            if (m_active && !m_requestModel.startsWith(QStringLiteral("custom:"))) {
+            if (m_active && !isCloudRequestModel(m_requestModel) &&
+                !m_requestModel.startsWith(QStringLiteral("custom:"))) {
                 cancelRequests();
                 m_source.clear();
                 fail(tr("Model configuration changed. Retry to use the updated settings"));
@@ -173,7 +182,7 @@ void ScreenshotImageConversionController::bindProviderSignals() {
                 return;
             ++m_providerGeneration;
             cancelRequests();
-            if (busy()) {
+            if (busy() && !isCloudRequestModel(m_requestModel)) {
                 fail(tr("The image conversion service is unavailable"));
             }
         });
@@ -183,8 +192,9 @@ void ScreenshotImageConversionController::bindProviderSignals() {
 void ScreenshotImageConversionController::activate(QString key, QImage image,
                                                    SnowShotImageConversionFormat format) {
     ConversionRequestIdentity requested{Settings().visionModel(), {}};
-    if (format == SnowShotImageConversionFormat::Markdown)
-        requested = cloudRequestIdentity(snow_shot::network::readCommunityCloudOcrSettings());
+    const auto cloudSettings = snow_shot::network::readCommunityCloudOcrSettings();
+    if (usesPaddleCloudOcr(cloudSettings, format))
+        requested = cloudRequestIdentity(cloudSettings);
     const bool sameRequest =
         m_requestModel == requested.model &&
         (format != SnowShotImageConversionFormat::Markdown ||
@@ -402,8 +412,9 @@ void ScreenshotImageConversionController::start(bool refreshModels) {
     m_refreshConversion = refreshModels;
     m_requestModel = Settings().visionModel();
     m_requestFingerprint.clear();
-    if (m_format == SnowShotImageConversionFormat::Markdown) {
-        const auto saved = snow_shot::network::readCommunityCloudOcrSettings();
+    const auto cloudSettings = snow_shot::network::readCommunityCloudOcrSettings();
+    if (usesPaddleCloudOcr(cloudSettings, m_format)) {
+        const auto& saved = cloudSettings;
         const auto identity = cloudRequestIdentity(saved);
         snow_shot::network::BaiduPaddleOcrClient::Options options;
         options.apiUrl = saved.apiUrl;

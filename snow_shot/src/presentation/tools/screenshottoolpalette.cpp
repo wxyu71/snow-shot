@@ -6865,9 +6865,10 @@ bool ScreenshotToolPalette::addMainSecondaryButtons(const Options& options, QBox
     }
 
     if (options.showImageConversionTools && snow_shot::app::edition::imageConversion) {
-        // Community cloud OCR is a single direct action, not a five-item hover menu.
+        // Preserve the upstream "convert-to-markdown" id as the stable compatibility entry.
+        // Community settings decide which online engine/output this single button dispatches.
         m_markdownButton =
-            addToolButton(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Convert to Markdown"),
+            addToolButton(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Online OCR"),
                           custom_outlined_icons::Markdown());
         m_markdownButton->setObjectName(QStringLiteral("screenshotConvertToMarkdownButton"));
         m_markdownButton->setBusyIndicatorPresentation(

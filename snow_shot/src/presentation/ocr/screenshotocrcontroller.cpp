@@ -1,4 +1,6 @@
 #include "snow_shot/presentation/screenshotocrcontroller.h"
+#include "snow_shot/network/communitycloudocrsettings.h"
+#include "snow_shot/storage/settingsadapters.h"
 #include "snow_shot/presentation/screenshotclipboardcontent.h"
 #include "snow_shot/presentation/screenshotdocumentformatting.h"
 #include <QTextDocument>
@@ -425,6 +427,25 @@ void ScreenshotOcrController::setRecognitionModel(const QString& selection) {
 }
 
 void ScreenshotOcrController::activateImageConversion(SnowShotImageConversionFormat format) {
+    if (format == SnowShotImageConversionFormat::Markdown) {
+        const auto settings = snow_shot::network::readCommunityCloudOcrSettings();
+        if (settings.engine == QStringLiteral("vision")) {
+            if (settings.outputFormat == QStringLiteral("html")) {
+                activateMode(Mode::Html);
+                return;
+            }
+#if SNOW_SHOT_ENABLE_LATEX_RECOGNITION
+            if (settings.outputFormat == QStringLiteral("latex")) {
+                const QString model =
+                    snow_shot::storage::ScreenshotImageConversionSettings().visionModel();
+                if (!model.isEmpty())
+                    snow_shot::storage::ScreenshotRecognitionModelSettings().setLatexModel(model);
+                activateMode(Mode::Latex);
+                return;
+            }
+#endif
+        }
+    }
     activateMode(format == SnowShotImageConversionFormat::Markdown ? Mode::Markdown : Mode::Html);
 }
 
