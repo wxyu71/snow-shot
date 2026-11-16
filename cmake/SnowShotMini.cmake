@@ -5,9 +5,13 @@ include("${CMAKE_CURRENT_LIST_DIR}/SnowShotMiniBuildContract.cmake")
 add_library(snow_shot_edition_full INTERFACE)
 target_compile_definitions(snow_shot_edition_full INTERFACE SNOW_SHOT_EDITION_MINI=0)
 foreach(_feature IN ITEMS QR_RECOGNITION TABLE_RECOGNITION IMAGE_CONVERSION
-        LATEX_RECOGNITION DOCUMENT_RECOGNITION TEXT_TRANSLATION API_CONFIGURATION EXTENDED_FEATURES)
+        LATEX_RECOGNITION TEXT_TRANSLATION API_CONFIGURATION EXTENDED_FEATURES)
     target_compile_definitions(snow_shot_edition_full INTERFACE SNOW_SHOT_ENABLE_${_feature}=1)
 endforeach()
+# The community edition deliberately does not compile the upstream account-backed
+# document-recognition product path. Online OCR is provided by PaddleOCR/custom vision models.
+target_compile_definitions(snow_shot_edition_full INTERFACE
+    SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION=0)
 
 set(_snow_mini_libraries
     snow_shot_cloud_upload snow_shot_storage snow_shot_main_window_skin snow_shot_settings_catalog snow_shot_settings_search

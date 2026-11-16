@@ -3278,7 +3278,6 @@ void documentUploadPreservesPixelsAndRawResults() {
     QTcpServer server;
     require(server.listen(QHostAddress::LocalHost), "document fixture listens");
     SnowShotApiClient client(QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()));
-    client.setAccountAccessToken(QByteArrayLiteral("document-test-token"));
     QImage original(3001, 13, QImage::Format_RGBA8888);
     original.fill(QColor(17, 73, 151, 123));
     original.setPixelColor(1234, 7, QColor(255, 23, 91, 19));
@@ -3298,8 +3297,8 @@ void documentUploadPreservesPixelsAndRawResults() {
                     QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
     translation_tests::waitUntil([&] { return finished; }, "document completes");
     require(request.startsWith("POST /api/v1/document/extract ") && request.contains("image/png") &&
-                request.contains("Bearer document-test-token"),
-            "authenticated PNG route");
+                !request.left(request.indexOf("\r\n\r\n")).toLower().contains("authorization:"),
+            "document PNG route does not depend on an application account");
     const auto offset = request.indexOf(QByteArray::fromHex("89504e470d0a1a0a"));
     require(offset >= 0, "PNG signature");
     const auto image = QImage::fromData(request.mid(offset), "PNG");
@@ -3358,55 +3357,48 @@ void documentUploadPreservesPixelsAndRawResults() {
             "stale encoding cannot upload or publish");
 }
 
-void documentAuthenticationMatchesTable() {
-    for (const bool expiredSession : {false, true}) {
-        QString tableError;
-        const QByteArray code = expiredSession ? "invalid_session" : "account_required";
-        for (const bool document : {false, true}) {
-            QTcpServer server;
-            require(server.listen(QHostAddress::LocalHost), "authentication fixture listens");
-            SnowShotApiClient client(
-                QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()));
-            if (expiredSession)
-                client.setAccountAccessToken(QByteArrayLiteral("expired-test-token"));
-            QImage image(8, 8, QImage::Format_RGBA8888);
-            image.fill(Qt::white);
-            int completions = 0;
-            QString message;
-            const auto completion = [&](auto result) {
-                require(!result.succeeded() && result.httpStatus == 401 &&
-                            result.code == QString::fromLatin1(code),
-                        "recognition preserves the server's authentication error");
-                message = result.error;
-                ++completions;
-            };
-            const auto token = document ? client.extractDocument(image, &client, completion)
-                                        : client.extractTable(image, &client, completion);
-            require(token != 0 && completions == 0,
-                    "recognition starts without a client-side authentication rejection");
-            const QByteArray body = "{\"code\":\"" + code + "\"}";
-            const auto request = waitForHttpRequest(
-                server, "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/problem+json\r\n"
-                        "Content-Length: " +
-                            QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" +
-                            body);
-            require(request.startsWith(document ? "POST /api/v1/document/extract "
-                                                : "POST /api/v1/table/extract "),
-                    "anonymous and expired-session requests reach their recognition endpoint");
-            const auto headers = request.left(request.indexOf("\r\n\r\n")).toLower();
-            require(expiredSession ? headers.contains("authorization: bearer expired-test-token")
-                                   : !headers.contains("authorization:"),
-                    "recognition sends authorization only when a token exists");
-            translation_tests::waitUntil([&] { return completions != 0; },
-                                         "server authentication response completes");
-            require(completions == 1 && !message.isEmpty(),
-                    "server authentication failure completes exactly once");
-            if (document)
-                require(message == tableError,
-                        "document and table recognition share authentication messages");
-            else
-                tableError = message;
-        }
+void documentUnauthorizedFailureMatchesTable() {
+    QString tableError;
+    for (const bool document : {false, true}) {
+        QTcpServer server;
+        require(server.listen(QHostAddress::LocalHost), "authorization failure fixture listens");
+        SnowShotApiClient client(
+            QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()));
+        QImage image(8, 8, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        int completions = 0;
+        QString message;
+        const auto completion = [&](auto result) {
+            require(!result.succeeded() && result.httpStatus == 401,
+                    "recognition preserves the provider HTTP status");
+            message = result.error;
+            ++completions;
+        };
+        const auto token = document ? client.extractDocument(image, &client, completion)
+                                    : client.extractTable(image, &client, completion);
+        require(token != 0 && completions == 0,
+                "recognition starts without local account-state gating");
+        const QByteArray body = R"({"detail":"Unauthorized"})";
+        const auto request = waitForHttpRequest(
+            server, "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/problem+json\r\n"
+                    "Content-Length: " +
+                        QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" +
+                        body);
+        require(request.startsWith(document ? "POST /api/v1/document/extract "
+                                            : "POST /api/v1/table/extract "),
+                "recognition reaches its configured provider endpoint");
+        const auto headers = request.left(request.indexOf("\r\n\r\n")).toLower();
+        require(!headers.contains("authorization:"),
+                "community recognition does not inject an application account credential");
+        translation_tests::waitUntil([&] { return completions != 0; },
+                                     "provider authorization failure completes");
+        require(completions == 1 && !message.isEmpty(),
+                "provider authorization failure completes exactly once");
+        if (document)
+            require(message == tableError,
+                    "document and table recognition share generic provider errors");
+        else
+            tableError = message;
     }
 }
 
@@ -3414,7 +3406,7 @@ int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
     if (application.arguments().contains(QStringLiteral("--document-only"))) {
         documentUploadPreservesPixelsAndRawResults();
-        documentAuthenticationMatchesTable();
+        documentUnauthorizedFailureMatchesTable();
         return 0;
     }
 

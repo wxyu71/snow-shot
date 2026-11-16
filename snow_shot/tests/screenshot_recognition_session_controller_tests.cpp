@@ -1763,7 +1763,8 @@ void runLatexRecognitionTests();
 void runCommunityCloudOcrTests();
 void runImageConversionLayoutTests();
 
-void documentSessionCancelsPendingRequestOnAccountChange() {
+void documentSessionCancelsPendingRequestOnProviderChange() {
+#if SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION
     using Mode = ScreenshotRecognitionSessionController::Mode;
     QTcpServer server;
     require(server.listen(QHostAddress::LocalHost), "document test server listens");
@@ -1773,23 +1774,25 @@ void documentSessionCancelsPendingRequestOnAccountChange() {
     ScreenshotRecognitionSessionController session(nullptr, nullptr, client.get(), {});
     QImage original(64, 48, QImage::Format_ARGB32);
     original.fill(Qt::white);
-    session.setTarget({QStringLiteral("document-account"), original, QRectF(0, 0, 64, 48)});
+    session.setTarget({QStringLiteral("document-provider"), original, QRectF(0, 0, 64, 48)});
 
     session.activate(Mode::Document);
     require(session.busy(Mode::Document), "document request is still preparing");
-    client->setAccountAccessToken(QByteArrayLiteral("new-account"));
+    require(client->setBaseUrl(QStringLiteral("http://127.0.0.1:1")),
+            "document provider can be changed");
     require(!session.busy(Mode::Document) &&
                 !session.workflowState().value(QStringLiteral("error")).toString().isEmpty(),
-            "account change settles the cancelled request");
+            "provider change settles the cancelled request");
     require(QThreadPool::globalInstance()->waitForDone(5000), "document encoding settles");
     QCoreApplication::sendPostedEvents(client.get(), QEvent::MetaCall);
     QCoreApplication::processEvents();
     require(!server.hasPendingConnections(), "cancelled encoding cannot upload");
 
     session.retryRecognition();
-    require(session.busy(Mode::Document), "retry starts under the current account");
+    require(session.busy(Mode::Document), "retry starts under the current provider");
     client.reset();
     require(!session.busy(Mode::Document), "provider destruction clears the document busy state");
+#endif
 }
 
 void documentSessionUsesImmutableCacheAndPreservesSelection() {
@@ -2003,7 +2006,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--document-only"))) {
-        documentSessionCancelsPendingRequestOnAccountChange();
+        documentSessionCancelsPendingRequestOnProviderChange();
         documentSessionUsesImmutableCacheAndPreservesSelection();
         documentCacheEvictsLeastRecentlyUsedResults();
         documentPreviewDisplaysBeforeFormulaAssetsAreReady();
