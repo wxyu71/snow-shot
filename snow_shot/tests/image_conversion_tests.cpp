@@ -2405,7 +2405,9 @@ void communityCloudOcrUsesHistoryAndOwnsEdits() {
     auto snapshot = session.recognitionResultsSnapshot();
     require(first.authenticated && first.polls >= 1 && first.downloads == 1 &&
                 snapshot.visibleConversion &&
-                snapshot.visibleConversion->source == QStringLiteral("# Cloud result"),
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
+                !snapshot.conversions.isEmpty() &&
+                snapshot.conversions.constLast().source == QStringLiteral("# Cloud result"),
             "Cloud OCR completes through the production client and publishes Markdown");
 
     auto* view = window.findChild<ScreenshotImageConversionView*>();
@@ -2421,15 +2423,18 @@ void communityCloudOcrUsesHistoryAndOwnsEdits() {
     raw->setPlainText(revised);
     QCoreApplication::processEvents();
     snapshot = session.recognitionResultsSnapshot();
-    require(snapshot.visibleConversion && snapshot.visibleConversion->source == revised &&
+    require(snapshot.visibleConversion &&
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
                 !snapshot.conversions.isEmpty() && snapshot.conversions.constLast().source == revised,
             "Markdown edits flow back into the session-owned history result");
 
     const int completedSubmissions = first.submissions;
     session.deactivate();
     session.activate(Mode::Markdown);
-    require(!session.busy(Mode::Markdown) &&
-                session.recognitionResultsSnapshot().visibleConversion->source == revised &&
+    snapshot = session.recognitionResultsSnapshot();
+    require(!session.busy(Mode::Markdown) && snapshot.visibleConversion &&
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
+                !snapshot.conversions.isEmpty() && snapshot.conversions.constLast().source == revised &&
                 first.submissions == completedSubmissions,
             "reopening the same recognition key restores edited Cloud OCR history without upload");
 
@@ -2445,9 +2450,11 @@ void communityCloudOcrUsesHistoryAndOwnsEdits() {
     first.markdown = QStringLiteral("# Explicit retry");
     session.retryRecognition();
     until([&] { return !session.busy(Mode::Markdown); }, "Cloud OCR retry did not complete");
-    require(first.submissions == completedSubmissions + 1 &&
-                session.recognitionResultsSnapshot().visibleConversion->source ==
-                    QStringLiteral("# Explicit retry"),
+    snapshot = session.recognitionResultsSnapshot();
+    require(first.submissions == completedSubmissions + 1 && snapshot.visibleConversion &&
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
+                !snapshot.conversions.isEmpty() &&
+                snapshot.conversions.constLast().source == QStringLiteral("# Explicit retry"),
             "explicit retry bypasses history and refreshes Cloud OCR");
 
     PaddleConversionServer second;
