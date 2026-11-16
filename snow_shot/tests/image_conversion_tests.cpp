@@ -2204,6 +2204,14 @@ void conversionToolbarMigration() {
 } // namespace
 
 namespace {
+void selectVisionOnlineOcrForImageConversionTests() {
+    auto settings = snow_shot::network::readCommunityCloudOcrSettings();
+    settings.engine = QStringLiteral("vision");
+    settings.outputFormat = QStringLiteral("markdown");
+    require(snow_shot::network::writeCommunityCloudOcrSettings(settings),
+            "select large-model OCR for upstream image-conversion fixtures");
+}
+
 void initializeRecognitionTestFonts() {
 #if defined(Q_OS_WIN)
     require(QFontDatabase::addApplicationFont(QStringLiteral("C:/Windows/Fonts/segoeui.ttf")) >= 0,
@@ -2325,6 +2333,7 @@ void runCommunityCloudOcrTests() {
 }
 
 void runImageConversionNetworkTests() {
+    selectVisionOnlineOcrForImageConversionTests();
     initializeRecognitionTestFonts();
     for (const auto& legacy : {QStringLiteral("qwen3.8-flash"), QStringLiteral("qwen-mt-flash")})
         conversionAiModelMigrationPreservesHistoricalOutput(legacy);
@@ -2340,6 +2349,7 @@ void runImageConversionNetworkTests() {
 }
 
 void runRecognitionNotificationLifetimeTests() {
+    selectVisionOnlineOcrForImageConversionTests();
     conversionNotificationsAllowOwnerDeletion();
     conversionProviderBindingsSurviveNotificationReentry();
     conversionProviderReplacementKeepsOnlyCurrentBindings();
