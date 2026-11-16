@@ -219,7 +219,7 @@ struct EditorDescriptor {
              QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Table recognition"),
              Icon::TableRecognition},
             {"convert-to-markdown", "ScreenshotToolbarEditorSettingsWidget",
-             QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Convert to Markdown"),
+             QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Online OCR"),
              Icon::Markdown},
             {"latex-recognition", "ScreenshotToolbarEditorSettingsWidget",
              QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget",
@@ -395,6 +395,10 @@ editorDescriptors(storage::ScreenshotToolbarLayoutKind kind) {
         QVector<EditorDescriptor> result;
         for (const auto& descriptor : actionDescriptors()) {
             const QString id = QString::fromLatin1(descriptor.id);
+            if (id == QStringLiteral("document-recognition") ||
+                id == QStringLiteral("latex-recognition") ||
+                id == QStringLiteral("convert-to-html"))
+                continue;
             if (id == QStringLiteral("barcode-recognition") ||
                 id == QStringLiteral("table-recognition") ||
                 id == QStringLiteral("document-recognition") ||
@@ -422,7 +426,11 @@ editorDescriptors(storage::ScreenshotToolbarLayoutKind kind) {
     if (kind == storage::ScreenshotToolbarLayoutKind::ActionTools) {
         auto result = actionDescriptors();
         result.removeIf([](const EditorDescriptor& descriptor) {
-            return QLatin1String(descriptor.id) == QLatin1String("confirm");
+            const QLatin1String id(descriptor.id);
+            return id == QLatin1String("confirm") ||
+                   id == QLatin1String("document-recognition") ||
+                   id == QLatin1String("latex-recognition") ||
+                   id == QLatin1String("convert-to-html");
         });
         result.push_back(
             {"separator", "DrawingToolbarEditorSettingsWidget",

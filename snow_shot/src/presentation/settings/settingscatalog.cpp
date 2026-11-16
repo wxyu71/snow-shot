@@ -4625,10 +4625,13 @@ constexpr TranslatableText catalogPageScreenRecordingAliases[] = {
 SettingsItemDefinition communityCloudOcrSettingsItem() {
     return {
         QStringLiteral("text-recognition.cloud-ocr"),
-        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Cloud OCR for Markdown")),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Online OCR")),
         settingsText(QT_TRANSLATE_NOOP(
-            "SettingsCatalog", "Configure a provider URL, API key, model and connection test")),
-        {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "PaddleOCR AI Studio"))},
+            "SettingsCatalog", "Choose the online OCR engine, output format and provider settings")),
+        {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "PaddleOCR AI Studio")),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Large-model OCR")),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "LaTeX")),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Markdown"))},
         {},
         SettingsCustomDefinition{SettingsCustomRenderer::CloudOcr},
     };
