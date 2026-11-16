@@ -1,4 +1,5 @@
 #include "snow_shot/presentation/screenshotimageconversioncontroller.h"
+#include "snow_shot/network/communitycloudocrsettings.h"
 #include "snow_shot/presentation/languagemanager.h"
 #include "snow_shot/presentation/screenshotimageconversionpersistence.h"
 #include "snow_shot/presentation/screenshotimageconversionview.h"
@@ -26,6 +27,7 @@
 #include <QContextMenuEvent>
 #include <QEventLoop>
 #include <QPushButton>
+#include <QPlainTextEdit>
 #include <QTcpServer>
 #include <QTcpSocket>
 #include <QTextBrowser>
@@ -38,6 +40,7 @@
 #include <QMimeData>
 #include <QScrollBar>
 #include <QScreen>
+#include <QSettings>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QMouseEvent>
@@ -160,6 +163,92 @@ class ConversionServer final : public QTcpServer {
     bool holdModels = false;
     QPointer<QTcpSocket> held;
     QPointer<QTcpSocket> heldModels;
+};
+
+class PaddleConversionServer final : public QTcpServer {
+  public:
+    PaddleConversionServer() {
+        require(listen(QHostAddress::LocalHost), "Cloud OCR fixture listens");
+        connect(this, &QTcpServer::newConnection, this, [this]() {
+            while (auto* socket = nextPendingConnection()) {
+                auto bytes = std::make_shared<QByteArray>();
+                connect(socket, &QTcpSocket::readyRead, this, [this, socket, bytes]() {
+                    *bytes += socket->readAll();
+                    const auto end = bytes->indexOf("\r\n\r\n");
+                    if (end < 0 || socket->property("answered").toBool())
+                        return;
+                    qsizetype length = 0;
+                    for (const auto& line : bytes->left(end).split('\n')) {
+                        if (line.toLower().startsWith("content-length:"))
+                            length = line.mid(line.indexOf(':') + 1).trimmed().toLongLong();
+                    }
+                    if (bytes->size() < end + 4 + length)
+                        return;
+                    socket->setProperty("answered", true);
+                    const QByteArray headers = bytes->left(end).toLower();
+                    if (bytes->startsWith("POST /api/v2/ocr/jobs ")) {
+                        ++submissions;
+                        authenticated = authenticated ||
+                            headers.contains("authorization: bearer test-token") ||
+                            headers.contains("authorization: bearer changed-token");
+                        if (holdSubmission) {
+                            heldSubmission = socket;
+                            return;
+                        }
+                        respond(socket, R"({"code":0,"data":{"jobId":"job-123"}})");
+                    } else if (bytes->startsWith("GET /api/v2/ocr/jobs/job-123 ")) {
+                        ++polls;
+                        const QByteArray body =
+                            QStringLiteral(
+                                R"({"code":0,"data":{"state":"done","resultUrl":{"jsonUrl":"%1/result"}}})")
+                                .arg(url())
+                                .toUtf8();
+                        respond(socket, body);
+                    } else if (bytes->startsWith("GET /result ")) {
+                        ++downloads;
+                        const QByteArray body =
+                            QStringLiteral(
+                                R"({"result":{"layoutParsingResults":[{"markdown":{"text":"%1"}}]}})")
+                                .arg(markdown)
+                                .toUtf8();
+                        respond(socket, body);
+                    } else {
+                        respond(socket, R"({"code":404,"msg":"not found"})", "404 Not Found");
+                    }
+                });
+            }
+        });
+    }
+
+    QString url() const {
+        return QStringLiteral("http://127.0.0.1:%1").arg(serverPort());
+    }
+
+    void releaseSubmission() {
+        require(heldSubmission, "held Cloud OCR submission exists");
+        auto socket = heldSubmission;
+        heldSubmission.clear();
+        holdSubmission = false;
+        respond(socket, R"({"code":0,"data":{"jobId":"job-123"}})");
+    }
+
+    int submissions = 0;
+    int polls = 0;
+    int downloads = 0;
+    bool authenticated = false;
+    bool holdSubmission = false;
+    QPointer<QTcpSocket> heldSubmission;
+    QString markdown = QStringLiteral("# Cloud result");
+
+  private:
+    static void respond(QTcpSocket* socket, const QByteArray& body,
+                        const QByteArray& status = "200 OK") {
+        socket->write("HTTP/1.1 " + status +
+                      "\r\nContent-Type: application/json\r\nConnection: close\r\nContent-Length: " +
+                      QByteArray::number(body.size()) + "\r\n\r\n" + body);
+        socket->flush();
+        socket->disconnectFromHost();
+    }
 };
 
 QImage sampleImage() {
@@ -1602,6 +1691,29 @@ void renderingCopyAndPersistence() {
     require(view.copyToClipboard() &&
                 QApplication::clipboard()->text() == QStringLiteral("Heading"),
             "selected preview text copies as ordinary text");
+    auto* edit = view.findChild<adqt::widgets::AdButton*>(
+        QStringLiteral("screenshotMarkdownEditToggle"));
+    auto* raw = view.findChild<QPlainTextEdit*>(
+        QStringLiteral("screenshotMarkdownRawEditor"));
+    require(edit && raw && !raw->isVisible(), "Markdown offers a raw source editor");
+    edit->click();
+    require(raw->isVisible() && raw->toPlainText() == markdown,
+            "editing opens with complete unaltered Markdown source");
+    const QString revised = markdown + QStringLiteral("\n$E=mc^2$");
+    raw->setPlainText(revised);
+    QTextCursor selected(raw->document());
+    selected.setPosition(markdown.size() + 1);
+    selected.setPosition(revised.size(), QTextCursor::KeepAnchor);
+    raw->setTextCursor(selected);
+    require(view.copyToClipboard() &&
+                QApplication::clipboard()->text() == QStringLiteral("$E=mc^2$"),
+            "copy selected raw Markdown without losing formula delimiters");
+    raw->moveCursor(QTextCursor::End);
+    require(view.copyToClipboard() && QApplication::clipboard()->text() == revised,
+            "copy edited entire Markdown when no local selection is active");
+    edit->click();
+    require(!raw->isVisible() && browser->isVisible(),
+            "switch back to formatted preview without discarding edits");
     view.setContent(Format::Markdown, markdown + QStringLiteral("\nMore"), true, {});
     require(browser->textCursor().selectedText() == QStringLiteral("Heading"),
             "streaming preserves text selection");
@@ -2258,6 +2370,112 @@ void initializeRecognitionTestFonts() {
 }
 } // namespace
 
+void communityCloudOcrUsesHistoryAndOwnsEdits() {
+    using Mode = ScreenshotRecognitionSessionController::Mode;
+    using snow_shot::network::CommunityCloudOcrSettings;
+    using snow_shot::network::writeCommunityCloudOcrSettings;
+
+    QTemporaryDir settingsRoot;
+    require(settingsRoot.isValid(), "create isolated Cloud OCR settings directory");
+    QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot.path());
+
+    PaddleConversionServer first;
+    first.holdSubmission = true;
+    require(writeCommunityCloudOcrSettings(
+                CommunityCloudOcrSettings{first.url(), QStringLiteral("test-token"),
+                                          QStringLiteral("PaddleOCR-VL-1.6")}),
+            "save Cloud OCR fixture settings");
+
+    ScreenshotRecognitionWindow window({});
+    ScreenshotRecognitionSessionActions actions;
+    actions.ensureContent = [&]() { return &window; };
+    ScreenshotRecognitionSessionController session(nullptr, nullptr, nullptr, actions);
+    session.setTarget({QStringLiteral("community-cloud-image"), sampleImage(),
+                       QRectF(0, 0, 240, 120)});
+
+    session.activate(Mode::Markdown);
+    until([&] { return first.submissions == 1; }, "Cloud OCR submission did not start");
+    session.activate(Mode::Markdown);
+    QCoreApplication::processEvents();
+    require(first.submissions == 1 && session.busy(Mode::Markdown),
+            "repeated activation while busy reuses the same Cloud OCR request");
+
+    first.releaseSubmission();
+    until([&] { return !session.busy(Mode::Markdown); }, "Cloud OCR request did not complete");
+    auto snapshot = session.recognitionResultsSnapshot();
+    require(first.authenticated && first.polls >= 1 && first.downloads == 1 &&
+                snapshot.visibleConversion &&
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
+                !snapshot.conversions.isEmpty() &&
+                snapshot.conversions.constLast().source == QStringLiteral("# Cloud result"),
+            "Cloud OCR completes through the production client and publishes Markdown");
+
+    auto* view = window.findChild<ScreenshotImageConversionView*>();
+    auto* edit = view ? view->findChild<adqt::widgets::AdButton*>(
+                            QStringLiteral("screenshotMarkdownEditToggle"))
+                      : nullptr;
+    auto* raw = view ? view->findChild<QPlainTextEdit*>(
+                           QStringLiteral("screenshotMarkdownRawEditor"))
+                     : nullptr;
+    require(view && edit && raw, "Cloud OCR result uses the existing Markdown editor");
+    edit->click();
+    const QString revised = QStringLiteral("# Edited locally\n\n42");
+    raw->setPlainText(revised);
+    QCoreApplication::processEvents();
+    snapshot = session.recognitionResultsSnapshot();
+    require(snapshot.visibleConversion &&
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
+                !snapshot.conversions.isEmpty() && snapshot.conversions.constLast().source == revised,
+            "Markdown edits flow back into the session-owned history result");
+
+    const int completedSubmissions = first.submissions;
+    session.deactivate();
+    session.activate(Mode::Markdown);
+    snapshot = session.recognitionResultsSnapshot();
+    require(!session.busy(Mode::Markdown) && snapshot.visibleConversion &&
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
+                !snapshot.conversions.isEmpty() && snapshot.conversions.constLast().source == revised &&
+                first.submissions == completedSubmissions,
+            "reopening the same recognition key restores edited Cloud OCR history without upload");
+
+    require(writeCommunityCloudOcrSettings(
+                CommunityCloudOcrSettings{first.url(), QStringLiteral("changed-token"),
+                                          QStringLiteral("PaddleOCR-VL-1.6")}),
+            "rotate Cloud OCR token");
+    session.deactivate();
+    session.activate(Mode::Markdown);
+    require(!session.busy(Mode::Markdown) && first.submissions == completedSubmissions,
+            "token rotation does not invalidate same endpoint/model history");
+
+    first.markdown = QStringLiteral("# Explicit retry");
+    // Exercise the same retry signal emitted by the conversion UI. Markdown conversions
+    // have their own retry path; retryRecognition() is reserved for Table/LaTeX.
+    window.imageConversionRetryRequested();
+    until([&] { return !session.busy(Mode::Markdown); }, "Cloud OCR retry did not complete");
+    snapshot = session.recognitionResultsSnapshot();
+    require(first.submissions == completedSubmissions + 1 && snapshot.visibleConversion &&
+                *snapshot.visibleConversion == SnowShotImageConversionFormat::Markdown &&
+                !snapshot.conversions.isEmpty() &&
+                snapshot.conversions.constLast().source == QStringLiteral("# Explicit retry"),
+            "explicit retry bypasses history and refreshes Cloud OCR");
+
+    PaddleConversionServer second;
+    require(writeCommunityCloudOcrSettings(
+                CommunityCloudOcrSettings{second.url(), QStringLiteral("test-token"),
+                                          QStringLiteral("PaddleOCR-VL-1.6")}),
+            "change Cloud OCR endpoint");
+    session.deactivate();
+    session.activate(Mode::Markdown);
+    until([&] { return !session.busy(Mode::Markdown); }, "new endpoint OCR did not complete");
+    require(second.submissions == 1,
+            "changing endpoint identity cannot reuse another provider's cached result");
+}
+
+void runCommunityCloudOcrTests() {
+    initializeRecognitionTestFonts();
+    communityCloudOcrUsesHistoryAndOwnsEdits();
+}
+
 void runImageConversionNetworkTests() {
     initializeRecognitionTestFonts();
     for (const auto& legacy : {QStringLiteral("qwen3.8-flash"), QStringLiteral("qwen-mt-flash")})
@@ -2303,6 +2521,10 @@ void runImageConversionTests() {
 void runImageConversionClipboardTests() {
     conversionClipboardPreservesFormats();
     recognitionFileSnapshotTracksPartialConversionAndQrValues();
+}
+
+void runImageConversionLayoutTests() {
+    conversionToolbarMigration();
 }
 
 void latexSessionRequestsAreIsolated() {

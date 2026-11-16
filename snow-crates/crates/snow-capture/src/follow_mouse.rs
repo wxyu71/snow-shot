@@ -439,7 +439,7 @@ impl SourceControl {
     fn set_paused(&self, paused: bool) {
         if self
             .pause_revision
-            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |revision| {
+            .try_update(Ordering::AcqRel, Ordering::Acquire, |revision| {
                 ((revision & 1 != 0) != paused).then(|| revision.wrapping_add(1))
             })
             .is_ok()

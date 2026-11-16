@@ -2276,6 +2276,8 @@ void ScreenshotRecognitionWindow::showImageConversion(SnowShotImageConversionFor
         installSelectionResizeEventFilters(m_conversionView);
         connect(m_conversionView, &ScreenshotImageConversionView::retryRequested, this,
                 &ScreenshotRecognitionWindow::imageConversionRetryRequested);
+        connect(m_conversionView, &ScreenshotImageConversionView::sourceEdited, this,
+                &ScreenshotRecognitionWindow::imageConversionSourceEdited);
         connect(m_conversionView, &ScreenshotImageConversionView::linkActivated, this,
                 [this](const QUrl& url) {
                     const auto callback = m_actions.handleLinkActivated;

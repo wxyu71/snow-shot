@@ -14,6 +14,10 @@
 #include <QFontDatabase>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QMimeData>
+#include <QPlainTextEdit>
+#include <QSignalBlocker>
+#include <QTextCursor>
 #include <QScrollBar>
 #include <QTextBrowser>
 #include <QTextDocument>
@@ -23,6 +27,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <memory>
 
 ScreenshotImageConversionView::ScreenshotImageConversionView(QWidget* parent) : QWidget(parent) {
     setObjectName(QStringLiteral("screenshotImageConversionView"));
@@ -41,6 +46,38 @@ ScreenshotImageConversionView::ScreenshotImageConversionView(QWidget* parent) : 
     m_browser->setLineWrapMode(QTextEdit::WidgetWidth);
     m_browser->setContextMenuPolicy(Qt::CustomContextMenu);
     layout->addWidget(m_browser, 1);
+    m_rawEditor = new QPlainTextEdit(this);
+    m_rawEditor->setObjectName(QStringLiteral("screenshotMarkdownRawEditor"));
+    m_rawEditor->setVisible(false);
+    m_rawEditor->setLineWrapMode(QPlainTextEdit::WidgetWidth);
+    layout->addWidget(m_rawEditor, 1);
+    auto* editRow = new QHBoxLayout;
+    editRow->setContentsMargins(12, 4, 12, 4);
+    editRow->addStretch();
+    m_editButton = new adqt::widgets::AdButton(this);
+    m_editButton->setObjectName(QStringLiteral("screenshotMarkdownEditToggle"));
+    m_editButton->setButtonStyle(adqt::widgets::AdButton::ButtonStyle::Text);
+    m_editButton->setSizeClass(adqt::widgets::AdButton::SizeClass::Small);
+    editRow->addWidget(m_editButton);
+    layout->addLayout(editRow);
+    connect(m_rawEditor, &QPlainTextEdit::textChanged, this, [this] {
+        if (!m_editMode)
+            return;
+        m_source = m_rawEditor->toPlainText();
+        emit sourceEdited(m_source);
+    });
+    connect(m_editButton, &adqt::widgets::AdButton::clicked, this, [this] {
+        m_editMode = !m_editMode;
+        m_browser->setVisible(!m_editMode);
+        m_rawEditor->setVisible(m_editMode);
+        if (m_editMode) {
+            m_rawEditor->setFocus(Qt::OtherFocusReason);
+        } else {
+            render();
+            m_browser->setFocus(Qt::OtherFocusReason);
+        }
+        retranslate();
+    });
     setFocusProxy(m_browser);
     connect(m_browser, &QTextBrowser::anchorClicked, this, [this](const QUrl& url) {
         if (url.isValid() &&
@@ -76,14 +113,23 @@ ScreenshotImageConversionView::ScreenshotImageConversionView(QWidget* parent) : 
 void ScreenshotImageConversionView::setContent(SnowShotImageConversionFormat format,
                                                const QString& source, bool busy,
                                                const QString& error) {
-    const bool changed = m_format != format || m_source != source;
+    const bool changed = m_format != format || m_lastProvidedSource != source;
     m_format = format;
-    m_source = source;
+    if (changed) {
+        m_lastProvidedSource = source;
+        m_source = source;
+        const QSignalBlocker blocker(m_rawEditor);
+        m_rawEditor->setPlainText(source);
+    }
+    if (format != SnowShotImageConversionFormat::Markdown && m_editMode) {
+        m_editMode = false;
+        m_rawEditor->hide();
+        m_browser->show();
+    }
     m_busy = busy;
     m_error = error;
-    if (changed) {
+    if (changed && !m_editMode)
         render();
-    }
     retranslate();
 }
 
@@ -92,6 +138,8 @@ void ScreenshotImageConversionView::retranslate() {
                                      ? tr("Markdown preview")
                                      : tr("HTML preview"));
     m_retry->setText(tr("Retry"));
+    m_editButton->setVisible(m_format == SnowShotImageConversionFormat::Markdown && !m_busy);
+    m_editButton->setText(m_editMode ? tr("Preview Markdown") : tr("Edit Markdown"));
     m_status->setVisible(!m_busy && !m_error.isEmpty());
     m_retry->setVisible(!m_busy && !m_error.isEmpty());
     m_statusText->setText(m_source.isEmpty() ? m_error : tr("Incomplete result: %1").arg(m_error));
@@ -150,6 +198,14 @@ void ScreenshotImageConversionView::render() {
 }
 
 bool ScreenshotImageConversionView::copyToClipboard() const {
+    if (m_editMode) {
+        const QTextCursor cursor = m_rawEditor->textCursor();
+        QString selected = cursor.selectedText();
+        selected.replace(QChar::ParagraphSeparator, u'\n');
+        QApplication::clipboard()->setText(
+            cursor.hasSelection() ? selected : m_source, QClipboard::Clipboard);
+        return true;
+    }
     auto mimeData = snow_shot::presentation::imageConversionClipboardMimeData(
         m_format, m_source, m_browser->textCursor());
     if (mimeData == nullptr) {
@@ -160,7 +216,10 @@ bool ScreenshotImageConversionView::copyToClipboard() const {
 }
 
 void ScreenshotImageConversionView::selectAll() {
-    m_browser->selectAll();
+    if (m_editMode)
+        m_rawEditor->selectAll();
+    else
+        m_browser->selectAll();
 }
 
 void ScreenshotImageConversionView::showContextMenu(const QPoint& globalPosition) {

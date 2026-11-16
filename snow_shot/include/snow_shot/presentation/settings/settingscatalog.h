@@ -424,6 +424,7 @@ enum class SettingsCustomRenderer {
     PermissionMicrophone,
     CustomAiModels,
     TextTranslationConfigurations,
+    CloudOcr,
     StorageStatus,
     DrawingToolbarEditor,
     ScreenshotToolbarEditor,
@@ -567,7 +568,6 @@ struct SettingsSectionDefinition {
 };
 
 enum class SettingsPageKind {
-    Account,
     GeneratedSettings,
     ScreenshotHistory,
     PinnedWindowManagement,

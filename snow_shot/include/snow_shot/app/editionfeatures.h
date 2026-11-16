@@ -7,6 +7,15 @@
 
 namespace snow_shot::app {
 [[nodiscard]] inline bool editionActionToolAvailable(const QString& id) {
+    // The Community screenshot action bar has one cloud action: Markdown.
+    // QR scanning remains in the selection toolbar and Ctrl+D/local OCR is
+    // independent of this configurable action list.
+    if (id == QStringLiteral("barcode-recognition") ||
+        id == QStringLiteral("table-recognition") ||
+        id == QStringLiteral("latex-recognition") ||
+        id == QStringLiteral("convert-to-html")) {
+        return false;
+    }
     if (id == QStringLiteral("pin-window-to-screen")) {
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         return true;

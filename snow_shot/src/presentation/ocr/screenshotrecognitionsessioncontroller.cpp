@@ -31,6 +31,7 @@
 
 #include <QCoreApplication>
 #include <QApplication>
+#include <QClipboard>
 #include <QCryptographicHash>
 #include <QDataStream>
 #include <QThreadPool>
@@ -188,6 +189,8 @@ ScreenshotRecognitionSessionController::ScreenshotRecognitionSessionController(
     });
     connect(m_conversion, &ScreenshotImageConversionController::resultsChanged, this,
             &ScreenshotRecognitionSessionController::recognitionResultsChanged);
+    connect(m_conversion, &ScreenshotImageConversionController::markdownCopied, this,
+            &ScreenshotRecognitionSessionController::markdownCopied);
 #endif
     setProviders(recognition, qrRecognition, tableRecognition);
     connect(
@@ -1610,7 +1613,7 @@ void ScreenshotRecognitionSessionController::activate(Mode mode) {
         if (!notify(&ScreenshotRecognitionSessionController::setPendingTextRecognitionRendering,
                     false))
             return;
-        if (m_actions.setRecognitionModelState &&
+        if (mode != Mode::Markdown && m_actions.setRecognitionModelState &&
             !notify(&ScreenshotRecognitionSessionController::loadRecognitionModels, false))
             return;
         m_conversion->activate(m_target.key, m_target.image,
@@ -1929,7 +1932,8 @@ bool ScreenshotRecognitionSessionController::updateConversionState() const {
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
     if (!notify(&ScreenshotRecognitionSessionController::workflowStateChanged))
         return false;
-    if (conversionModeActive() && m_conversion->active() && !updateRecognitionModels())
+    if (conversionModeActive() && m_mode != Mode::Markdown && m_conversion->active() &&
+        !updateRecognitionModels())
         return false;
     if (conversionModeActive() && m_conversion->active() && content() != nullptr) {
         content()->showImageConversion(m_conversion->format(), m_conversion->source(),
@@ -3744,6 +3748,10 @@ void ScreenshotRecognitionSessionController::handleTextOutput(
         return;
     if (!updateTextState())
         return;
+    // Copy the complete offline OCR result without closing the selectable text overlay.
+    if (m_active && m_mode == Mode::Text && !original.trimmed().isEmpty() &&
+        QApplication::clipboard())
+        QApplication::clipboard()->setText(original);
     notify(&ScreenshotRecognitionSessionController::recognitionResultsChanged);
 }
 
@@ -4069,6 +4077,7 @@ void ScreenshotRecognitionSessionController::attachContent() {
     {
         QObject::disconnect(m_recognitionRetryConnection);
         QObject::disconnect(m_conversionRetryConnection);
+        QObject::disconnect(m_conversionEditConnection);
         const QPointer<ScreenshotRecognitionSessionController> session(this);
         const QPointer<ScreenshotRecognitionWindow> view = m_content;
         m_attachmentToken = view->attachSession(
@@ -4094,6 +4103,12 @@ void ScreenshotRecognitionSessionController::attachContent() {
                     [session, view, token] {
                         if (session && view && view->ownsAttachment(session, token))
                             session->m_conversion->retry();
+                    });
+        m_conversionEditConnection =
+            connect(view, &ScreenshotRecognitionWindow::imageConversionSourceEdited, this,
+                    [session, view, token](const QString& source) {
+                        if (session && view && view->ownsAttachment(session, token))
+                            session->m_conversion->setSource(source);
                     });
 #endif
     }

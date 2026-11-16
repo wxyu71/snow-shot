@@ -1,6 +1,7 @@
 #include "snow_shot/app/distribution.h"
 #include "snow_shot/app/mcp/mcpstartuperror.h"
 #include "snow_shot/presentation/components/clouduploadsettingswidget.h"
+#include "snow_shot/presentation/components/cloudocrsettingswidget.h"
 #include "snow_shot/presentation/components/settingscustomwidget.h"
 #include "snow_shot/presentation/components/formfields.h"
 #include "snow_shot/app/edition.h"
@@ -1555,6 +1556,8 @@ SettingsCustomWidget* createSettingsCustomWidget(
     snow_shot::presentation::settings::SettingsRuntimeSession& runtimeSession, QWidget* parent) {
     using snow_shot::presentation::settings::SettingsCustomRenderer;
     switch (renderer) {
+    case SettingsCustomRenderer::CloudOcr:
+        return new CloudOcrSettingsWidget(parent);
     case SettingsCustomRenderer::CloudUploadConfigurations:
         return new CloudUploadSettingsWidget(runtimeSession, parent);
     case SettingsCustomRenderer::McpStatus:

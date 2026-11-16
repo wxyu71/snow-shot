@@ -1,0 +1,271 @@
+name: Community Windows x64
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_prerelease:
+        description: Publish a prerelease after tests and a clean production build
+        required: true
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-windows-x64-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  preflight:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      native: ${{ steps.classify.outputs.native }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Classify change
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
+            echo "native=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          native=false
+          while IFS= read -r -d '' path; do
+            case "$path" in
+              *.md|*.markdown|*.rst|docs/*) ;;
+              *) native=true ;;
+            esac
+          done < <(git diff --name-only -z "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")
+          echo "native=$native" >> "$GITHUB_OUTPUT"
+      - name: Run repository policy and helper tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python3 scripts/test-upstream-sync.py
+          python3 scripts/upstream_sync.py verify-deletions
+          python3 scripts/test-qt-cmake-contract.py
+          python3 scripts/paddleocr_live_e2e.py --selftest
+          python3 scripts/community_release.py selftest
+      - name: Validate prerelease source
+        if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REF" == "refs/heads/main" ]] || {
+            echo "Prereleases must be started from main." >&2
+            exit 1
+          }
+          git fetch --no-tags origin main
+          [[ "$GITHUB_SHA" == "$(git rev-parse refs/remotes/origin/main)" ]] || {
+            echo "Prerelease source is not current origin/main." >&2
+            exit 1
+          }
+          python3 scripts/community_release.py validate-tag --tag "$(python3 scripts/community_release.py tag)"
+
+  windows:
+    needs: [preflight]
+    if: needs.preflight.outputs.native == 'true'
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 360
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Bootstrap NSIS and smoke-test CPack
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: ./scripts/bootstrap-community-nsis.ps1
+
+      - name: Restore vcpkg binary cache
+        id: vcpkg-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .tools/vcpkg-binary-cache
+          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+      - name: Enable vcpkg binary cache
+        shell: pwsh
+        run: |
+          $cache = Join-Path $PWD '.tools/vcpkg-binary-cache'
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+
+      - name: Restore Cargo sources
+        id: cargo-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+
+      - name: Install pinned build dependencies
+        shell: pwsh
+        run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
+
+      - name: Save vcpkg binary cache
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .tools/vcpkg-binary-cache
+          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+
+      - name: Restore static Qt
+        id: qt-cache
+        uses: actions/cache/restore@v4
+        with:
+          path: .tools/qt/6.12.0/x64-static-release
+          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+      - name: Build or validate static Qt
+        shell: pwsh
+        run: |
+          $prefix = Join-Path $PWD '.tools/qt/6.12.0/x64-static-release'
+          ./scripts/build-static-qt.ps1 -InstallPrefix $prefix -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
+          if ($LASTEXITCODE -ne 0) { throw 'Static Qt build failed' }
+          $qt6Dir = Join-Path $prefix 'lib/cmake/Qt6'
+          if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) { throw 'Qt6Config.cmake missing' }
+          "SNOW_QT_STATIC_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          "Qt6_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+      - name: Save static Qt
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: .tools/qt/6.12.0/x64-static-release
+          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+
+      - name: Configure focused native tests
+        shell: pwsh
+        run: cmake --preset snow-shot-msvc-test
+      - name: Build core Community native tests
+        timeout-minutes: 120
+        shell: pwsh
+        run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
+      - name: Run core Community native tests
+        shell: pwsh
+        run: ctest --preset test-snow-shot-msvc-community
+
+      - name: Verify production license graph
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: ./scripts/preflight-community-release-licenses.ps1
+      - name: Save complete Cargo sources
+        if: steps.cargo-cache.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+
+      - name: Build production Windows x64
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
+      - name: Package production installers
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
+      - name: Verify installer assets
+        if: github.event_name == 'workflow_dispatch'
+        shell: pwsh
+        run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release --allow-build-intermediates
+
+      - name: Upload release candidates
+        if: github.event_name == 'workflow_dispatch'
+        uses: actions/upload-artifact@v4
+        with:
+          name: community-windows-x64-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: error
+          path: |
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.exe
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.exe
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-*.exe.sha256
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.manifest.json
+            build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.manifest.json
+
+  publish-prerelease:
+    needs: [windows]
+    if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true && needs.windows.result == 'success'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/download-artifact@v4
+        with:
+          name: community-windows-x64-${{ github.sha }}
+          path: dist
+      - name: Verify release inputs
+        id: release
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(python3 scripts/community_release.py version)"
+          tag="$(python3 scripts/community_release.py tag)"
+          python3 scripts/community_release.py validate-tag --tag "$tag"
+          python3 scripts/community_release.py verify-assets --directory dist
+          python3 scripts/community_release.py render-notes --output release-notes.md
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Stage verified draft release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
+          if [[ -n "$ref" && "$ref" != "$GITHUB_SHA" ]]; then
+            echo "Tag $RELEASE_TAG already points to $ref." >&2
+            exit 1
+          fi
+          if [[ -z "$ref" ]]; then
+            gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
+          fi
+
+          if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            [[ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" == "true" ]] || {
+              echo "Release $RELEASE_TAG is already published; refusing to replace it." >&2
+              exit 1
+            }
+          else
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md
+          fi
+
+          gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
+      - name: Verify GitHub-hosted assets and publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.release.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.release.outputs.version }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir verified
+          gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verified
+          python3 scripts/community_release.py verify-assets --directory verified
+          gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md

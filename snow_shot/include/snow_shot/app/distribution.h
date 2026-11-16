@@ -12,7 +12,7 @@
 #endif
 #endif
 #ifndef SNOW_SHOT_PRIVACY_POLICY_URL
-#define SNOW_SHOT_PRIVACY_POLICY_URL "https://snowshot.top/privacy.html"
+#define SNOW_SHOT_PRIVACY_POLICY_URL "https://github.com/wxyu71/snow-shot/blob/main/docs/community-privacy.md"
 #endif
 
 namespace snow_shot::app::distribution {
@@ -82,7 +82,7 @@ struct Policy {
 }
 
 [[nodiscard]] inline QString userAgreementUrl() {
-    return QStringLiteral("https://snowshot.top/terms.html");
+    return QStringLiteral("https://github.com/wxyu71/snow-shot/blob/main/snow_shot/COPYRIGHT");
 }
 
 } // namespace snow_shot::app::distribution

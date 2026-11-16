@@ -588,9 +588,9 @@ void builtInCatalogIsCompleteAndValid() {
             }) != screenshotInterface->items.cend(),
         "selection center guide color must appear immediately below cursor guide color");
 #ifdef Q_OS_MACOS
-    require(catalog.pages().size() == 18, "macOS includes Account and App Permissions");
+    require(catalog.pages().size() == 17, "macOS includes App Permissions");
 #else
-    require(catalog.pages().size() == 17, "other platforms include Account and pin management");
+    require(catalog.pages().size() == 16, "other platforms include pin management");
 #endif
 
     for (const auto& pageId :
@@ -824,7 +824,24 @@ void builtInCatalogIsCompleteAndValid() {
     require(itemIds.contains(QStringLiteral("pin-to-screen.confirm-before-closing-window")) &&
                 itemIds.contains(QStringLiteral("pin-to-screen.confirm-before-destroying-window")),
             "catalog must retain both independent pinned window confirmation settings");
+#ifdef Q_OS_WIN
+    require(!foundUpdates, "Community Windows uses a direct GitHub Releases link, not an update mode");
+#else
     require(foundUpdates, "catalog must contain the update mode item");
+#endif
+    const auto* cloudOcr =
+        catalog.item({QStringLiteral("text-recognition-translation"),
+                      QStringLiteral("text-recognition-settings"),
+                      QStringLiteral("text-recognition.cloud-ocr")});
+    const auto* cloudOcrCustom =
+        cloudOcr != nullptr
+            ? std::get_if<settings::SettingsCustomDefinition>(&cloudOcr->payload)
+            : nullptr;
+    require(cloudOcr != nullptr && cloudOcrCustom != nullptr &&
+                cloudOcrCustom->renderer == settings::SettingsCustomRenderer::CloudOcr &&
+                cloudOcr->title.translated() == QStringLiteral("Cloud OCR for Markdown"),
+            "Text recognition settings expose the Cloud OCR custom renderer");
+
     const auto* pinnedEditor =
         catalog.item({QStringLiteral("pinned-windows"), QStringLiteral("pin-to-screen-toolbar"),
                       QStringLiteral("interface.pin-to-screen.pinned-toolbar-editor")});
@@ -1716,36 +1733,35 @@ void builtInCatalogIsCompleteAndValid() {
             break;
         }
     }
-    require(settingsGroup != nullptr && settingsGroup->pages.size() >= 4 &&
+    require(settingsGroup != nullptr && settingsGroup->pages.size() >= 3 &&
                 settingsGroup->pages.at(0).pageId == QStringLiteral("general") &&
-                settingsGroup->pages.at(1).pageId == QStringLiteral("account") &&
-                settingsGroup->pages.at(2).pageId == QStringLiteral("general-appearance") &&
-                settingsGroup->pages.at(3).pageId == QStringLiteral("screenshots"),
-            "Account follows General, with Appearance and Screenshots after it");
+                settingsGroup->pages.at(1).pageId == QStringLiteral("general-appearance") &&
+                settingsGroup->pages.at(2).pageId == QStringLiteral("screenshots"),
+            "Appearance and Screenshots follow General");
 #ifdef Q_OS_MACOS
-    constexpr int expectedSettingsPages = 12;
+    constexpr int expectedSettingsPages = 11;
     require(settingsGroup->pages.constLast().pageId == QStringLiteral("app-permissions"),
             "macOS App Permissions follows System settings");
 #else
-    constexpr int expectedSettingsPages = 11;
+    constexpr int expectedSettingsPages = 10;
 #endif
     require(settingsGroup->title.translated() == QStringLiteral("Settings") &&
                 settingsGroup->pages.size() == expectedSettingsPages &&
-                settingsGroup->pages.at(4).pageId == QStringLiteral("pinned-windows") &&
-                settingsGroup->pages.at(5).pageId == QStringLiteral("screen-recording") &&
-                settingsGroup->pages.at(6).pageId ==
+                settingsGroup->pages.at(3).pageId == QStringLiteral("pinned-windows") &&
+                settingsGroup->pages.at(4).pageId == QStringLiteral("screen-recording") &&
+                settingsGroup->pages.at(5).pageId ==
                     QStringLiteral("text-recognition-translation") &&
-                settingsGroup->pages.at(7).pageId == QStringLiteral("shortcuts-mouse") &&
-                settingsGroup->pages.at(8).pageId == QStringLiteral("desktop-tools") &&
-                settingsGroup->pages.at(9).pageId == QStringLiteral("files-history") &&
-                settingsGroup->pages.at(10).pageId == QStringLiteral("connections-services"),
+                settingsGroup->pages.at(6).pageId == QStringLiteral("shortcuts-mouse") &&
+                settingsGroup->pages.at(7).pageId == QStringLiteral("desktop-tools") &&
+                settingsGroup->pages.at(8).pageId == QStringLiteral("files-history") &&
+                settingsGroup->pages.at(9).pageId == QStringLiteral("connections-services"),
             "Settings navigation must group feature controls and shared preferences predictably");
     const auto* applicationShortcutsPage = catalog.page(QStringLiteral("shortcuts-mouse"));
     require(applicationShortcutsPage != nullptr &&
                 applicationShortcutsPage->route == QStringLiteral("/settings/shortcuts-mouse") &&
                 applicationShortcutsPage->title.translated() ==
                     QStringLiteral("Application shortcuts") &&
-                settingsGroup->pages.at(7).id == QStringLiteral("nav.shortcuts-mouse"),
+                settingsGroup->pages.at(6).id == QStringLiteral("nav.shortcuts-mouse"),
             "Application shortcuts must expose the renamed title, route, and navigation");
     const auto* drawingShortcuts =
         catalog.section(QStringLiteral("shortcuts-mouse"), QStringLiteral("drawing-shortcuts"));
@@ -3298,6 +3314,11 @@ void searchIndexIsGeneratedAndRanked() {
                 edit.first().location.itemId == QStringLiteral("quick.edit-selected-images"),
             "selected-image editing is searchable by its action title");
     const auto updates = index.search(QStringLiteral("Software updates"));
+#ifdef Q_OS_WIN
+    require(updates.isEmpty() &&
+                index.search(QStringLiteral("Auto-update on next launch")).isEmpty(),
+            "Community Windows hides the obsolete automatic update controls");
+#else
     require(!updates.isEmpty() &&
                 updates.constFirst().location.itemId == QStringLiteral("updates.mode"),
             "update policy is directly discoverable through settings search");
@@ -3306,6 +3327,7 @@ void searchIndexIsGeneratedAndRanked() {
     require(!nextLaunchUpdates.isEmpty() &&
                 nextLaunchUpdates.constFirst().location.itemId == QStringLiteral("updates.mode"),
             "next-launch updates must be searchable by their option label");
+#endif
 #endif
     const auto selectedText = index.search(QStringLiteral("Translate selected text"));
     require(!selectedText.isEmpty() &&

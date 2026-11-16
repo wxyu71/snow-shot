@@ -104,11 +104,8 @@ option(SNOW_SHOT_ENABLE_MCP "Build and package the local Snow Shot MCP bridge." 
 option(SNOW_SHOT_SCROLLING_PERF_DETAIL "Compile detailed scrolling C++ and Rust timings." OFF)
 option(SNOW_SHOT_RELEASE_STATIC "Prefer static Snow Shot release linkage." OFF)
 option(SNOW_SHOT_QT_STATIC "Link Snow Shot against a static Qt build." OFF)
-set(SNOW_SHOT_WEBSITE_URL "https://snowshot.top" CACHE STRING "Public Snow Shot website URL.")
-set(SNOW_SHOT_PROJECT_URL "https://github.com/mg-chao/snow-shot" CACHE STRING
+set(SNOW_SHOT_PROJECT_URL "https://github.com/wxyu71/snow-shot" CACHE STRING
     "Public Snow Shot source repository URL.")
-set(SNOW_SHOT_QQ_GROUP_4_URL "https://qm.qq.com/q/GfZvSHi6E" CACHE STRING
-    "QQ group 4 join URL.")
 unset(SNOW_SHOT_CAMERA_SHUTTER_AUDIO_SOURCE CACHE)
 set(
     SNOW_SHOT_CAMERA_SHUTTER_AUDIO_SOURCE
@@ -251,18 +248,11 @@ if(SNOW_SHOT_QT_STATIC)
     endif()
 endif()
 
-if(NOT DEFINED SNOW_SHOT_API_BASE_URL OR SNOW_SHOT_API_BASE_URL STREQUAL "")
-    if(CMAKE_CONFIGURATION_TYPES)
-        set(SNOW_SHOT_API_BASE_URL "https://snowshot.top" CACHE STRING
-            "Snow Shot API base URL." FORCE)
-    elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-        set(SNOW_SHOT_API_BASE_URL "https://test.snowshot.top" CACHE STRING
-            "Snow Shot API base URL." FORCE)
-    else()
-        set(SNOW_SHOT_API_BASE_URL "https://snowshot.top" CACHE STRING
-            "Snow Shot API base URL." FORCE)
-    endif()
-endif()
+# No built-in account, membership, payment or original-author API endpoints.
+# Cloud OCR uses its own user-supplied AI Studio host and bearer token.
+set(SNOW_SHOT_API_BASE_URL "" CACHE STRING
+    "Deliberately disabled default legacy Snow Shot service endpoint." FORCE)
+
 snow_find_qt_private(Gui)
 set(SNOW_SHOT_DRAW_ENGINE_QT_DIR
     "${SNOW_DRAW_ENGINE_SOURCE_DIR}"
@@ -818,10 +808,6 @@ target_link_libraries(snow_shot_storage PUBLIC
 )
 
 add_library(snow_shot_translation STATIC
-    include/snow_shot/app/accountsessionservice.h
-    src/app/accountsessionservice.cpp
-    include/snow_shot/storage/accountsecretstore.h
-    src/storage/accountsecretstore.cpp
     include/snow_shot/translation/freetranslation.h
     include/snow_shot/translation/translationservice.h
     include/snow_shot/translation/translationlanguages.h
@@ -831,6 +817,10 @@ add_library(snow_shot_translation STATIC
     src/app/translationservice.cpp
     include/snow_shot/presentation/selectedtexttranslationcontroller.h
     src/presentation/services/selectedtexttranslationcontroller.cpp
+    include/snow_shot/network/baidupaddleocrclient.h
+    src/network/baidupaddleocrclient.cpp
+    include/snow_shot/network/communitycloudocrsettings.h
+    src/network/communitycloudocrsettings.cpp
     include/snow_shot/network/snowshotapiclient.h
     src/network/boundednetworkresponse.h
     src/network/freetranslationprotocol.h
@@ -842,25 +832,6 @@ add_library(snow_shot_translation STATIC
 )
 if(WIN32)
     target_link_libraries(snow_shot_translation PRIVATE crypt32)
-elseif(APPLE)
-    target_sources(snow_shot_translation PRIVATE src/platform/macos/accountsecretstore.mm)
-    target_compile_options(snow_shot_translation PRIVATE $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-    target_link_libraries(snow_shot_translation PRIVATE
-        "-framework Security" "-framework Foundation" "-framework LocalAuthentication")
-    if(SNOW_SHOT_BUILD_TESTS)
-        add_executable(snow-shot-macos-account-secret-store-tests
-            tests/macos_account_secret_store_tests.mm
-            src/storage/accountsecretstore.cpp
-            src/platform/macos/accountsecretstore.mm)
-        target_include_directories(snow-shot-macos-account-secret-store-tests PRIVATE include)
-        target_compile_options(snow-shot-macos-account-secret-store-tests PRIVATE
-            $<$<COMPILE_LANGUAGE:OBJCXX>:-fobjc-arc>)
-        target_link_libraries(snow-shot-macos-account-secret-store-tests PRIVATE Qt6::Core
-            "-framework Security" "-framework Foundation" "-framework LocalAuthentication")
-        add_test(NAME snow-shot-macos-account-secret-store-tests
-            COMMAND snow-shot-macos-account-secret-store-tests)
-        set_tests_properties(snow-shot-macos-account-secret-store-tests PROPERTIES LABELS "unit;macos")
-    endif()
 endif()
 snow_enable_unity_build(snow_shot_translation)
 target_include_directories(snow_shot_translation PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
@@ -938,8 +909,6 @@ target_link_libraries(snow_shot_main_window_skin PUBLIC Qt6::Widgets
     PRIVATE snow_shot_storage snow_shot_image_codec snow_draw_engine_qt_canvas)
 
 set(SNOW_SHOT_SETTINGS_SOURCES
-    include/snow_shot/presentation/components/accountpagewidget.h
-    src/presentation/components/accountpagewidget.cpp
     src/presentation/services/pinnedtextstylecapture.cpp
     include/snow_shot/presentation/selectedtexttranslationcoordinator.h
     src/presentation/services/selectedtexttranslationcoordinator.cpp
@@ -1245,7 +1214,9 @@ if(APPLE)
 endif()
 target_sources(snow_shot_settings PRIVATE
     include/snow_shot/presentation/components/clouduploadsettingswidget.h
-    src/presentation/components/clouduploadsettingswidget.cpp)
+    src/presentation/components/clouduploadsettingswidget.cpp
+    include/snow_shot/presentation/components/cloudocrsettingswidget.h
+    src/presentation/components/cloudocrsettingswidget.cpp)
 target_link_libraries(snow_shot_settings PUBLIC snow_shot_permissions snow_shot_login_item
     snow_shot_store_lifecycle)
 qt_add_resources(snow_shot_settings "snow_shot_about_assets"
@@ -1254,9 +1225,7 @@ qt_add_resources(snow_shot_settings "snow_shot_about_assets"
     FILES resources/about/illustration.svg
 )
 target_compile_definitions(snow_shot_settings PRIVATE
-    SNOW_SHOT_WEBSITE_URL="${SNOW_SHOT_WEBSITE_URL}"
     SNOW_SHOT_PROJECT_URL="${SNOW_SHOT_PROJECT_URL}"
-    SNOW_SHOT_QQ_GROUP_4_URL="${SNOW_SHOT_QQ_GROUP_4_URL}"
 )
 target_link_libraries(snow_shot_settings PRIVATE snow_shot_image_codec Qt6::Svg Qt6::Network snow_shot_administrator)
 add_library(snow_shot_global_mouse STATIC
@@ -3274,18 +3243,23 @@ if(SNOW_SHOT_BUILD_TESTS)
     target_compile_definitions(snow-shot-about-page-tests PRIVATE
         SNOW_SHOT_TEST_VERSION="${SNOW_SHOT_VERSION}"
         SNOW_SHOT_TEST_TRANSLATIONS_DIR="${CMAKE_CURRENT_BINARY_DIR}"
-        SNOW_SHOT_TEST_WEBSITE_URL="${SNOW_SHOT_WEBSITE_URL}"
         SNOW_SHOT_TEST_PROJECT_URL="${SNOW_SHOT_PROJECT_URL}"
-        SNOW_SHOT_TEST_QQ_GROUP_4_URL="${SNOW_SHOT_QQ_GROUP_4_URL}"
     )
     add_dependencies(snow-shot-about-page-tests snow_shot_release_translations)
     snow_shot_import_offscreen_platform(snow-shot-about-page-tests)
     add_test(NAME snow-shot-about-page-tests COMMAND snow-shot-about-page-tests)
     target_link_libraries(snow-shot-about-page-tests PRIVATE snow_shot_updates)
     set_tests_properties(snow-shot-about-page-tests PROPERTIES
+        LABELS "unit"
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
+    add_test(NAME snow-shot-community-about-tests
+        COMMAND snow-shot-about-page-tests --community-only -platform offscreen)
+    set_tests_properties(snow-shot-community-about-tests PROPERTIES
+        LABELS "unit;community" TIMEOUT 90
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-tray-click-settings-tests
         COMMAND snow-shot-about-page-tests --tray-click-settings-only -platform offscreen)
     set_tests_properties(snow-shot-tray-click-settings-tests PROPERTIES LABELS "unit" TIMEOUT 60
@@ -3402,6 +3376,7 @@ if(SNOW_SHOT_BUILD_TESTS)
     set_tests_properties(snow-shot-ocr-text-options-catalog-tests PROPERTIES LABELS "unit" TIMEOUT 30
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     set_tests_properties(snow-shot-settings-catalog-tests PROPERTIES
+        LABELS "unit;community"
         ENVIRONMENT_MODIFICATION
             "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
     )
@@ -3531,6 +3506,12 @@ if(SNOW_SHOT_BUILD_TESTS)
     )
     add_test(NAME snow-shot-settings-page-loading-tests
         COMMAND snow-shot-settings-page-loading-tests)
+    add_test(NAME snow-shot-community-cloud-ocr-settings-tests
+        COMMAND snow-shot-settings-page-loading-tests --community-cloud-ocr-only -platform offscreen)
+    set_tests_properties(snow-shot-community-cloud-ocr-settings-tests PROPERTIES
+        LABELS "unit;ocr;community" TIMEOUT 60
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-settings-variable-help-tests
         COMMAND snow-shot-settings-page-loading-tests --variable-help-only -platform offscreen)
     set_tests_properties(snow-shot-settings-variable-help-tests PROPERTIES
@@ -9694,17 +9675,28 @@ if(SNOW_SHOT_BUILD_TESTS)
         COMMAND snow-shot-recognition-session-controller-tests --image-conversion-network-only -platform offscreen)
     set_tests_properties(snow-shot-image-conversion-network-tests PROPERTIES TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+    add_test(NAME snow-shot-community-cloud-ocr-tests
+        COMMAND snow-shot-recognition-session-controller-tests --community-cloud-ocr-only -platform offscreen)
+    set_tests_properties(snow-shot-community-cloud-ocr-tests PROPERTIES
+        LABELS "unit;ocr;community" TIMEOUT 60
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-clipboard-tests
         COMMAND snow-shot-recognition-session-controller-tests --image-conversion-clipboard-only -platform offscreen)
-    set_tests_properties(snow-shot-image-conversion-clipboard-tests PROPERTIES LABELS "unit" TIMEOUT 60
+    set_tests_properties(snow-shot-image-conversion-clipboard-tests PROPERTIES LABELS "unit;community" TIMEOUT 60
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+    add_test(NAME snow-shot-image-conversion-layout-tests
+        COMMAND snow-shot-recognition-session-controller-tests --image-conversion-layout-only -platform offscreen)
+    set_tests_properties(snow-shot-image-conversion-layout-tests PROPERTIES
+        LABELS "unit;community" TIMEOUT 30
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-storage-tests
         COMMAND snow-shot-application-storage-tests --image-conversion-only)
-    set_tests_properties(snow-shot-image-conversion-storage-tests PROPERTIES TIMEOUT 60
+    set_tests_properties(snow-shot-image-conversion-storage-tests PROPERTIES LABELS "unit;community" TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-toolbar-tests
         COMMAND snow-shot-screenshot-tool-palette-tests --image-conversion-only -platform offscreen)
-    set_tests_properties(snow-shot-image-conversion-toolbar-tests PROPERTIES TIMEOUT 60
+    set_tests_properties(snow-shot-image-conversion-toolbar-tests PROPERTIES LABELS "unit;community" TIMEOUT 60
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-image-conversion-pinned-tests
         COMMAND snow-shot-pinned-window-tests --image-conversion-only)
@@ -10022,25 +10014,14 @@ if(SNOW_SHOT_BUILD_TESTS)
             snow_shot_image_codec)
     endif()
 
-    add_executable(snow-shot-account-tests tests/account_tests.cpp
-        src/presentation/services/screenshotclipboardservice.cpp)
-    target_link_libraries(snow-shot-account-tests PRIVATE snow_shot_settings Qt6::Network)
-    if(WIN32)
-        target_link_libraries(snow-shot-account-tests PRIVATE PkgConfig::SNOW_SHOT_FFMPEG)
-    endif()
-    snow_shot_add_translations(snow-shot-account-tests)
-    snow_shot_import_offscreen_platform(snow-shot-account-tests)
-    if(QT_FEATURE_static)
-        qt_import_plugins(snow-shot-account-tests EXCLUDE Qt6::QJpegPlugin)
-    endif()
-    add_test(NAME snow-shot-account-tests COMMAND snow-shot-account-tests -platform offscreen)
-    add_test(NAME snow-shot-account-cancellation-tests
-        COMMAND snow-shot-account-tests -platform offscreen --top-up-cancellation-only)
-    set_tests_properties(snow-shot-account-tests snow-shot-account-cancellation-tests
-        PROPERTIES LABELS "unit"
-        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}")
-    set_tests_properties(snow-shot-account-tests PROPERTIES TIMEOUT 90)
-    set_tests_properties(snow-shot-account-cancellation-tests PROPERTIES TIMEOUT 45)
+    add_executable(snow-shot-paddleocr-client-tests
+        tests/baidu_paddleocr_client_tests.cpp)
+    target_link_libraries(snow-shot-paddleocr-client-tests PRIVATE
+        snow_shot_translation Qt6::Network Qt6::Core Qt6::Gui)
+    add_test(NAME snow-shot-paddleocr-client-tests
+             COMMAND snow-shot-paddleocr-client-tests)
+    set_tests_properties(snow-shot-paddleocr-client-tests PROPERTIES
+        LABELS "unit;ocr;community" TIMEOUT 60)
 
     add_executable(snow-shot-api-client-tests
         tests/snowshot_api_client_tests.cpp
@@ -10064,6 +10045,11 @@ if(SNOW_SHOT_BUILD_TESTS)
         NAME snow-shot-api-client-tests
         COMMAND snow-shot-api-client-tests
     )
+    add_test(NAME snow-shot-community-api-client-tests
+        COMMAND snow-shot-api-client-tests --community-service-only)
+    set_tests_properties(snow-shot-community-api-client-tests PROPERTIES
+        LABELS "unit;community" TIMEOUT 60
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-api-client-table-vision-tests
         COMMAND snow-shot-api-client-tests --table-vision-only)
     set_tests_properties(snow-shot-api-client-table-vision-tests PROPERTIES LABELS "unit" TIMEOUT 60
@@ -14626,4 +14612,13 @@ if(SNOW_SHOT_BUILD_BENCHMARKS)
     if(APPLE)
         target_link_libraries(snow-shot-pinned-window-stacking-performance-benchmark PRIVATE "-framework AppKit")
     endif()
+endif()
+
+# Keep the PR gate intentionally small: validate the provider protocol and
+# the complete in-product Cloud OCR session. Broader UI/plumbing tests remain
+# available in the normal native test suite without multiplying static-Qt links.
+if(SNOW_SHOT_BUILD_TESTS)
+    add_custom_target(snow-shot-community-tests DEPENDS
+        snow-shot-paddleocr-client-tests
+        snow-shot-recognition-session-controller-tests)
 endif()

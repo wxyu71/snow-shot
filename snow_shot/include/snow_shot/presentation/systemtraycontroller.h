@@ -42,6 +42,7 @@ class SystemTrayController final : public QObject {
     void showWarningMessage(const QString& title, const QString& message);
     void showUpdateMessage(const QString& message);
     void showRecordingExportMessage(const QString& path);
+    void showMarkdownCopiedMessage();
     void setEnabled(bool enabled);
     [[nodiscard]] bool isEnabled() const;
     void setUseSystemIconColor(bool enabled);

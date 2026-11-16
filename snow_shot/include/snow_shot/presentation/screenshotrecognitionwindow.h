@@ -240,6 +240,7 @@ class ScreenshotRecognitionWindow final : public QWidget {
     void textSelectionGeometryChanged();
     void embeddedContextMenuRequested(const QPoint& globalPosition);
     void imageConversionRetryRequested();
+    void imageConversionSourceEdited(const QString& source);
     void recognitionRetryRequested();
 
   protected:

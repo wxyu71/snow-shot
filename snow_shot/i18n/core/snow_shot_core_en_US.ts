@@ -93,14 +93,8 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Current version: %1</source>
             <translation>Current version: %1</translation>
         </message>
-        <message>
-            <source>Discover more features and ways to use it</source>
-            <translation>Discover more features and ways to use it</translation>
-        </message>
-        <message>
-            <source>Discussion and support · group no. %1</source>
-            <translation>Discussion and support · group no. %1</translation>
-        </message>
+        
+        
         <message>
             <source>Download from GitHub</source>
             <translation>Download from GitHub</translation>
@@ -157,10 +151,7 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Make the next experience better</source>
             <translation>Make the next experience better</translation>
         </message>
-        <message>
-            <source>Official website</source>
-            <translation>Official website</translation>
-        </message>
+        
         <message>
             <source>Open Microsoft Store</source>
             <translation>Open Microsoft Store</translation>
@@ -181,10 +172,7 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Privacy policy</source>
             <translation>Privacy policy</translation>
         </message>
-        <message>
-            <source>QQ group 4</source>
-            <translation>QQ group 4</translation>
-        </message>
+        
         <message>
             <source>Ready to install %1</source>
             <translation>Ready to install %1</translation>
@@ -759,18 +747,9 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>No translation services are available</source>
             <translation>No translation services are available</translation>
         </message>
-        <message>
-            <source>Paid calls are paused because your account has an outstanding balance. Settle the balance in Account to continue</source>
-            <translation>Paid calls are paused because your account has an outstanding balance. Settle the balance in Account to continue</translation>
-        </message>
-        <message>
-            <source>Sign in to your Snow Shot account to use Expert Model</source>
-            <translation>Sign in to your Snow Shot account to use Expert Model</translation>
-        </message>
-        <message>
-            <source>Sign in to your Snow Shot account to use this service</source>
-            <translation>Sign in to your Snow Shot account to use this service</translation>
-        </message>
+        
+        
+        
         <message>
             <source>Table recognition failed</source>
             <translation>Table recognition failed</translation>
@@ -831,10 +810,7 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>The translation response is too large</source>
             <translation>The translation response is too large</translation>
         </message>
-        <message>
-            <source>This request requires payment. Check your balance in Account</source>
-            <translation>This request requires payment. Check your balance in Account</translation>
-        </message>
+        
         <message>
             <source>This service does not support the selected language combination</source>
             <translation>This service does not support the selected language combination</translation>
@@ -859,22 +835,10 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Translation stream ended unexpectedly</source>
             <translation>Translation stream ended unexpectedly</translation>
         </message>
-        <message>
-            <source>Your Snow Shot session is no longer valid. Sign in again</source>
-            <translation>Your Snow Shot session is no longer valid. Sign in again</translation>
-        </message>
-        <message>
-            <source>Your available credits cannot cover this request. Purchase credits in Account</source>
-            <translation>Your available credits cannot cover this request. Purchase credits in Account</translation>
-        </message>
-        <message>
-            <source>Your credits are reserved by other calls that are still running. Wait for them to finish and try again</source>
-            <translation>Your credits are reserved by other calls that are still running. Wait for them to finish and try again</translation>
-        </message>
-        <message>
-            <source>Your credits cannot cover this Expert Model request. Purchase credits from Account to continue</source>
-            <translation>Your credits cannot cover this Expert Model request. Purchase credits from Account to continue</translation>
-        </message>
+        
+        
+        
+        
         <message>
             <source>Your daily free allowance is exhausted. Try again after it resets</source>
             <translation>Your daily free allowance is exhausted. Try again after it resets</translation>

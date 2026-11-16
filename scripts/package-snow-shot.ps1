@@ -6,6 +6,7 @@ param(
     [string]$OcrRuntimeArchive,
     [ValidateRange(1, 256)][int]$Parallelism = 4,
     [switch]$SkipBuild,
+    [switch]$FullOnly,
     [ValidateSet('standalone', 'store')][string]$DistributionChannel = 'standalone',
     [switch]$StageOnly,
     [switch]$PrepareOcrRuntimeOnly
@@ -13,6 +14,9 @@ param(
 
 $ErrorActionPreference = "Stop"
 $store = $DistributionChannel -eq 'store'
+# Full-only community releases must never require or build the Mini target.
+# Keep the release cache contract and the selected native targets aligned.
+$miniEnabled = -not ($store -or $FullOnly)
 if ($store -and $Architecture -ne 'x64') { throw 'The Snow Shot Store channel supports x64 only.' }
 if ($PrepareOcrRuntimeOnly) {
     & (Join-Path $PSScriptRoot 'prepare-snow-shot-ocr-runtime.ps1') -Architecture $Architecture -BuildDirectory $BuildDirectory -Parallelism $Parallelism -SkipBuild:$SkipBuild
@@ -446,7 +450,7 @@ $requiredCacheEntries = @(
     "SNOW_APPS_RELEASE_STATIC:BOOL=ON",
     "SNOW_APPS_QT_STATIC:BOOL=ON",
     "SNOW_APPS_PACKAGE_SNOW_SHOT:BOOL=$(if ($store) { 'OFF' } else { 'ON' })",
-    "SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=$(if ($store) { 'OFF' } else { 'ON' })",
+    "SNOW_APPS_BUILD_SNOW_SHOT_MINI:BOOL=$(if ($miniEnabled) { 'ON' } else { 'OFF' })",
     "SNOW_SHOT_IMAGE_CODEC_BACKEND_STATIC:INTERNAL=ON",
     "QT_FEATURE_static:INTERNAL=ON",
     "QT_FEATURE_timezone:INTERNAL=ON",
@@ -472,7 +476,11 @@ foreach ($entry in $requiredCacheEntries) {
 }
 
 if (-not $SkipBuild) {
-    [string[]]$releaseTargets = if ($store) { @('snow_shot') } else { @('snow_shot', 'snow_shot_mini') }
+    [string[]]$releaseTargets = if ($miniEnabled) {
+        @('snow_shot', 'snow_shot_mini')
+    } else {
+        @('snow_shot')
+    }
     & cmake --build $buildDirectory --config Release --target @releaseTargets --parallel $Parallelism
     if ($LASTEXITCODE -ne 0) {
         throw "Snow Shot release build failed."
@@ -494,21 +502,15 @@ if (-not $store) {
 
 $thirdPartyLicenseCollector = Join-Path $PSScriptRoot "collect-third-party-licenses.ps1"
 $thirdPartyLicenseDirectory = Join-Path $buildDirectory "snow_shot\third-party-licenses\third-party"
-$ocrCargoManifest = Join-Path $repoRoot "snow-crates\crates\snow-ocr-process\Cargo.toml"
-$updaterCargoManifest = Join-Path $repoRoot "snow_shot\rust\snow-shot-updater\Cargo.toml"
-$licenseManifests = @((Join-Path $repoRoot "snow_rust_ffi\Cargo.toml"), $ocrCargoManifest,
-    (Join-Path $repoRoot "snow_shot\rust\snow-shot-mcp\Cargo.toml"))
-if (-not $store) { $licenseManifests += $updaterCargoManifest }
+. (Join-Path $PSScriptRoot 'snow-community-release-cargo-licenses.ps1')
+$licensePlan = Get-SnowShotReleaseCargoLicensePlan -RepoRoot $repoRoot -Store:$store
 & $thirdPartyLicenseCollector `
     -Destination $thirdPartyLicenseDirectory `
     -AllowedRoot $buildDirectory `
     -VcpkgPrefix $staticVcpkgPrefix `
     -QtPrefix $qtPrefix `
-    -CargoManifest $licenseManifests `
-    -CargoOptions @{ (Join-Path $repoRoot "snow_rust_ffi\Cargo.toml") = @('--features', 'selected-text,language-detection');
-        # The runtime ships the raw-pixel worker without convenience dependencies.
-        $ocrCargoManifest = @('--no-default-features', '--features',
-        'crash-diagnostics,gpu') } `
+    -CargoManifest $licensePlan.Manifests `
+    -CargoOptions $licensePlan.Options `
     -AntDesignNotice (Join-Path $repoRoot "ant_design_qt\THIRD_PARTY_NOTICES.md") `
     -FallbackLicenseDirectory (Join-Path $repoRoot "licenses")
 if ($LASTEXITCODE -ne 0) {
@@ -532,7 +534,7 @@ if (-not (Test-Path -LiteralPath $mainExecutable)) {
 
 $versionInfo = (Get-Item -LiteralPath $mainExecutable).VersionInfo
 $expectedBinaryMetadata = @{
-    CompanyName = "Snow Apps"
+    CompanyName = "Snow Shot Community"
     FileDescription = "Snow Shot screenshot utility"
     InternalName = "snow_shot"
     LegalCopyright = "Copyright (C) 2025-2026 mg-chao"
@@ -845,27 +847,7 @@ if (-not $store) {
     }
 
     $cpackConfiguration = Get-Content -LiteralPath $cpackConfig -Raw
-    $requiredCpackSettings = @{
-        CPACK_CREATE_DESKTOP_LINKS = "snow_shot"
-        CPACK_PACKAGE_EXECUTABLES = "snow_shot;Snow Shot"
-        CPACK_PACKAGE_HOMEPAGE_URL = "https://snowshot.top"
-        CPACK_PACKAGE_INSTALL_DIRECTORY = "SnowShot"
-        CPACK_PACKAGE_INSTALL_REGISTRY_KEY = "SnowShot"
-        CPACK_NSIS_INSTALLED_ICON_NAME = "bin\\snow_shot.exe"
-    }
-    foreach ($setting in $requiredCpackSettings.Keys) {
-        $escapedSetting = [regex]::Escape($setting)
-        $escapedValue = [regex]::Escape($requiredCpackSettings[$setting])
-        $settingPresent = if ($setting -eq "CPACK_NSIS_INSTALLED_ICON_NAME") {
-            $cpackConfiguration -match 'set\(CPACK_NSIS_INSTALLED_ICON_NAME "bin\\+snow_shot\.exe"\)'
-        }
-        else {
-            $cpackConfiguration -match "set\($escapedSetting `"$escapedValue`"\)"
-        }
-        if (-not $settingPresent) {
-            throw "CPack configuration is missing '$setting=$($requiredCpackSettings[$setting])'."
-        }
-    }
+    & (Join-Path $PSScriptRoot 'assert-community-release-config.ps1') -BuildDirectory $buildDirectory -ExpectedMini $(if ($miniEnabled) { 'ON' } else { 'OFF' })
     if ($cpackConfiguration -notmatch 'set\(CPACK_PACKAGE_VERSION "([^"]+)"\)') {
         throw "CPack configuration does not declare the Snow Shot package version."
     }
@@ -1467,7 +1449,7 @@ string(REPLACE "snow-shot-$packageVersion-$ocrPlatform.exe" "$packageBaseName.ex
     }
     $installerVersionInfo = (Get-Item -LiteralPath $packagePath).VersionInfo
     $expectedInstallerMetadata = @{
-        CompanyName = "Snow Apps"
+        CompanyName = "Snow Shot Community"
         FileDescription = "Snow Shot installer"
         FileVersion = "$packageVersionNumeric.0"
         InternalName = "snow-shot-installer"
@@ -1565,7 +1547,11 @@ Write-Output "OCR runtime upload artifact: $runtimeArchivePath"
 Write-Output "OCR runtime checksum: $runtimeArchiveChecksum"
 Write-Output "OCR runtime manifest: $runtimeReleaseManifest"
 
-. (Join-Path $PSScriptRoot "package-snow-shot-mini.ps1")
+# The community beta ships the full x64 product only. Do not compile or
+# package Mini as a side effect of preparing its full installer.
+if (-not $FullOnly) {
+    . (Join-Path $PSScriptRoot "package-snow-shot-mini.ps1")
+}
 
 # Store staging returns above; it must never invoke this release step recursively.
 if (-not $store -and -not $StageOnly -and $Architecture -eq 'x64') {

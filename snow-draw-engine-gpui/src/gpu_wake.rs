@@ -89,7 +89,7 @@ impl Fence {
     pub fn arm(&self, service: Arc<dyn GpuService>) -> Result<GpuCompletionWake> {
         let value = self
             .next
-            .fetch_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
+            .try_update(Ordering::Relaxed, Ordering::Relaxed, |n| n.checked_add(1))
             .map_err(|_| anyhow::anyhow!("GPU wake fence sequence exhausted"))?;
         // Submit the signal before registering the event. A failed registration
         // therefore cannot leave an event attached to an unreachable fence value.

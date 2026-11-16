@@ -1,4 +1,6 @@
 #include "snow_shot/presentation/screenshotimageconversioncontroller.h"
+#include "snow_shot/network/baidupaddleocrclient.h"
+#include "snow_shot/network/communitycloudocrsettings.h"
 
 #include "snow_shot/presentation/languagemanager.h"
 #include "snow_shot/storage/settingsadapters.h"
@@ -8,7 +10,10 @@
 #include "widgets/modal.h"
 #include "widgets/select.h"
 
-#include <QPushButton>
+#include <QClipboard>
+#include <QCryptographicHash>
+#include <QGuiApplication>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -19,6 +24,30 @@ QString currentLocale() {
     return snow_shot::presentation::LanguageManager::instance().currentLocale().name();
 }
 using Settings = snow_shot::storage::ScreenshotImageConversionSettings;
+using CloudSettings = snow_shot::network::CommunityCloudOcrSettings;
+
+struct ConversionRequestIdentity {
+    QString model;
+    QString fingerprint;
+};
+
+ConversionRequestIdentity cloudRequestIdentity(const CloudSettings& settings) {
+    QString endpoint = settings.apiUrl.trimmed();
+    while (endpoint.endsWith(u'/'))
+        endpoint.chop(1);
+    if (!endpoint.endsWith(QStringLiteral("/api/v2/ocr/jobs")))
+        endpoint += QStringLiteral("/api/v2/ocr/jobs");
+    const QByteArray payload =
+        QUrl(endpoint).toString(QUrl::FullyEncoded).toUtf8() + '\n' + settings.model.toUtf8();
+    return {QStringLiteral("paddleocr:") + settings.model,
+            QStringLiteral("paddleocr:") +
+                QString::fromLatin1(QCryptographicHash::hash(payload, QCryptographicHash::Sha256)
+                                        .toHex())};
+}
+
+bool isCloudRequestModel(const QString& model) {
+    return model.startsWith(QStringLiteral("paddleocr:"));
+}
 } // namespace
 
 ScreenshotImageConversionController::ScreenshotImageConversionController(QObject* parent)
@@ -173,10 +202,15 @@ void ScreenshotImageConversionController::bindProviderSignals() {
 
 void ScreenshotImageConversionController::activate(QString key, QImage image,
                                                    SnowShotImageConversionFormat format) {
-    if (m_active && m_key == key && m_format == format && busy() &&
-        m_requestModel == Settings().visionModel()) {
+    ConversionRequestIdentity requested{Settings().visionModel(), {}};
+    if (format == SnowShotImageConversionFormat::Markdown)
+        requested = cloudRequestIdentity(snow_shot::network::readCommunityCloudOcrSettings());
+    const bool sameRequest =
+        m_requestModel == requested.model &&
+        (format != SnowShotImageConversionFormat::Markdown ||
+         m_requestFingerprint == requested.fingerprint);
+    if (m_active && m_key == key && m_format == format && busy() && sameRequest)
         return;
-    }
     cancelRequests();
     m_key = std::move(key);
     m_image = std::move(image);
@@ -191,6 +225,8 @@ bool ScreenshotImageConversionController::entryMatchesProvider(
     const ScreenshotImageConversionEntry& entry) const {
     if (!entry.isValid())
         return false;
+    if (isCloudRequestModel(entry.model))
+        return true;
     const bool custom = entry.model.startsWith(QStringLiteral("custom:"));
     // Legacy built-in results remain viewable offline, but cannot establish server identity.
     if (!m_api)
@@ -205,19 +241,25 @@ bool ScreenshotImageConversionController::entryMatchesProvider(
            entry.modelFingerprint == m_api->modelFingerprint(entry.model);
 }
 
-bool ScreenshotImageConversionController::restoreCachedResult(const QString& model) {
+bool ScreenshotImageConversionController::restoreCachedResult(
+    const QString& model, const QString& fingerprint) {
     qsizetype selected = -1;
     for (qsizetype index = m_cache.size(); index > 0; --index) {
         const auto& cached = m_cache.at(index - 1);
         if (cached.key != m_key || cached.result.format != m_format ||
             !entryMatchesProvider(cached.result))
             continue;
+        if (!fingerprint.isEmpty()) {
+            if (cached.result.model == model && cached.result.modelFingerprint == fingerprint) {
+                selected = index - 1;
+                break;
+            }
+            continue;
+        }
         if (cached.result.model == model) {
             selected = index - 1;
             break;
         }
-        // A migrated preference can reopen a historical result, including offline. An
-        // exact model match still wins, and the stored result keeps its original identity.
         if (selected < 0 && snowShotBuiltInModelAlias(cached.result.model, model))
             selected = index - 1;
     }
@@ -226,6 +268,7 @@ bool ScreenshotImageConversionController::restoreCachedResult(const QString& mod
     auto entry = m_cache.takeAt(selected);
     m_source = entry.result.source;
     m_requestModel = entry.result.model;
+    m_requestFingerprint = entry.result.modelFingerprint;
     m_cache.append(std::move(entry));
     m_state = State::Completed;
     notifyChanged();
@@ -240,6 +283,19 @@ void ScreenshotImageConversionController::cacheResult(const QString& key,
     });
     m_cache.append({key, std::move(entry)});
     trimCache();
+}
+
+void ScreenshotImageConversionController::updateCurrentCache() {
+    m_cache.removeIf([this](const auto& cached) {
+        return cached.key == m_key && cached.result.format == m_format &&
+               cached.result.model == m_requestModel &&
+               cached.result.modelFingerprint == m_requestFingerprint;
+    });
+    if (m_source.trimmed().isEmpty())
+        return;
+    ScreenshotImageConversionEntry entry{m_format, m_requestModel, m_source};
+    entry.modelFingerprint = m_requestFingerprint;
+    cacheResult(m_key, std::move(entry));
 }
 
 void ScreenshotImageConversionController::trimCache() {
@@ -262,6 +318,8 @@ void ScreenshotImageConversionController::trimCache() {
 void ScreenshotImageConversionController::cancelRequests() {
     ++m_generation;
     m_previewTimer.stop();
+    if (m_baidu)
+        m_baidu->cancel();
     if (m_api != nullptr) {
         m_api->cancel(m_modelsToken);
         m_api->cancel(m_conversionToken);
@@ -285,6 +343,7 @@ void ScreenshotImageConversionController::reset(bool discardCache) {
     m_image = {};
     m_source.clear();
     m_error.clear();
+    m_requestFingerprint.clear();
     if (discardCache) {
         if (m_api)
             m_api->cancel(m_settingsToken);
@@ -326,6 +385,14 @@ void ScreenshotImageConversionController::retry() {
     }
 }
 
+void ScreenshotImageConversionController::setSource(QString source) {
+    if (!m_active || m_state != State::Completed || source == m_source)
+        return;
+    m_source = std::move(source);
+    updateCurrentCache();
+    notifyResultsChanged();
+}
+
 void ScreenshotImageConversionController::selectVisionModel(const QString& model) {
     if (!m_active || model == m_requestModel || !m_api)
         return;
@@ -359,6 +426,59 @@ void ScreenshotImageConversionController::start(bool refreshModels) {
     m_error.clear();
     m_refreshConversion = refreshModels;
     m_requestModel = Settings().visionModel();
+    m_requestFingerprint.clear();
+    if (m_format == SnowShotImageConversionFormat::Markdown) {
+        const auto saved = snow_shot::network::readCommunityCloudOcrSettings();
+        const auto identity = cloudRequestIdentity(saved);
+        snow_shot::network::BaiduPaddleOcrClient::Options options;
+        options.apiUrl = saved.apiUrl;
+        options.accessToken = saved.accessToken;
+        options.model = saved.model;
+        m_requestModel = identity.model;
+        m_requestFingerprint = identity.fingerprint;
+        if (m_image.isNull() || m_key.isEmpty()) {
+            fail(tr("No screenshot is available for cloud OCR"));
+            return;
+        }
+        const quint64 cacheGeneration = m_generation;
+        if (!refreshModels && restoreCachedResult(m_requestModel, m_requestFingerprint)) {
+            if (!lifetime || cacheGeneration != m_generation || !m_active)
+                return;
+            if (QGuiApplication::clipboard())
+                QGuiApplication::clipboard()->setText(m_source);
+            emit markdownCopied();
+            return;
+        }
+        if (!m_baidu)
+            m_baidu = std::make_unique<snow_shot::network::BaiduPaddleOcrClient>();
+        m_state = State::Converting;
+        if (!notifyChanged())
+            return;
+        const quint64 generation = m_generation;
+        m_baidu->recognize(m_image, std::move(options),
+                           [this, generation](QString markdown, QString error) {
+            if (generation != m_generation || !m_active)
+                return;
+            if (!error.isEmpty()) {
+                fail(error);
+                return;
+            }
+            m_source = normalizedImageConversionSource(
+                markdown, SnowShotImageConversionFormat::Markdown);
+            if (m_source.trimmed().isEmpty()) {
+                fail(tr("PaddleOCR returned no readable Markdown"));
+                return;
+            }
+            updateCurrentCache();
+            m_state = State::Completed;
+            if (QGuiApplication::clipboard())
+                QGuiApplication::clipboard()->setText(m_source);
+            if (!notifyChanged() || !notifyResultsChanged())
+                return;
+            emit markdownCopied();
+        });
+        return;
+    }
     if (!refreshModels && restoreCachedResult(m_requestModel))
         return;
     if (m_api == nullptr || m_image.isNull() || m_key.isEmpty()) {
@@ -420,6 +540,7 @@ void ScreenshotImageConversionController::startWithModels(
     if (!m_refreshConversion && restoreCachedResult(model))
         return;
     const QString fingerprint = m_api->modelFingerprint(model);
+    m_requestFingerprint = fingerprint;
     m_state = State::Converting;
     if (!notifyChanged())
         return;
@@ -482,6 +603,11 @@ void ScreenshotImageConversionController::startWithModels(
 }
 
 void ScreenshotImageConversionController::openSettings(QWidget* owner) {
+    if (m_format == SnowShotImageConversionFormat::Markdown) {
+        // Cloud OCR is configured in the persistent Text recognition settings page.
+        // Do not interrupt a screenshot with a credential dialog.
+        return;
+    }
     using namespace adqt::widgets;
     const QPointer<ScreenshotImageConversionController> lifetime(this);
     if (owner == nullptr || m_modal != nullptr) {

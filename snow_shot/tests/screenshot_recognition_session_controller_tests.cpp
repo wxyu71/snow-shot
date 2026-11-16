@@ -1730,6 +1730,8 @@ void translationLanguageSelectsUseCodePrefixGroups() {
 } // namespace
 
 void runLatexRecognitionTests();
+void runCommunityCloudOcrTests();
+void runImageConversionLayoutTests();
 
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
@@ -1804,6 +1806,11 @@ int main(int argc, char** argv) {
         snow_shot::storage::ApplicationStorage::instance().shutdown();
         return 0;
     }
+    if (application.arguments().contains(QStringLiteral("--community-cloud-ocr-only"))) {
+        runCommunityCloudOcrTests();
+        snow_shot::storage::ApplicationStorage::instance().shutdown();
+        return 0;
+    }
     if (application.arguments().contains(QStringLiteral("--image-conversion-network-only"))) {
         runImageConversionNetworkTests();
         snow_shot::storage::ApplicationStorage::instance().shutdown();
@@ -1816,6 +1823,11 @@ int main(int argc, char** argv) {
     }
     if (application.arguments().contains(QStringLiteral("--image-conversion-clipboard-only"))) {
         runImageConversionClipboardTests();
+        snow_shot::storage::ApplicationStorage::instance().shutdown();
+        return 0;
+    }
+    if (application.arguments().contains(QStringLiteral("--image-conversion-layout-only"))) {
+        runImageConversionLayoutTests();
         snow_shot::storage::ApplicationStorage::instance().shutdown();
         return 0;
     }

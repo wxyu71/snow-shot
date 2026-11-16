@@ -93,14 +93,8 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Current version: %1</source>
             <translation>目前版本：%1</translation>
         </message>
-        <message>
-            <source>Discover more features and ways to use it</source>
-            <translation>探索更多功能與使用方式</translation>
-        </message>
-        <message>
-            <source>Discussion and support · group no. %1</source>
-            <translation>交流與答疑 · 群號 %1</translation>
-        </message>
+        
+        
         <message>
             <source>Download from GitHub</source>
             <translation>從 GitHub 下載</translation>
@@ -157,10 +151,7 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Make the next experience better</source>
             <translation>讓下一次體驗更好</translation>
         </message>
-        <message>
-            <source>Official website</source>
-            <translation>官方網站</translation>
-        </message>
+        
         <message>
             <source>Open Microsoft Store</source>
             <translation>開啟 Microsoft Store</translation>
@@ -181,10 +172,7 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Privacy policy</source>
             <translation>隱私權政策</translation>
         </message>
-        <message>
-            <source>QQ group 4</source>
-            <translation>QQ 群組 4</translation>
-        </message>
+        
         <message>
             <source>Ready to install %1</source>
             <translation>已準備好安裝 %1</translation>
@@ -759,18 +747,9 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>No translation services are available</source>
             <translation>沒有可用的翻譯服務</translation>
         </message>
-        <message>
-            <source>Paid calls are paused because your account has an outstanding balance. Settle the balance in Account to continue</source>
-            <translation>帳號有欠款，付費呼叫已暫停。請前往「帳號」結清欠款後繼續</translation>
-        </message>
-        <message>
-            <source>Sign in to your Snow Shot account to use Expert Model</source>
-            <translation>請登入 Snow Shot 帳號以使用專家模型</translation>
-        </message>
-        <message>
-            <source>Sign in to your Snow Shot account to use this service</source>
-            <translation>請登入 Snow Shot 帳號後使用此服務</translation>
-        </message>
+        
+        
+        
         <message>
             <source>Table recognition failed</source>
             <translation>表格辨識失敗</translation>
@@ -831,10 +810,7 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>The translation response is too large</source>
             <translation>翻譯回應過大</translation>
         </message>
-        <message>
-            <source>This request requires payment. Check your balance in Account</source>
-            <translation>此請求需要付費，請前往「帳號」查看餘額</translation>
-        </message>
+        
         <message>
             <source>This service does not support the selected language combination</source>
             <translation>此服務不支援所選語言組合</translation>
@@ -859,22 +835,10 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Translation stream ended unexpectedly</source>
             <translation>翻譯串流意外結束</translation>
         </message>
-        <message>
-            <source>Your Snow Shot session is no longer valid. Sign in again</source>
-            <translation>Snow Shot 登入已失效，請重新登入</translation>
-        </message>
-        <message>
-            <source>Your available credits cannot cover this request. Purchase credits in Account</source>
-            <translation>可用餘額不足以支付本次請求，請前往「帳號」儲值</translation>
-        </message>
-        <message>
-            <source>Your credits are reserved by other calls that are still running. Wait for them to finish and try again</source>
-            <translation>餘額已被其他進行中的呼叫預留，請等待這些呼叫結束後重試</translation>
-        </message>
-        <message>
-            <source>Your credits cannot cover this Expert Model request. Purchase credits from Account to continue</source>
-            <translation>點數不足，無法使用專家模型完成此請求。請前往帳號頁面購買點數後繼續</translation>
-        </message>
+        
+        
+        
+        
         <message>
             <source>Your daily free allowance is exhausted. Try again after it resets</source>
             <translation>今日免費額度已用盡，請在額度重設後重試</translation>

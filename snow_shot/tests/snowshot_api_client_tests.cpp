@@ -223,23 +223,23 @@ void officialHttpErrorsDescribeTheFailure() {
         QString expected;
     } cases[]{
         {Kind::Table, 401, R"({"code":"account_required","detail":"Unauthorized"})",
-         QStringLiteral("account_required"), QStringLiteral("Sign in to your Snow Shot account")},
+         QStringLiteral("account_required"), QStringLiteral("HTTP 401")},
         {Kind::Latex, 401, R"({"code":"invalid_session"})", QStringLiteral("invalid_session"),
-         QStringLiteral("session is no longer valid")},
+         QStringLiteral("HTTP 401")},
         {Kind::Translation, 402, R"({"error":{"code":"insufficient_credits"}})",
-         QStringLiteral("insufficient_credits"), QStringLiteral("Purchase credits in Account")},
+         QStringLiteral("insufficient_credits"), QStringLiteral("HTTP 402")},
         {Kind::Latex, 402, R"({"code":"outstanding_balance"})",
-         QStringLiteral("outstanding_balance"), QStringLiteral("outstanding balance")},
+         QStringLiteral("outstanding_balance"), QStringLiteral("HTTP 402")},
         {Kind::Table, 429, R"({"code":"funds_temporarily_reserved"})",
-         QStringLiteral("funds_temporarily_reserved"), QStringLiteral("reserved by other calls")},
+         QStringLiteral("funds_temporarily_reserved"), QStringLiteral("429")},
         {Kind::Translation, 429, R"({"code":"allowance_exhausted"})",
          QStringLiteral("allowance_exhausted"),
-         QStringLiteral("daily free allowance is exhausted")},
+         QStringLiteral("daily allowance is exhausted")},
         {Kind::Translation, 503, R"({"code":"operator_budget_exhausted"})",
          QStringLiteral("operator_budget_exhausted"),
          QStringLiteral("service has reached its usage limit")},
-        {Kind::Translation, 401, {}, {}, QStringLiteral("Sign in to your Snow Shot account")},
-        {Kind::Latex, 402, {}, {}, QStringLiteral("This request requires payment")},
+        {Kind::Translation, 401, {}, {}, QStringLiteral("HTTP 401")},
+        {Kind::Latex, 402, {}, {}, QStringLiteral("HTTP 402")},
         {Kind::Table, 422, R"({"code":"future_error","title":"Image cannot be processed"})",
          QStringLiteral("future_error"), QStringLiteral("Image cannot be processed")},
     };
@@ -1350,7 +1350,6 @@ void customModelsUseIndependentOpenAiConnections() {
                                                 true};
     model.provider = QStringLiteral("qwen");
     SnowShotApiClient client(QStringLiteral("http://127.0.0.1:1"));
-    client.setAccountAccessToken("private-snow-shot-session");
     client.setCustomModels({model});
     require(client.cachedChatModels().size() == 1 &&
                 client.cachedChatModels().first().supportsVision &&
@@ -1401,8 +1400,6 @@ void customModelsUseIndependentOpenAiConnections() {
         }
         require(done && result.succeeded() && text == QStringLiteral("Hallo"),
                 "custom SSE streams successfully");
-        require(!request.contains("private-snow-shot-session"),
-                "account credentials never reach a custom model provider");
         require(request.startsWith("POST /v1/chat/completions HTTP/1.1"),
                 "custom endpoint appends only chat/completions");
         require(variant == 2 ? !request.contains("Authorization:")
@@ -1805,7 +1802,7 @@ void customServerDefaultsAndValidation() {
     const bool wasSet = qEnvironmentVariableIsSet("SNOW_SHOT_API_BASE_URL");
     qunsetenv("SNOW_SHOT_API_BASE_URL");
     const QString buildDefault = SnowShotApiClient::configuredBaseUrl();
-    require(!buildDefault.isEmpty(), "build provides a server default");
+    require(buildDefault.isEmpty(), "community build never defaults to Snow Shot services");
     qputenv("SNOW_SHOT_API_BASE_URL", " http://localhost:9876/dev/// ");
     require(SnowShotApiClient::configuredBaseUrl() == QStringLiteral("http://localhost:9876/dev"),
             "environment overrides build default and normalizes it");
@@ -3205,6 +3202,13 @@ void abortObserversMayDestroyApiClient() {
 
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
+
+    if (application.arguments().contains(QStringLiteral("--community-service-only"))) {
+        customServerDefaultsAndValidation();
+        officialHttpErrorsDescribeTheFailure();
+        customModelsUseIndependentOpenAiConnections();
+        return 0;
+    }
 
     if (application.arguments().contains(QStringLiteral("--cancel-destruction-only"))) {
         abortObserversMayDestroyApiClient();

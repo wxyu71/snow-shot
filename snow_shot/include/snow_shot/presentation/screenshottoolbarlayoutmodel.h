@@ -470,9 +470,7 @@ editorDescriptors(storage::ScreenshotToolbarLayoutKind kind) {
 
 [[nodiscard]] inline QVector<QStringList> actionDefaultPositions() {
     return editionActionPositions({
-        {QStringLiteral("convert-to-html"), QStringLiteral("convert-to-markdown"),
-         QStringLiteral("latex-recognition"), QStringLiteral("barcode-recognition"),
-         QStringLiteral("table-recognition")},
+        {QStringLiteral("convert-to-markdown")},
         {QStringLiteral("record-screen")},
         {QStringLiteral("pin-window-to-screen"), QStringLiteral("pin-to-screen")},
         {QStringLiteral("text-recognition")},
@@ -500,9 +498,7 @@ defaultPositions(storage::ScreenshotToolbarLayoutKind kind) {
         return storage::defaultFloatingToolbarLayout().positions;
     if (kind == storage::ScreenshotToolbarLayoutKind::PinnedActionTools) {
         return editionActionPositions({
-            {QStringLiteral("convert-to-html"), QStringLiteral("convert-to-markdown"),
-             QStringLiteral("latex-recognition"), QStringLiteral("barcode-recognition"),
-             QStringLiteral("table-recognition")},
+            {QStringLiteral("convert-to-markdown")},
             {QStringLiteral("text-recognition")},
             {QStringLiteral("text-translation")},
             {QStringLiteral("separator")},
