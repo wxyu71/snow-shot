@@ -164,7 +164,7 @@ mod tests {
             assert!(!redirect_allowed(&origin, &Url::parse(url).unwrap()));
         }
         assert!(!redirect_allowed(
-            &Url::parse("https://snowshot.top").unwrap(),
+            &Url::parse("https://untrusted.example").unwrap(),
             &cdn
         ));
     }

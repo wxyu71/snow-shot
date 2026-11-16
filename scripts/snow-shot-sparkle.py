@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'snow_shot/packaging/macos/sparkle.json'
 SPARKLE = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
 HOSTS = {'github': 'https://github.com/wxyu71/snow-shot/releases/download'}
-_gitee_repository = os.environ.get('SNOW_SHOT_GITEE_REPOSITORY', '').strip()
+_gitee_repository = os.environ.get('SNOW_SHOT_GITEE_REPOSITORY', 'wxyu71/snow-shot').strip()
 if _gitee_repository:
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', _gitee_repository):
         raise ValueError('SNOW_SHOT_GITEE_REPOSITORY must use owner/repository form')

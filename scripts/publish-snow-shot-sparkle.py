@@ -14,7 +14,7 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 NAMESPACE = {'s': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
 REPOSITORIES = {'github': 'https://github.com/wxyu71/snow-shot.git'}
-_gitee_repository = os.environ.get('SNOW_SHOT_GITEE_REPOSITORY', '').strip()
+_gitee_repository = os.environ.get('SNOW_SHOT_GITEE_REPOSITORY', 'wxyu71/snow-shot').strip()
 if _gitee_repository:
     if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', _gitee_repository):
         raise ValueError('SNOW_SHOT_GITEE_REPOSITORY must use owner/repository form')
