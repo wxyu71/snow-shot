@@ -2078,128 +2078,82 @@ void previewThemesAndLongDocuments() {
 void conversionToolbarMigration() {
     namespace storage = snow_shot::storage;
     namespace layout = snow_shot::presentation::toolbar_layout;
-    const storage::ScreenshotToolbarLayout original{
-        {{QStringLiteral("text-recognition")},
-         {QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition")}},
-        {QStringLiteral("save-as-file")}};
-    const auto migrated =
-        layout::normalizedLayout(original, storage::ScreenshotToolbarLayoutKind::ActionTools);
-    require(migrated.positions.at(0) == original.positions.at(0) &&
-                migrated.positions.at(1) == QStringList{QStringLiteral("barcode-recognition"),
-                                                        QStringLiteral("document-recognition"),
-                                                        QStringLiteral("table-recognition"),
-                                                        QStringLiteral("convert-to-markdown"),
-                                                        QStringLiteral("latex-recognition"),
-                                                        QStringLiteral("convert-to-html")} &&
-                // Upload, quick-save, and print inherit the manual save action's visibility.
-                migrated.hidden ==
-                    QStringList{QStringLiteral("save-as-file"), QStringLiteral("upload-to-cloud"),
-                                QStringLiteral("quick-save"), QStringLiteral("print")},
-            "older layouts gain conversions inside recognition without rearranging other tools");
-    const storage::ScreenshotToolbarSettings settings;
-    settings.setLayout(storage::ScreenshotToolbarLayoutKind::ActionTools, original);
-    const auto persisted = settings.layout(storage::ScreenshotToolbarLayoutKind::ActionTools);
-    require(persisted.positions == migrated.positions && persisted.hidden == migrated.hidden,
-            "storage and presentation apply identical layout migration");
-    auto hidden = migrated;
-    hidden.positions[1].removeAll(QStringLiteral("convert-to-markdown"));
-    hidden.hidden.push_back(QStringLiteral("convert-to-markdown"));
-    const auto retained =
-        layout::normalizedLayout(hidden, storage::ScreenshotToolbarLayoutKind::ActionTools);
-    require(retained.hidden.contains(QStringLiteral("convert-to-markdown")),
-            "explicitly hidden conversion actions stay hidden");
 
-    const auto verify = [&](const storage::ScreenshotToolbarLayout& input,
-                            const storage::ScreenshotToolbarLayout& expected) {
-        const auto result =
-            layout::normalizedLayout(input, storage::ScreenshotToolbarLayoutKind::ActionTools);
-        require(result == expected, "recognition group migration matches the expected layout");
-        require(layout::normalizedLayout(
-                    result, storage::ScreenshotToolbarLayoutKind::ActionTools) == result,
-                "recognition group migration is idempotent");
-        settings.setLayout(storage::ScreenshotToolbarLayoutKind::ActionTools, input);
-        require(settings.layout(storage::ScreenshotToolbarLayoutKind::ActionTools) == result,
-                "storage and presentation agree on every migration branch");
+    const QString canonical = QStringLiteral("convert-to-markdown");
+    const QStringList retiredOnlineOcrIds{
+        QStringLiteral("table-recognition"),
+        QStringLiteral("document-recognition"),
+        QStringLiteral("latex-recognition"),
+        QStringLiteral("convert-to-html"),
     };
+    const auto assertSingleOnlineOcr = [&](const storage::ScreenshotToolbarLayout& value,
+                                           const char* message) {
+        int count = 0;
+        for (const QStringList& position : value.positions) {
+            count += position.count(canonical);
+            for (const QString& retired : retiredOnlineOcrIds)
+                require(!position.contains(retired), message);
+            require(!position.contains(QStringLiteral("barcode-recognition")), message);
+        }
+        count += value.hidden.count(canonical);
+        for (const QString& retired : retiredOnlineOcrIds)
+            require(!value.hidden.contains(retired), message);
+        require(!value.hidden.contains(QStringLiteral("barcode-recognition")), message);
+        require(count == 1, message);
+    };
+
+    const storage::ScreenshotToolbarLayout legacy{
+        {{QStringLiteral("text-recognition")},
+         {QStringLiteral("barcode-recognition"),
+          QStringLiteral("table-recognition"),
+          QStringLiteral("document-recognition"),
+          QStringLiteral("convert-to-markdown"),
+          QStringLiteral("latex-recognition"),
+          QStringLiteral("convert-to-html")},
+         {QStringLiteral("save-as-file")}},
+        {}};
+
+    const storage::ScreenshotToolbarSettings settings;
     for (const auto kind : {storage::ScreenshotToolbarLayoutKind::ActionTools,
                             storage::ScreenshotToolbarLayoutKind::PinnedActionTools}) {
-        for (bool hideSave : {false, true}) {
-            storage::ScreenshotToolbarLayout saveLayout;
-            if (hideSave)
-                saveLayout.hidden = {QStringLiteral("save-as-file")};
-            else
-                saveLayout.positions = {{QStringLiteral("save-as-file")}};
-            const auto result = layout::normalizedLayout(saveLayout, kind);
-            if (hideSave) {
-                require(result.hidden == QStringList{QStringLiteral("save-as-file"),
-                                                     QStringLiteral("upload-to-cloud"),
-                                                     QStringLiteral("quick-save"),
-                                                     QStringLiteral("print")},
-                        "print inherits hidden save visibility for both action toolbars");
-            } else {
-                require(result.positions.front() == QStringList{QStringLiteral("upload-to-cloud"),
-                                                                QStringLiteral("print"),
-                                                                QStringLiteral("quick-save"),
-                                                                QStringLiteral("save-as-file")},
-                        "print joins the saved manual save stack for both action toolbars");
-            }
-            require(settings.setLayout(kind, saveLayout) && settings.layout(kind) == result,
-                    "storage preserves print's inherited save placement and visibility");
+        const auto migrated = layout::normalizedLayout(legacy, kind);
+        assertSingleOnlineOcr(migrated,
+                              "legacy online OCR actions collapse to one community action");
+        require(layout::normalizedLayout(migrated, kind) == migrated,
+                "single Online OCR toolbar migration is idempotent");
+        require(settings.setLayout(kind, legacy) && settings.layout(kind) == migrated,
+                "persisted legacy toolbar layouts collapse to one Online OCR action");
+
+        storage::ScreenshotToolbarLayout aliasesOnly;
+        aliasesOnly.positions = {{QStringLiteral("document-recognition"),
+                                  QStringLiteral("latex-recognition"),
+                                  QStringLiteral("convert-to-html"),
+                                  QStringLiteral("table-recognition")}};
+        const auto collapsed = layout::normalizedLayout(aliasesOnly, kind);
+        assertSingleOnlineOcr(collapsed,
+                              "legacy provider-format actions map to the canonical Online OCR id");
+
+        storage::ScreenshotToolbarLayout hidden;
+        hidden.positions = {{QStringLiteral("text-recognition")}};
+        hidden.hidden = {canonical, QStringLiteral("latex-recognition"),
+                         QStringLiteral("convert-to-html")};
+        const auto hiddenResult = layout::normalizedLayout(hidden, kind);
+        require(hiddenResult.hidden.count(canonical) == 1,
+                "explicitly hidden Online OCR remains hidden after alias cleanup");
+        assertSingleOnlineOcr(hiddenResult,
+                              "hidden legacy aliases collapse without resurrecting extra actions");
+
+        const auto defaults = layout::defaultPositions(kind);
+        int defaultOnlineOcrCount = 0;
+        for (const QStringList& position : defaults) {
+            defaultOnlineOcrCount += position.count(canonical);
+            for (const QString& retired : retiredOnlineOcrIds)
+                require(!position.contains(retired),
+                        "community defaults never expose retired Online OCR variants");
         }
+        require(defaultOnlineOcrCount == 1,
+                "community defaults expose exactly one configurable Online OCR action");
     }
-    verify(hidden, retained);
-    storage::ScreenshotToolbarLayout defaults{layout::actionDefaultPositions(), {}};
-    const QVector<QStringList> formerFixedPositions{
-        {QStringLiteral("separator")}, {QStringLiteral("cancel")}, {QStringLiteral("copy")}};
-    auto historicalDefaults = defaults;
-    historicalDefaults.positions.removeIf(
-        [&](const QStringList& position) { return formerFixedPositions.contains(position); });
-    auto previousDefault = historicalDefaults;
-    previousDefault.positions[0] = {QStringLiteral("barcode-recognition"),
-                                    QStringLiteral("table-recognition")};
-    previousDefault.positions.insert(1, QStringList{QStringLiteral("convert-to-markdown")});
-    previousDefault.positions.insert(2, QStringList{QStringLiteral("convert-to-html")});
-    verify(previousDefault, defaults);
-    auto previousGroupedDefault = historicalDefaults;
-    previousGroupedDefault.positions[0] = {
-        QStringLiteral("table-recognition"), QStringLiteral("barcode-recognition"),
-        QStringLiteral("convert-to-markdown"), QStringLiteral("convert-to-html")};
-    verify(previousGroupedDefault, defaults);
-    auto customGrouped = previousGroupedDefault;
-    customGrouped.positions.move(0, 1);
-    auto expectedCustomGrouped = customGrouped;
-    expectedCustomGrouped.positions[1].insert(3, QStringLiteral("latex-recognition"));
-    expectedCustomGrouped.positions[1].prepend(QStringLiteral("document-recognition"));
-    expectedCustomGrouped.positions += formerFixedPositions;
-    verify(customGrouped, expectedCustomGrouped);
-    verify({}, defaults);
-    auto customized = previousDefault;
-    customized.positions.move(1, customized.positions.size() - 1);
-    auto expectedCustomized = customized;
-    expectedCustomized.positions.last().append(QStringLiteral("latex-recognition"));
-    auto& recognitionGroup = expectedCustomized.positions[0];
-    recognitionGroup.insert(recognitionGroup.indexOf(QStringLiteral("table-recognition")),
-                            QStringLiteral("document-recognition"));
-    expectedCustomized.positions += formerFixedPositions;
-    verify(customized, expectedCustomized);
-    auto qrHidden = original;
-    qrHidden.positions[1].removeAll(QStringLiteral("barcode-recognition"));
-    qrHidden.hidden.push_back(QStringLiteral("barcode-recognition"));
-    auto tableGroup = migrated;
-    tableGroup.positions[1].removeAll(QStringLiteral("barcode-recognition"));
-    // Recognition keeps its input position before the inherited hidden save companions.
-    tableGroup.hidden.insert(1, QStringLiteral("barcode-recognition"));
-    verify(qrHidden, tableGroup);
-    auto recognitionHidden = defaults;
-    recognitionHidden.positions.removeFirst();
-    recognitionHidden.hidden = {QStringLiteral("barcode-recognition"),
-                                QStringLiteral("table-recognition")};
-    auto conversionsOnly = recognitionHidden;
-    conversionsOnly.hidden.append(QStringLiteral("document-recognition"));
-    conversionsOnly.positions.push_back({QStringLiteral("convert-to-html"),
-                                         QStringLiteral("convert-to-markdown"),
-                                         QStringLiteral("latex-recognition")});
-    verify(recognitionHidden, conversionsOnly);
 }
 } // namespace
 
@@ -3071,8 +3025,6 @@ void runLatexRecognitionTests() {
     latexVisionPublishesProvisionalSourceBeforeCompletion();
     latexVisionRetiresProvisionalOutput();
     using Mode = ScreenshotRecognitionSessionController::Mode;
-    namespace layout = snow_shot::presentation::toolbar_layout;
-    using Kind = snow_shot::storage::ScreenshotToolbarLayoutKind;
     const QString source = QStringLiteral("\\frac{a_b}{c^2} <x> & \\alpha\n+1");
     ScreenshotRecognitionWindow window(ScreenshotRecognitionWindowActions{});
     ScreenshotRecognitionSessionActions actions;
@@ -3160,26 +3112,4 @@ void runLatexRecognitionTests() {
             "reset restores recognized LaTeX exactly");
     session.setTarget({QStringLiteral("other"), sampleImage(), QRectF(0, 0, 240, 120)});
     require(!session.cachedRecognitionResults().latex, "another target cannot reuse this formula");
-    for (const auto kind : {Kind::ActionTools, Kind::PinnedActionTools}) {
-        snow_shot::storage::ScreenshotToolbarLayout old;
-        old.positions = {{QStringLiteral("convert-to-html"), QStringLiteral("convert-to-markdown"),
-                          QStringLiteral("barcode-recognition")}};
-        const auto migrated = layout::normalizedLayout(old, kind);
-        require(migrated.positions.front().at(2) == QStringLiteral("latex-recognition"),
-                "migration inserts LaTeX immediately after Markdown");
-        snow_shot::storage::ScreenshotToolbarLayout previousDefault;
-        previousDefault.positions = {
-            {QStringLiteral("convert-to-html"), QStringLiteral("latex-recognition"),
-             QStringLiteral("convert-to-markdown"), QStringLiteral("barcode-recognition"),
-             QStringLiteral("table-recognition")}};
-        const auto updated = layout::normalizedLayout(previousDefault, kind);
-        require(updated.positions.front().at(1) == QStringLiteral("convert-to-markdown") &&
-                    updated.positions.front().at(2) == QStringLiteral("latex-recognition"),
-                "previous default moves LaTeX to Markdown's left in the reversed popup");
-        old.hidden = {QStringLiteral("latex-recognition")};
-        const auto hidden = layout::normalizedLayout(old, kind);
-        require(hidden.hidden.contains(QStringLiteral("latex-recognition")) &&
-                    !hidden.positions.front().contains(QStringLiteral("latex-recognition")),
-                "explicitly hidden LaTeX stays hidden");
-    }
 }

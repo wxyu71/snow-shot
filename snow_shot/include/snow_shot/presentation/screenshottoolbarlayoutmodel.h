@@ -470,6 +470,41 @@ editorDescriptors(storage::ScreenshotToolbarLayoutKind kind) {
     };
 }
 
+[[nodiscard]] inline bool communityOnlineOcrActionId(const QString& id) {
+    return id == QStringLiteral("table-recognition") ||
+           id == QStringLiteral("document-recognition") ||
+           id == QStringLiteral("convert-to-markdown") ||
+           id == QStringLiteral("latex-recognition") ||
+           id == QStringLiteral("convert-to-html");
+}
+
+[[nodiscard]] inline storage::ScreenshotToolbarLayout
+collapseCommunityOnlineOcrLayout(storage::ScreenshotToolbarLayout layout) {
+    const QString canonical = QStringLiteral("convert-to-markdown");
+    bool positioned = false;
+    for (QStringList& position : layout.positions) {
+        QStringList collapsed;
+        collapsed.reserve(position.size());
+        for (const QString& id : position) {
+            if (!communityOnlineOcrActionId(id)) {
+                collapsed.push_back(id);
+                continue;
+            }
+            if (!positioned) {
+                collapsed.push_back(canonical);
+                positioned = true;
+            }
+        }
+        position = collapsed;
+    }
+
+    const bool explicitlyHidden = layout.hidden.contains(canonical);
+    layout.hidden.removeIf([](const QString& id) { return communityOnlineOcrActionId(id); });
+    if (!positioned && explicitlyHidden)
+        layout.hidden.push_back(canonical);
+    return layout;
+}
+
 [[nodiscard]] inline QVector<QStringList> editionActionPositions(QVector<QStringList> positions) {
     for (QStringList& position : positions) {
         position.removeIf([](const QString& id) {
@@ -892,7 +927,12 @@ normalizedLayout(const storage::ScreenshotToolbarLayout& input,
         return normalizedLayout(candidate, defaultOrder(kind), defaultPositions(kind), false,
                                 false);
     }
-    return normalizedLayout(input, defaultOrder(kind), defaultPositions(kind),
+    auto candidate = input;
+    if (kind == storage::ScreenshotToolbarLayoutKind::ActionTools ||
+        kind == storage::ScreenshotToolbarLayoutKind::PinnedActionTools) {
+        candidate = collapseCommunityOnlineOcrLayout(candidate);
+    }
+    return normalizedLayout(candidate, defaultOrder(kind), defaultPositions(kind),
                             kind == storage::ScreenshotToolbarLayoutKind::ActionTools);
 }
 
