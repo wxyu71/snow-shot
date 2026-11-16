@@ -125,14 +125,14 @@ Every pull request enters one workflow:
 2. Native changes use the pinned Windows toolchain and the cached vcpkg/Cargo/static-Qt dependency
    layers.
 3. A dedicated `snow-shot-msvc-test` build enables the repository's real tests without enabling
-   packaging or release optimization. Its aggregate `snow-shot-community-tests` target also builds
-   the full `snow_shot` application, so every PR still compiles the integrated Windows app once,
-   then runs the focused Community CTest entries.
+   packaging or release optimization. Its aggregate `snow-shot-community-tests` target builds only
+   the focused native test executables that CTest will run. PRs do not link the production
+   `snow_shot.exe`; the focused build has its own two-hour timeout so a stalled compiler or linker
+   cannot consume the whole Windows job.
 4. A normal `workflow_dispatch` additionally smoke-tests the pinned NSIS/CPack toolchain, runs
-   the production Cargo/license collector, creates a separate `snow-shot-msvc-release` production
-   build tree, packages the Full-only NSIS online/offline installers, verifies their manifests and
-   SHA-256 files, and uploads them as private workflow artifacts. PRs do not perform release-only
-   packaging work or repeat the application compilation.
+   the production Cargo/license collector, creates the `snow-shot-msvc-release` production build
+   tree, links the full application once, packages the Full-only NSIS online/offline installers,
+   verifies their manifests and SHA-256 files, and uploads them as private workflow artifacts.
 5. With `publish_prerelease=true`, the same manually verified production artifacts continue into
    the draft/prerelease publication gate.
 
