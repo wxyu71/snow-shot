@@ -1016,6 +1016,10 @@
             <translation>转换为 Markdown</translation>
         </message>
         <message>
+            <source>Document recognition</source>
+            <translation>文档识别</translation>
+        </message>
+        <message>
             <source>Drag tools here to hide them from the screenshot toolbar</source>
             <translation>将工具拖到此处，即可在截图工具栏中隐藏它们</translation>
         </message>
@@ -1233,6 +1237,10 @@
         <message>
             <source>Active window</source>
             <translation>活动窗口</translation>
+        </message>
+        <message>
+            <source>Adaptive guide colors</source>
+            <translation>自适应辅助线颜色</translation>
         </message>
         <message>
             <source>Add a mask to highlight text recognition results</source>
@@ -1463,6 +1471,10 @@
             <translation>自动禁用</translation>
         </message>
         <message>
+            <source>Automatic disabling in fullscreen windows</source>
+            <translation>全屏窗口自动禁用</translation>
+        </message>
+        <message>
             <source>Automatic text recognition</source>
             <translation>自动文本识别</translation>
         </message>
@@ -1671,10 +1683,6 @@
             <translation>自动检查</translation>
         </message>
         <message>
-            <source>Check for new versions on GitHub and Gitee</source>
-            <translation>在 GitHub 和 Gitee 上检查新版本</translation>
-        </message>
-        <message>
             <source>Child elements</source>
             <translation>子元素</translation>
         </message>
@@ -1863,8 +1871,12 @@
             <translation>选择执行哪些操作时，同时以所选图像格式保存到指定目录</translation>
         </message>
         <message>
-            <source>Choose which fullscreen windows automatically disable global shortcuts</source>
-            <translation>选择哪些全屏窗口会自动禁用全局快捷键</translation>
+            <source>Choose which fullscreen windows trigger automatic disabling</source>
+            <translation>选择哪些全屏窗口会触发自动禁用</translation>
+        </message>
+        <message>
+            <source>Choose which inputs to disable</source>
+            <translation>选择要禁用的输入功能</translation>
         </message>
         <message>
             <source>Clear</source>
@@ -2287,12 +2299,20 @@
             <translation>诊断</translation>
         </message>
         <message>
+            <source>Disable global mouse</source>
+            <translation>禁用全局鼠标</translation>
+        </message>
+        <message>
             <source>Disable global shortcuts</source>
             <translation>禁用全局快捷键</translation>
         </message>
         <message>
-            <source>Disable shortcuts in fullscreen windows</source>
-            <translation>在全屏窗口中禁用快捷键</translation>
+            <source>Disable scope</source>
+            <translation>禁用范围</translation>
+        </message>
+        <message>
+            <source>Disable/enable global mouse</source>
+            <translation>禁用/启用全局鼠标</translation>
         </message>
         <message>
             <source>Disable/enable global shortcuts</source>
@@ -2587,6 +2607,10 @@
             <translation>全屏画布（开启/关闭鼠标穿透）</translation>
         </message>
         <message>
+            <source>Fullscreen input settings</source>
+            <translation>全屏输入设置</translation>
+        </message>
+        <message>
             <source>Fullscreen suppression</source>
             <translation>全屏抑制</translation>
         </message>
@@ -2637,10 +2661,6 @@
         <message>
             <source>Global mouse gestures</source>
             <translation>全局鼠标手势</translation>
-        </message>
-        <message>
-            <source>Global shortcut activation behavior</source>
-            <translation>全局快捷键启用行为</translation>
         </message>
         <message>
             <source>Global shortcuts</source>
@@ -2725,10 +2745,6 @@
         <message>
             <source>Icon</source>
             <translation>图标</translation>
-        </message>
-        <message>
-            <source>Ignore global shortcuts while a matching focused window occupies an entire monitor</source>
-            <translation>符合筛选条件的焦点窗口占满整个显示器时忽略全局快捷键</translation>
         </message>
         <message>
             <source>Image and document files</source>
@@ -2829,6 +2845,10 @@
         <message>
             <source>Interface settings</source>
             <translation>界面设置</translation>
+        </message>
+        <message>
+            <source>Invert guide colors that are similar to their sampled background color</source>
+            <translation>辅助线颜色与采样的背景颜色相近时反转辅助线颜色</translation>
         </message>
         <message>
             <source>JPEG</source>
@@ -3318,6 +3338,14 @@
         <message>
             <source>Pages</source>
             <translation>页面</translation>
+        </message>
+        <message>
+            <source>Pause or resume configured global mouse gestures</source>
+            <translation>暂停或恢复已配置的全局鼠标手势</translation>
+        </message>
+        <message>
+            <source>Pause the selected inputs while a matching focused window occupies an entire monitor</source>
+            <translation>当前焦点窗口符合筛选条件且占据整个显示器时，暂停所选的输入功能</translation>
         </message>
         <message>
             <source>Permanently remove all saved screenshots</source>
@@ -4620,6 +4648,10 @@
             <translation>切换鼠标所在窗口的置顶状态</translation>
         </message>
         <message>
+            <source>Toggle automatic disabling of the selected inputs in fullscreen windows. This shortcut stays active while automatic disabling is enabled</source>
+            <translation>切换全屏时自动禁用所选输入功能。启用自动禁用后，此快捷键仍然有效</translation>
+        </message>
+        <message>
             <source>Toggle cursor visibility</source>
             <translation>切换光标显示</translation>
         </message>
@@ -4758,10 +4790,6 @@
         <message>
             <source>Turn every global shortcut off or back on; this shortcut stays active while global shortcuts are disabled</source>
             <translation>关闭或重新开启所有全局快捷键；即使全局快捷键已被禁用，此快捷键仍然有效</translation>
-        </message>
-        <message>
-            <source>Turn off or back on the suppression of global shortcuts while the focused window is fullscreen; this shortcut stays active while fullscreen suppression is enabled</source>
-            <translation>关闭或重新开启焦点窗口全屏时对全局快捷键的抑制；即使全屏抑制已生效，此快捷键仍然有效</translation>
         </message>
         <message>
             <source>UIA</source>

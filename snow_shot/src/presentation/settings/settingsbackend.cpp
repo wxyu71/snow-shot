@@ -996,6 +996,8 @@ bool BuiltInSettingsBackend::switchValue(SettingsSwitchBinding binding) const {
         return storage::ScreenshotUiSettings().screenshotAreaTypeHintEnabled();
     case SettingsSwitchBinding::ShowGuidesByDefault:
         return storage::ScreenshotUiSettings().showGuidesByDefault();
+    case SettingsSwitchBinding::AdaptiveGuideColors:
+        return storage::ScreenshotUiSettings().adaptiveGuideColors();
     case SettingsSwitchBinding::ShowEditSelectionToolbar:
         return storage::ScreenshotUiSettings().showEditSelectionToolbar();
     case SettingsSwitchBinding::FloatingToolbarEnabled:
@@ -1356,6 +1358,9 @@ bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, boo
     if (binding == SettingsSwitchBinding::ShowGuidesByDefault) {
         return storage::ScreenshotUiSettings().setShowGuidesByDefault(value);
     }
+    if (binding == SettingsSwitchBinding::AdaptiveGuideColors) {
+        return storage::ScreenshotUiSettings().setAdaptiveGuideColors(value);
+    }
     if (binding == SettingsSwitchBinding::ShowEditSelectionToolbar) {
         return storage::ScreenshotUiSettings().setShowEditSelectionToolbar(value);
     }
@@ -1544,6 +1549,7 @@ bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, boo
         return false;
     case SettingsSwitchBinding::ScreenshotAreaTypeHint:
     case SettingsSwitchBinding::ShowGuidesByDefault:
+    case SettingsSwitchBinding::AdaptiveGuideColors:
     case SettingsSwitchBinding::ShowEditSelectionToolbar:
     case SettingsSwitchBinding::FloatingToolbarEnabled:
     case SettingsSwitchBinding::TrayEnabled:
@@ -1725,6 +1731,10 @@ QVariantList BuiltInSettingsBackend::multiSelectValue(SettingsMultiSelectBinding
         for (const QString& value : storage::ScreenshotSettings().autoSaveAfterExecutionActions()) {
             values.push_back(value);
         }
+    } else if (binding == SettingsMultiSelectBinding::FullscreenDisableScope) {
+        for (const QString& value : storage::GlobalShortcutSettings().fullscreenDisableScope()) {
+            values.push_back(value);
+        }
     }
     return values;
 }
@@ -1747,6 +1757,9 @@ bool BuiltInSettingsBackend::applyMultiSelectValue(SettingsMultiSelectBinding bi
     }
     if (binding == SettingsMultiSelectBinding::ScreenshotAutoSaveAfterExecution) {
         return storage::ScreenshotSettings().setAutoSaveAfterExecutionActions(tools);
+    }
+    if (binding == SettingsMultiSelectBinding::FullscreenDisableScope) {
+        return storage::GlobalShortcutSettings().setFullscreenDisableScope(tools);
     }
     return false;
 }
@@ -2823,6 +2836,8 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
                       QStringLiteral("global_shortcuts/toggle_window_under_cursor_always_on_top"));
         resetShortcut(GlobalShortcutAction::ToggleGlobalShortcuts,
                       QStringLiteral("global_shortcuts/toggle_global_hotkeys"));
+        resetShortcut(GlobalShortcutAction::ToggleGlobalMouse,
+                      QStringLiteral("global_shortcuts/toggle_global_mouse"));
         resetShortcut(
             GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow,
             QStringLiteral("global_shortcuts/toggle_disable_on_focused_fullscreen_window"));
@@ -2949,6 +2964,9 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
             {QStringLiteral("screenshot_ui/show_guides_by_default"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("screenshot_ui/show_guides_by_default"))},
+            {QStringLiteral("screenshot_ui/adaptive_guide_colors"),
+             storage::ConfigurationSchema::defaultValue(
+                 QStringLiteral("screenshot_ui/adaptive_guide_colors"))},
             {QStringLiteral("screenshot_ui/cursor_guide_line_color"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("screenshot_ui/cursor_guide_line_color"))},

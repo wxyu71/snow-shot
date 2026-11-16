@@ -60,19 +60,6 @@ ScreenshotImageConversionController::ScreenshotImageConversionController(QObject
 ScreenshotImageConversionController::~ScreenshotImageConversionController() {
     m_destroying = true;
     cancelRequests();
-    if (m_api)
-        m_api->cancel(m_settingsToken);
-    // Retire callback-owning children while their controller state still exists.
-    QList<QPointer<QObject>> ownedChildren;
-    for (QObject* child : children())
-        ownedChildren.append(child);
-    for (const auto& child : ownedChildren) {
-        if (!child)
-            continue;
-        disconnect(child, nullptr, this, nullptr);
-        child->blockSignals(true);
-        delete child.data();
-    }
 }
 
 bool ScreenshotImageConversionController::notifyChanged() {
@@ -100,16 +87,10 @@ void ScreenshotImageConversionController::setProvider(SnowShotApiClient* provide
     }
     const QPointer<SnowShotApiClient> nextProvider(provider);
     const quint64 providerGeneration = ++m_providerGeneration;
-    if (m_modal)
-        m_modal->reject();
-    if (!lifetime || providerGeneration != m_providerGeneration)
-        return;
     cancelRequests();
     if (m_api != nullptr) {
-        m_api->cancel(m_settingsToken);
         disconnect(m_api, nullptr, this, nullptr);
     }
-    m_settingsToken = 0;
     m_api = nextProvider;
     // Provider subscriptions are part of the binding transaction, not a conversion request.
     // Complete them before any observer can reset a conversion or replace the provider again.
@@ -192,7 +173,6 @@ void ScreenshotImageConversionController::bindProviderSignals() {
                 return;
             ++m_providerGeneration;
             cancelRequests();
-            m_settingsToken = 0;
             if (busy()) {
                 fail(tr("The image conversion service is unavailable"));
             }
@@ -317,6 +297,7 @@ void ScreenshotImageConversionController::trimCache() {
 
 void ScreenshotImageConversionController::cancelRequests() {
     ++m_generation;
+    m_reasoningActive = false;
     m_previewTimer.stop();
     if (m_baidu)
         m_baidu->cancel();
@@ -345,14 +326,8 @@ void ScreenshotImageConversionController::reset(bool discardCache) {
     m_error.clear();
     m_requestFingerprint.clear();
     if (discardCache) {
-        if (m_api)
-            m_api->cancel(m_settingsToken);
-        m_settingsToken = 0;
         m_cache.clear();
         m_key.clear();
-    }
-    if (m_modal != nullptr) {
-        m_modal->reject();
     }
     if (lifetime)
         notifyChanged();
@@ -593,6 +568,12 @@ void ScreenshotImageConversionController::startWithModels(
             if (!notifyChanged())
                 return;
             notifyResultsChanged();
+        },
+        [this, generation](bool active) {
+            if (generation != m_generation || !m_active)
+                return;
+            m_reasoningActive = active;
+            emit reasoningChanged(active);
         });
     if (!lifetime || generation != m_generation)
         return;

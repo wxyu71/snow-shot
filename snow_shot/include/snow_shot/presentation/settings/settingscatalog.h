@@ -139,6 +139,7 @@ enum class SettingsSwitchBinding {
     OcrHardwareAcceleration,
     ScreenshotAreaTypeHint,
     ShowGuidesByDefault,
+    AdaptiveGuideColors,
     ShowEditSelectionToolbar,
     TrayEnabled,
     TrayUseSystemIconColor,
@@ -215,6 +216,7 @@ enum class SettingsMultiSelectBinding {
     DrawingQuickSelectionDisabledTools,
     TrayMenuOptions,
     ScreenshotAutoSaveAfterExecution,
+    FullscreenDisableScope,
 };
 
 struct SettingsMultiSelectDefinition {
