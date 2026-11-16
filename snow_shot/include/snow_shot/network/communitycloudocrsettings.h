@@ -9,7 +9,7 @@ struct CommunityCloudOcrSettings {
     QString accessToken;
     QString model = QStringLiteral("PaddleOCR-VL-1.6");
     // Stable community values. Keep the provider choice outside the upstream API client so
-    // upstream OCR code can be merged without re-introducing Snow Shot account semantics.
+    // upstream OCR code can be merged without re-introducing hosted-service coupling.
     QString engine = QStringLiteral("paddleocr");
     QString outputFormat = QStringLiteral("markdown");
 };
