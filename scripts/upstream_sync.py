@@ -32,6 +32,8 @@ FORBIDDEN_COMMUNITY_CONTENT = re.compile(
     r"accountAccessToken|setAccountAccessToken|accountIdentityChanged|officialCallSettled|"
     r"account_required|invalid_session|insufficient_credits|outstanding_balance|"
     r"funds_temporarily_reserved|purchase\.credits|membership\.payment|"
+    r"account-session|Snow Shot account|Purchase credits|available credits|"
+    r"official account authorization|"
     r"\btelemetry\b|\b(?:sentry|posthog|mixpanel|firebase_analytics)\b|segment\.io|"
     r"\bmg-chao/(?:snow-shot|snow-apps)\b|\bmg-chao\.snow-shot\b|"
     r"\bsnowshot\.top\b|\b120\.79\.232\.67\b",
