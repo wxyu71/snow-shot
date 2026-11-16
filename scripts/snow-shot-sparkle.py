@@ -8,6 +8,7 @@ import argparse
 import base64
 import hashlib
 import json
+import os
 import plistlib
 from pathlib import Path
 import re
@@ -20,8 +21,12 @@ import xml.etree.ElementTree as ET
 ROOT = Path(__file__).resolve().parents[1]
 MANIFEST = ROOT / 'snow_shot/packaging/macos/sparkle.json'
 SPARKLE = 'http://www.andymatuschak.org/xml-namespaces/sparkle'
-HOSTS = {'github': 'https://github.com/mg-chao/snow-shot/releases/download',
-         'gitee': 'https://gitee.com/mg-chao/snow-apps/releases/download'}
+HOSTS = {'github': 'https://github.com/wxyu71/snow-shot/releases/download'}
+_gitee_repository = os.environ.get('SNOW_SHOT_GITEE_REPOSITORY', '').strip()
+if _gitee_repository:
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', _gitee_repository):
+        raise ValueError('SNOW_SHOT_GITEE_REPOSITORY must use owner/repository form')
+    HOSTS['gitee'] = f'https://gitee.com/{_gitee_repository}/releases/download'
 ET.register_namespace('sparkle', SPARKLE)
 
 

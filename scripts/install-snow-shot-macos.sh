@@ -5,6 +5,14 @@ set -Eeuo pipefail
 # Public certificate pin, shared with the publisher. Never re-sign on user machines.
 PROJECT_SIGNING_CERTIFICATE_SHA1='A531FC00F5E11AC6AD38E5923401313F45A7CEAD'
 
+# Community release discovery must never silently fall back to upstream release infrastructure.
+github_repository='wxyu71/snow-shot'
+gitee_repository="${SNOW_SHOT_GITEE_REPOSITORY:-}"
+if [[ -n "$gitee_repository" && ! "$gitee_repository" =~ ^[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+$ ]]; then
+    printf 'SNOW_SHOT_GITEE_REPOSITORY must use owner/repository form\n' >&2
+    exit 2
+fi
+
 edition=full
 product_name="Snow Shot"
 product_slug=snow-shot
@@ -157,7 +165,16 @@ verify_checksum() {
 
 # JXA uses system Foundation for JSON; no Python, jq, or developer tools needed.
 release_urls() {
-    osascript -l JavaScript - "$1" "$asset_arch" "$2" "${3:-}" "${4:-}" "$product_slug" <<'JXA'
+    local repository=''
+    case "$2" in
+        github) repository="https://github.com/$github_repository" ;;
+        gitee|gitee-list)
+            [[ -n "$gitee_repository" ]] || return 1
+            repository="https://gitee.com/$gitee_repository"
+            ;;
+        *) return 1 ;;
+    esac
+    osascript -l JavaScript - "$1" "$asset_arch" "$2" "${3:-}" "${4:-}" "$product_slug" "$repository" <<'JXA'
 ObjC.import('Foundation');
 function run(argv) {
     const data = $.NSData.dataWithContentsOfFile(argv[0]);
@@ -216,8 +233,9 @@ function run(argv) {
         const image = assets.filter(a => a.name === name);
         const sum = assets.filter(a => a.name === name + '.sha256');
         if (image.length !== 1 || sum.length !== 1) continue;
-        const repository = argv[2] === 'github' ? 'https://github.com/mg-chao/snow-shot' :
-            'https://gitee.com/mg-chao/snow-apps';
+        const repository = argv[6];
+        if (typeof repository !== 'string' || !/^https:\/\/(github|gitee)\.com\/[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repository))
+            throw Error('Invalid community release repository');
         const prefix = repository + '/releases/download/' + release.tag_name + '/';
         if (image[0].browser_download_url !== prefix + name || sum[0].browser_download_url !== prefix + name + '.sha256') continue;
         if (!best || compare(tag, best.tag) > 0) best = {tag: tag, version: version, image: image[0], sum: sum[0], releaseTag: release.tag_name};
@@ -288,7 +306,7 @@ discover_channel() {
         result=''
         while read -r tag id; do
             [[ -n "$tag" && "$id" =~ ^[0-9]+$ ]] || continue
-            fetch_metadata "https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases/$id/attach_files?per_page=100" \
+            fetch_metadata "https://gitee.com/api/v5/repos/$gitee_repository/releases/$id/attach_files?per_page=100" \
                 "$work/gitee-attachments.json" || continue
             result=$(release_urls "$work/gitee-releases.json" gitee "$tag" \
                 "$work/gitee-attachments.json" 2>> "$work/diagnostic.log") && break
@@ -305,10 +323,15 @@ discover_channel() {
 
 discover_release() {
     local channel
-    discover_channel github 'https://api.github.com/repos/mg-chao/snow-shot/releases' &
+    discover_channel github "https://api.github.com/repos/$github_repository/releases" &
     github_pid=$!
-    discover_channel gitee 'https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases' &
-    gitee_pid=$!
+    if [[ -n "$gitee_repository" ]]; then
+        discover_channel gitee "https://gitee.com/api/v5/repos/$gitee_repository/releases" &
+        gitee_pid=$!
+    else
+        gitee_pid=''
+        printf 'failed\n' > "$work/gitee-status"
+    fi
     while :; do
         for channel in github gitee; do
             [[ -f "$work/$channel-status" && ! -f "$work/$channel-checked" ]] || continue
@@ -394,7 +417,7 @@ obtain_package() {
         candidate=$(release_urls "$work/gitee-releases.json" gitee-list "$tag" 2>> "$work/diagnostic.log") || die unavailable
         id=${candidate#* }
         [[ "$id" =~ ^[0-9]+$ ]] || die unavailable
-        fetch_metadata "https://gitee.com/api/v5/repos/mg-chao/snow-apps/releases/$id/attach_files?per_page=100" \
+        fetch_metadata "https://gitee.com/api/v5/repos/$gitee_repository/releases/$id/attach_files?per_page=100" \
             "$work/gitee-attachments.json" || die unavailable
         urls=$(release_urls "$work/gitee-releases.json" gitee "$tag" \
             "$work/gitee-attachments.json" 2>> "$work/diagnostic.log") || die unavailable

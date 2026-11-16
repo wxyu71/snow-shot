@@ -13,8 +13,12 @@ import xml.etree.ElementTree as ET
 
 ROOT = Path(__file__).resolve().parents[1]
 NAMESPACE = {'s': 'http://www.andymatuschak.org/xml-namespaces/sparkle'}
-REPOSITORIES = {'github': 'https://github.com/mg-chao/snow-shot.git',
-                'gitee': 'https://gitee.com/mg-chao/snow-apps.git'}
+REPOSITORIES = {'github': 'https://github.com/wxyu71/snow-shot.git'}
+_gitee_repository = os.environ.get('SNOW_SHOT_GITEE_REPOSITORY', '').strip()
+if _gitee_repository:
+    if not re.fullmatch(r'[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+', _gitee_repository):
+        raise ValueError('SNOW_SHOT_GITEE_REPOSITORY must use owner/repository form')
+    REPOSITORIES['gitee'] = f'https://gitee.com/{_gitee_repository}.git'
 BRANCH = 'sparkle-appcasts'
 
 
@@ -111,7 +115,8 @@ def publish(host, reports, token=None, username=None, verify_only=False):
             path.write_bytes(content)
             git('add', '--', feed['name'])
         if not verify_only and git('status', '--porcelain'):
-            git('-c', 'user.name=Snow Shot releases', '-c', 'user.email=releases@snowshot.top',
+            git('-c', 'user.name=Snow Shot Community releases',
+                '-c', 'user.email=snow-shot-community@localhost',
                 'commit', '-m', 'build(updates): publish verified Sparkle appcasts')
             # No force push: a concurrent release must be reconciled and reverified.
             git('push', 'origin', 'HEAD:refs/heads/' + BRANCH)
