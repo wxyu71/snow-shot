@@ -18,7 +18,10 @@ import unittest
 
 SCRIPT = Path(__file__).resolve().with_name('install-snow-shot-macos.sh')
 PREFLIGHT = SCRIPT.with_name('prepare-snow-shot-homebrew.sh')
-FINGERPRINT = re.search(r"PROJECT_SIGNING_CERTIFICATE_SHA1='([A-F0-9]{40})'", SCRIPT.read_text())[1]
+PIN = re.search(r"PROJECT_SIGNING_CERTIFICATE_SHA1='([^']*)'", SCRIPT.read_text())
+if not PIN:
+    raise RuntimeError('installer certificate pin slot is missing')
+FINGERPRINT = PIN[1] if re.fullmatch(r'[A-F0-9]{40}', PIN[1]) else 'A' * 40
 REQUIREMENT = 'identifier "com.snowshot.snow_shot" and anchor = H"' + FINGERPRINT + '"'
 API = 'https://api.github.com/repos/wxyu71/snow-shot/releases?per_page=100&page=1'
 GITEE_API = 'https://gitee.com/api/v5/repos/wxyu71/snow-shot/releases?per_page=100&page=1'
@@ -188,6 +191,7 @@ class InstallerTests(unittest.TestCase):
         env = dict(os.environ, HOME=str(self.home), FIXTURE=str(self.root), REQUIREMENT=REQUIREMENT, LC_ALL='C', LANG='C', **environment)
         setup = '\n'.join([
             'source ' + shlex.quote(str(SCRIPT)),
+            'PROJECT_SIGNING_CERTIFICATE_SHA1=' + shlex.quote(FINGERPRINT),
             'export PATH=' + shlex.quote(str(self.bin)) + ':"$PATH"',
             'work=' + shlex.quote(str(self.work)),
             'state=' + shlex.quote(str(self.state)),

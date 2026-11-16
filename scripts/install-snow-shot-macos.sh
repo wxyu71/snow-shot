@@ -3,7 +3,9 @@
 set -Eeuo pipefail
 
 # Public certificate pin, shared with the publisher. Never re-sign on user machines.
-PROJECT_SIGNING_CERTIFICATE_SHA1='A531FC00F5E11AC6AD38E5923401313F45A7CEAD'
+# Empty in source by design. The authorized community publisher must run
+# scripts/snow-shot-macos-signing.py initialize once and commit the generated public pin.
+PROJECT_SIGNING_CERTIFICATE_SHA1=''
 
 # Community release discovery must never silently fall back to upstream release infrastructure.
 github_repository='wxyu71/snow-shot'

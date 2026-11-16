@@ -37,15 +37,34 @@ class ReleaseSelection(unittest.TestCase):
             signing.select_previous(releases, 'snow-shot', 'x86_64', '1.5.9')
 
     def test_initialization_never_replaces_existing_project_identity(self):
-        with self.assertRaisesRegex(ValueError, 'already exists'):
-            signing.initialize()
-
-    def test_installer_pin_must_match_the_committed_certificate(self):
-        self.assertEqual(signing.project_identity(), signing.fingerprint())
         with tempfile.TemporaryDirectory() as directory:
+            certificate = Path(directory) / 'release-signing.pem'
+            certificate.write_text('existing public certificate')
+            with patch.object(signing, 'CERTIFICATE', certificate):
+                with self.assertRaisesRegex(ValueError, 'already exists'):
+                    signing.initialize()
+
+    def test_missing_project_identity_fails_closed(self):
+        with tempfile.TemporaryDirectory() as directory:
+            certificate = Path(directory) / 'release-signing.pem'
             installer = Path(directory) / 'installer.sh'
-            installer.write_text("PROJECT_SIGNING_CERTIFICATE_SHA1='" + '0' * 40 + "'\n")
-            with patch.object(signing, 'INSTALLER', installer):
+            installer.write_text("PROJECT_SIGNING_CERTIFICATE_SHA1=''\n")
+            with patch.object(signing, 'CERTIFICATE', certificate), \
+                    patch.object(signing, 'INSTALLER', installer):
+                with self.assertRaisesRegex(ValueError, 'certificate is missing'):
+                    signing.project_identity()
+
+    def test_installer_pin_must_match_the_project_certificate(self):
+        with tempfile.TemporaryDirectory() as directory:
+            certificate = Path(directory) / 'release-signing.pem'
+            certificate.write_text('fixture public certificate')
+            installer = Path(directory) / 'installer.sh'
+            installer.write_text("PROJECT_SIGNING_CERTIFICATE_SHA1='" + 'A' * 40 + "'\n")
+            with patch.object(signing, 'CERTIFICATE', certificate), \
+                    patch.object(signing, 'INSTALLER', installer), \
+                    patch.object(signing, 'fingerprint', return_value='A' * 40):
+                self.assertEqual(signing.project_identity(), 'A' * 40)
+                installer.write_text("PROJECT_SIGNING_CERTIFICATE_SHA1='" + '0' * 40 + "'\n")
                 with self.assertRaisesRegex(ValueError, 'pin differs'):
                     signing.project_identity()
 
