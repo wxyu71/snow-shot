@@ -4,6 +4,7 @@
 #include "snow_shot/presentation/screenshotocrpresentation.h"
 #include "snow_shot/presentation/screenshotocrtexttransform.h"
 #include "snow_shot/presentation/screenshotrecognitionwindow.h"
+#include "snow_shot/presentation/screenshotclipboardservice.h"
 #include <QTextEdit>
 #include <QMimeData>
 #include <QJsonArray>

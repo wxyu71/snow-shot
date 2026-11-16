@@ -2090,12 +2090,12 @@ void conversionToolbarMigration() {
                                            const char* message) {
         int count = 0;
         for (const QStringList& position : value.positions) {
-            count += position.count(canonical);
+            count += static_cast<int>(position.count(canonical));
             for (const QString& retired : retiredOnlineOcrIds)
                 require(!position.contains(retired), message);
             require(!position.contains(QStringLiteral("barcode-recognition")), message);
         }
-        count += value.hidden.count(canonical);
+        count += static_cast<int>(value.hidden.count(canonical));
         for (const QString& retired : retiredOnlineOcrIds)
             require(!value.hidden.contains(retired), message);
         require(!value.hidden.contains(QStringLiteral("barcode-recognition")), message);
@@ -2146,7 +2146,7 @@ void conversionToolbarMigration() {
         const auto defaults = layout::defaultPositions(kind);
         int defaultOnlineOcrCount = 0;
         for (const QStringList& position : defaults) {
-            defaultOnlineOcrCount += position.count(canonical);
+            defaultOnlineOcrCount += static_cast<int>(position.count(canonical));
             for (const QString& retired : retiredOnlineOcrIds)
                 require(!position.contains(retired),
                         "community defaults never expose retired Online OCR variants");
