@@ -14614,16 +14614,11 @@ if(SNOW_SHOT_BUILD_BENCHMARKS)
     endif()
 endif()
 
-# Keep Community CI focused on the native executables it actually runs.
-# The production snow_shot executable is built only by the release workflow.
+# Keep the PR gate intentionally small: validate the provider protocol and
+# the complete in-product Cloud OCR session. Broader UI/plumbing tests remain
+# available in the normal native test suite without multiplying static-Qt links.
 if(SNOW_SHOT_BUILD_TESTS)
     add_custom_target(snow-shot-community-tests DEPENDS
         snow-shot-paddleocr-client-tests
-        snow-shot-api-client-tests
-        snow-shot-recognition-session-controller-tests
-        snow-shot-application-storage-tests
-        snow-shot-screenshot-tool-palette-tests
-        snow-shot-settings-catalog-tests
-        snow-shot-settings-page-loading-tests
-        snow-shot-about-page-tests)
+        snow-shot-recognition-session-controller-tests)
 endif()
