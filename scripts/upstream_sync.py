@@ -25,6 +25,34 @@ COMMERCIAL_CONTENT = re.compile(
     r"membership.payment|top.up|recharge|sign.in|sign.up|register|checkout|会员|充值|支付|积分", re.I
 )
 
+# Current-tree safety policy. These are runtime/product identifiers, not the upstream
+# metadata in .github/upstream-protection.json that tells the sync tool where to fetch from.
+FORBIDDEN_COMMUNITY_CONTENT = re.compile(
+    r"AccountSessionService|AccountPageWidget|AccountSecretStore|"
+    r"accountAccessToken|setAccountAccessToken|accountIdentityChanged|officialCallSettled|"
+    r"\b(?:sentry|posthog|amplitude|telemetry)\b|"
+    r"https?://(?:www\.)?snowshot\.top|"
+    r"https?://(?:www\.)?github\.com/mg-chao/snow-shot|"
+    r"https?://(?:www\.)?gitee\.com/mg-chao/snow-apps",
+    re.I,
+)
+COMMUNITY_SCAN_ROOTS = (
+    "cmake",
+    "scripts",
+    "snow_shot/include",
+    "snow_shot/src",
+    "snow_shot/rust",
+    "snow_shot/tests",
+)
+COMMUNITY_SCAN_SUFFIXES = {
+    ".c", ".cc", ".cpp", ".h", ".hpp", ".mm", ".m",
+    ".py", ".js", ".ts", ".rs", ".cmake", ".txt", ".json", ".sh", ".ps1",
+}
+COMMUNITY_SCAN_EXCLUSIONS = {
+    "scripts/upstream_sync.py",
+    "scripts/test-upstream-sync.py",
+}
+
 
 def git(*args: str) -> bytes:
     return subprocess.check_output(["git", *args], cwd=ROOT)
@@ -112,6 +140,33 @@ def classify(upstream: str, output: Path | None = None) -> dict:
     return result
 
 
+def assert_forbidden_runtime_content_absent() -> None:
+    violations: list[str] = []
+    for root_name in COMMUNITY_SCAN_ROOTS:
+        root = ROOT / root_name
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in COMMUNITY_SCAN_SUFFIXES:
+                continue
+            relative = path.relative_to(ROOT).as_posix()
+            if relative in COMMUNITY_SCAN_EXCLUSIONS:
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            match = FORBIDDEN_COMMUNITY_CONTENT.search(content)
+            if match:
+                line = content.count("\n", 0, match.start()) + 1
+                violations.append(f"{relative}:{line}: {match.group(0)}")
+    if violations:
+        raise SystemExit(
+            "Forbidden account/telemetry/upstream runtime content found:\n" +
+            "\n".join(violations[:50])
+        )
+
+
 def assert_deleted_files_absent() -> None:
     policy = json.loads(POLICY.read_text(encoding="utf-8"))
     for path in policy["deleted_files"]:
@@ -120,6 +175,7 @@ def assert_deleted_files_absent() -> None:
             cwd=ROOT, capture_output=True
         ).returncode == 0:
             raise SystemExit(f"Previously removed commercial file was restored: {path}")
+    assert_forbidden_runtime_content_absent()
 
 
 def main() -> None:

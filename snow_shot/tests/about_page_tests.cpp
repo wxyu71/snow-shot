@@ -454,7 +454,7 @@ void updatePolicyAndUnavailableCopy() {
         {},
         0,
         0,
-        QUrl(QStringLiteral("https://github.com/mg-chao/snow-shot/releases/tag/v2.0.0_snow-shot"))};
+        QUrl(QStringLiteral("https://github.com/wxyu71/snow-shot/releases/tag/v2.0.0_snow-shot"))};
     updates.statusChanged();
     auto* action = child<adqt::widgets::AdButton>(page, "aboutUpdateAction");
     require(action->text() == QStringLiteral("View update details"),
@@ -462,7 +462,7 @@ void updatePolicyAndUnavailableCopy() {
     action->click();
     require(opened == QList<QUrl>{status.downloadUrl}, "About opens the exact GitHub release");
     status.downloadUrl =
-        QUrl(QStringLiteral("https://gitee.com/mg-chao/snow-apps/releases/tag/v2.0.0_snow-shot"));
+        QUrl(QStringLiteral("https://gitee.com/wxyu71/snow-shot/releases/tag/v2.0.0_snow-shot"));
     emit updates.statusChanged();
     flushEvents();
     require(action->text() == QStringLiteral("View update details"),

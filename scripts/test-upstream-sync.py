@@ -73,6 +73,9 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_release_configuration_is_protected(self):
         self.assertEqual(self.decision(["CMakeLists.txt"])["mode"], "review")
 
+    def test_current_tree_has_no_account_telemetry_or_upstream_runtime_endpoints(self):
+        upstream_sync.assert_forbidden_runtime_content_absent()
+
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
