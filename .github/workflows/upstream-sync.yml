@@ -71,13 +71,10 @@ jobs:
           else
             git merge --abort
             candidate="The upstream merge has conflicts. This branch contains only the conflict report; resolve the upstream merge manually before merging the PR."
-            cat > .github/upstream-review-pending.md <<EOF
-# Upstream synchronization requires conflict resolution
-
-Upstream commit: $upstream_sha
-
-$reasons
-EOF
+            printf '%s\n\n%s\n\n%s\n' \
+              '# Upstream synchronization requires conflict resolution' \
+              "Upstream commit: $upstream_sha" \
+              "$reasons" > .github/upstream-review-pending.md
             git add .github/upstream-review-pending.md
             git commit -m "chore(sync): report upstream merge conflict"
           fi
@@ -90,9 +87,12 @@ $candidate
 Reasons reported by the fork policy:
 $reasons"
 
-          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main             --state open --json number --jq '.[0].number // empty')"
+          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main \
+            --state open --json number --jq '.[0].number // empty')"
           if [[ -n "$number" ]]; then
-            gh pr edit "$number" --repo "$GITHUB_REPOSITORY"               --title "review(sync): integrate upstream main" --body "$body"
+            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" \
+              --title "review(sync): integrate upstream main" --body "$body"
           else
-            gh pr create --draft --repo "$GITHUB_REPOSITORY" --base main --head "$branch"               --title "review(sync): integrate upstream main" --body "$body"
+            gh pr create --draft --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
+              --title "review(sync): integrate upstream main" --body "$body"
           fi
