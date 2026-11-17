@@ -162,6 +162,66 @@ SecretTransformResult transformConfigurationSecrets(QJsonObject* document,
 }
 #endif
 
+void redactSecretField(QJsonObject* object, const QString& key) {
+    if (!object || !object->contains(key))
+        return;
+    const QJsonValue stored = object->value(key);
+    if (stored.isString() && stored.toString().isEmpty())
+        return;
+    object->insert(key, QString());
+}
+
+void redactSecretArray(QJsonArray* array, std::initializer_list<const char*> fields) {
+    if (!array)
+        return;
+    for (qsizetype index = 0; index < array->size(); ++index) {
+        if (!array->at(index).isObject())
+            continue;
+        QJsonObject object = array->at(index).toObject();
+        for (const char* field : fields)
+            redactSecretField(&object, QString::fromLatin1(field));
+        (*array)[index] = object;
+    }
+}
+
+void redactSecrets(QJsonObject* document) {
+    if (!document)
+        return;
+
+    const QJsonValue cloudValue = document->value(QStringLiteral("cloud_upload"));
+    if (cloudValue.isObject()) {
+        QJsonObject cloud = cloudValue.toObject();
+        const QJsonValue configurationValue = cloud.value(QStringLiteral("configuration"));
+        if (configurationValue.isObject()) {
+            QJsonObject configuration = configurationValue.toObject();
+            const QJsonValue profilesValue = configuration.value(QStringLiteral("configurations"));
+            if (profilesValue.isArray()) {
+                QJsonArray profiles = profilesValue.toArray();
+                redactSecretArray(&profiles,
+                                  {"access_key_id", "secret_access_key", "session_token"});
+                configuration.insert(QStringLiteral("configurations"), profiles);
+                cloud.insert(QStringLiteral("configuration"), configuration);
+                document->insert(QStringLiteral("cloud_upload"), cloud);
+            }
+        }
+    }
+
+    const QJsonValue apiValue = document->value(QStringLiteral("api_configuration"));
+    if (apiValue.isObject()) {
+        QJsonObject api = apiValue.toObject();
+        for (const char* name : {"custom_models", "text_translation"}) {
+            const QString key = QString::fromLatin1(name);
+            const QJsonValue modelsValue = api.value(key);
+            if (!modelsValue.isArray())
+                continue;
+            QJsonArray models = modelsValue.toArray();
+            redactSecretArray(&models, {"api_key"});
+            api.insert(key, models);
+        }
+        document->insert(QStringLiteral("api_configuration"), api);
+    }
+}
+
 } // namespace
 
 bool protectConfigurationSecrets(QJsonObject* document, QString* error) {
@@ -188,6 +248,10 @@ ConfigurationSecretLoadResult unprotectConfigurationSecrets(QJsonObject* documen
     Q_UNUSED(document);
     return {};
 #endif
+}
+
+void redactConfigurationSecrets(QJsonObject* document) {
+    redactSecrets(document);
 }
 
 } // namespace snow_shot::storage

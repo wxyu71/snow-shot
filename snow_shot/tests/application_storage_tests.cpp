@@ -3466,6 +3466,22 @@ void malformedConfigurationIsCopiedAndReplaced() {
                  .entryInfoList({QStringLiteral("config.json.corrupt.*.json")}, QDir::Files)
                  .isEmpty(),
             "malformed configuration was not copied to a corrupt backup");
+    const auto malformedBackups =
+        QDir(temporary.path())
+            .entryInfoList({QStringLiteral("config.json.corrupt.*.json")}, QDir::Files, QDir::Time);
+    require(!malformedBackups.isEmpty(), "malformed backup path is available");
+    const QJsonObject malformedBackup = readObject(malformedBackups.first().absoluteFilePath());
+    require(malformedBackup.value(QStringLiteral("diagnostics"))
+                    .toObject()
+                    .value(QStringLiteral("content_omitted"))
+                    .toBool() &&
+                !malformedBackup.value(QStringLiteral("diagnostics"))
+                     .toObject()
+                     .value(QStringLiteral("source_sha256"))
+                     .toString()
+                     .isEmpty() &&
+                !readBytes(malformedBackups.first().absoluteFilePath()).contains("{broken"),
+            "unparseable configuration backup keeps diagnostics but omits original content");
     require(store.flushNow().success &&
                 readObject(config)
                         .value(QStringLiteral("storage"))
@@ -3491,11 +3507,21 @@ void malformedConfigurationIsCopiedAndReplaced() {
                      .isEmpty(),
             "expired corrupt configuration backups were not cleaned up");
 
-    writeBytes(config, QByteArrayLiteral("{\"storage\": {}}"));
+    const QByteArray backupSecret = QByteArrayLiteral("legacy-corrupt-secret");
+    writeBytes(config,
+               QByteArrayLiteral(
+                   "{\"storage\":{},\"api_configuration\":{\"custom_models\":[{\"api_key\":\"") +
+                   backupSecret + QByteArrayLiteral("\"}]}}"));
     storage::ConfigurationStore missingVersion(config, true, true, 60000);
     require(missingVersion.compatibility() ==
                 storage::ConfigurationCompatibility::RecoveredDefaults,
             "missing schema version was not treated as corrupt");
+    const auto sanitizedBackups =
+        QDir(temporary.path())
+            .entryInfoList({QStringLiteral("config.json.corrupt.*.json")}, QDir::Files, QDir::Time);
+    require(!sanitizedBackups.isEmpty() &&
+                !readBytes(sanitizedBackups.first().absoluteFilePath()).contains(backupSecret),
+            "parseable corrupt configuration backup redacts provider credentials");
 }
 
 void futureVersionIsReadOnly() {

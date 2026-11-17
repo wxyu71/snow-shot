@@ -12,5 +12,6 @@ struct ConfigurationSecretLoadResult {
 
 [[nodiscard]] bool protectConfigurationSecrets(QJsonObject* document, QString* error);
 [[nodiscard]] ConfigurationSecretLoadResult unprotectConfigurationSecrets(QJsonObject* document);
+void redactConfigurationSecrets(QJsonObject* document);
 
 } // namespace snow_shot::storage

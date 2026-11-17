@@ -13,6 +13,7 @@
 #include "snow_shot/storage/storagelogging.h"
 #include "snow_shot/shortcuts/shortcutbinding.h"
 
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -352,15 +353,43 @@ QString corruptBackupPath(const QString& configurationFile) {
 }
 
 void preserveCorruptFile(const QString& configurationFile) {
-    if (!QFileInfo::exists(configurationFile)) {
+    QFile source(configurationFile);
+    if (!source.open(QIODevice::ReadOnly))
+        return;
+    const QByteArray original = source.readAll();
+    source.close();
+
+    QJsonParseError parseError;
+    const QJsonDocument parsed = QJsonDocument::fromJson(original, &parseError);
+    QJsonObject backupDocument;
+    if (parseError.error == QJsonParseError::NoError && parsed.isObject()) {
+        backupDocument = parsed.object();
+        redactConfigurationSecrets(&backupDocument);
+    } else {
+        backupDocument.insert(
+            QStringLiteral("diagnostics"),
+            QJsonObject{
+                {QStringLiteral("corrupt_configuration"), true},
+                {QStringLiteral("content_omitted"), true},
+                {QStringLiteral("source_size"), QString::number(original.size())},
+                {QStringLiteral("source_sha256"),
+                 QString::fromLatin1(
+                     QCryptographicHash::hash(original, QCryptographicHash::Sha256).toHex())}});
+    }
+
+    QByteArray bytes = QJsonDocument(backupDocument).toJson(QJsonDocument::Indented);
+    if (!bytes.endsWith('\n'))
+        bytes.append('\n');
+    const QString backup = corruptBackupPath(configurationFile);
+    QSaveFile file(backup);
+    const qint64 byteCount = static_cast<qint64>(bytes.size());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(bytes) != byteCount ||
+        !file.commit()) {
+        qCWarning(storageLog) << "Unable to preserve sanitized invalid configuration"
+                              << configurationFile;
         return;
     }
-    const QString backup = corruptBackupPath(configurationFile);
-    if (QFile::copy(configurationFile, backup)) {
-        qCWarning(storageLog) << "Preserved invalid configuration at" << backup;
-    } else {
-        qCWarning(storageLog) << "Unable to preserve invalid configuration" << configurationFile;
-    }
+    qCWarning(storageLog) << "Preserved sanitized invalid configuration at" << backup;
 }
 
 void cleanupCorruptBackups(const QString& configurationFile) {
