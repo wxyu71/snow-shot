@@ -77,6 +77,9 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         for path in (
             "snow_shot/resources/update-trusted-keys.json",
             ".gitmodules",
+            "snow-crates/crates/simd-paddle-ocr-rs",
+            "snow-draw-engine-gpui/Cargo.toml",
+            "snow-draw-engine-gpui/Cargo.lock",
         ):
             result = self.decision([path])
             self.assertEqual(result["mode"], "review")
@@ -98,6 +101,27 @@ class UpstreamSyncGuardTests(unittest.TestCase):
 
     def test_workflow_actions_are_pinned_to_commit_shas(self):
         upstream_sync.assert_workflow_actions_pinned()
+
+    def test_external_source_dependency_parser_rejects_mutable_refs(self):
+        pinned = {
+            "git": "https://example.invalid/dependency.git",
+            "rev": "0123456789abcdef0123456789abcdef01234567",
+        }
+        self.assertTrue(upstream_sync.immutable_git_dependency(pinned))
+        self.assertFalse(
+            upstream_sync.immutable_git_dependency(
+                {"git": pinned["git"], "branch": "main", "rev": pinned["rev"]}
+            )
+        )
+        self.assertFalse(
+            upstream_sync.immutable_git_dependency(
+                {"git": pinned["git"], "rev": "v1.2.3"}
+            )
+        )
+
+    def test_external_source_dependencies_are_immutable(self):
+        upstream_sync.assert_external_source_pins()
+
 
     def test_local_control_privilege_boundaries_are_protected(self):
         for path in (

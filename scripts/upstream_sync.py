@@ -11,6 +11,7 @@ import fnmatch
 import json
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -229,6 +230,86 @@ def assert_privacy_persistence_defaults_disabled() -> None:
         )
 
 
+
+def immutable_git_dependency(specification: dict) -> bool:
+    revision = specification.get("rev")
+    return (
+        isinstance(specification.get("git"), str)
+        and isinstance(revision, str)
+        and re.fullmatch(r"[0-9a-fA-F]{40}", revision) is not None
+        and "branch" not in specification
+        and "tag" not in specification
+    )
+
+
+def _git_dependency_specs(value, location: str = ""):
+    if isinstance(value, dict):
+        if "git" in value:
+            yield location or "<root>", value
+        for key, child in value.items():
+            child_location = f"{location}.{key}" if location else str(key)
+            yield from _git_dependency_specs(child, child_location)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _git_dependency_specs(child, f"{location}[{index}]")
+
+
+def assert_external_source_pins() -> None:
+    violations: list[str] = []
+    gitmodules = ROOT / ".gitmodules"
+    if gitmodules.exists():
+        content = gitmodules.read_text(encoding="utf-8")
+        if re.search(r"(?m)^\s*branch\s*=", content):
+            violations.append(".gitmodules: submodules must follow the recorded gitlink, not a branch")
+        for match in re.finditer(r"(?m)^\s*path\s*=\s*(.+?)\s*$", content):
+            submodule_path = match.group(1)
+            candidate = Path(submodule_path)
+            if candidate.is_absolute() or ".." in candidate.parts:
+                violations.append(f".gitmodules: unsafe submodule path: {submodule_path}")
+                continue
+            staged = subprocess.run(
+                ["git", "ls-files", "--stage", "--", submodule_path],
+                cwd=ROOT, capture_output=True, text=True
+            )
+            fields = staged.stdout.strip().split(maxsplit=3)
+            if (
+                staged.returncode != 0
+                or len(fields) < 4
+                or fields[0] != "160000"
+                or re.fullmatch(r"[0-9a-fA-F]{40}", fields[1]) is None
+            ):
+                violations.append(
+                    f"{submodule_path}: submodule must be a tracked 160000 gitlink at a full commit"
+                )
+
+    tracked = git("ls-files", "-z").split(b"\x00")
+    manifests = sorted(
+        path.decode("utf-8", errors="replace")
+        for path in tracked
+        if path and (
+            path == b"Cargo.toml" or path.endswith(b"/Cargo.toml")
+        )
+    )
+    for relative in manifests:
+        path = ROOT / relative
+        try:
+            document = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            violations.append(f"{relative}: cannot inspect Cargo source pins: {error}")
+            continue
+        for location, specification in _git_dependency_specs(document):
+            if not immutable_git_dependency(specification):
+                violations.append(
+                    f"{relative}:{location}: git dependency requires an exact 40-character rev "
+                    "and must not use branch/tag"
+                )
+    if violations:
+        raise SystemExit(
+            "External source dependencies must be immutable:\n" + "\n".join(violations)
+        )
+
+
+
 def assert_workflow_actions_pinned() -> None:
     violations: list[str] = []
     for path in sorted(WORKFLOW_ROOT.glob("*.y*ml")):
@@ -260,6 +341,7 @@ def assert_deleted_files_absent() -> None:
     assert_sensitive_local_control_defaults_disabled()
     assert_privacy_persistence_defaults_disabled()
     assert_workflow_actions_pinned()
+    assert_external_source_pins()
 
 
 def main() -> None:
