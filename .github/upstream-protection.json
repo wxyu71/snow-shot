@@ -72,6 +72,8 @@
     "snow_shot/tests/cloud_upload_tests.cpp",
     "snow_shot/tests/text_translation_tests.cpp",
     "snow_shot/src/app/applicationcontroller.cpp",
+    "snow_shot/src/app/main.cpp",
+    "snow_shot/src/presentation/capture/screenshotscrollingcapturecontroller.cpp",
     "snow_shot/src/app/mcp/screenshotmcpserver.cpp",
     "snow_shot/include/snow_shot/app/mcp/screenshotmcpserver.h",
     "snow_shot/src/app/singleinstancecoordinator.cpp",

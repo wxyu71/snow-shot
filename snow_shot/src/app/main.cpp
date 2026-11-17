@@ -156,12 +156,10 @@ int main(int argc, char* argv[]) {
     }
     QCoreApplication::setOrganizationName(snow_shot::app::edition::registryName());
     QString applicationName = snow_shot::app::edition::applicationName();
+#ifdef SNOW_SHOT_CONTROLLER_LIFETIME_TESTS
     QString e2eInstanceId;
-    bool e2eCaptureEnabled = false;
     for (int index = 1; index < argc; ++index) {
         const QString argument = QString::fromLocal8Bit(argv[index]);
-        e2eCaptureEnabled =
-            e2eCaptureEnabled || argument == QStringLiteral("--e2e-allow-overlay-capture");
         constexpr auto e2eInstancePrefix = "--e2e-instance-id=";
         if (argument.startsWith(QString::fromLatin1(e2eInstancePrefix))) {
             e2eInstanceId =
@@ -173,6 +171,7 @@ int main(int argc, char* argv[]) {
             .hasMatch()) {
         applicationName += QStringLiteral("-e2e-") + e2eInstanceId;
     }
+#endif
     QCoreApplication::setApplicationName(applicationName);
     QCoreApplication::setApplicationVersion(QStringLiteral(SNOW_DIAGNOSTICS_VERSION));
 #ifdef SNOW_SHOT_CONTROLLER_LIFETIME_TESTS
