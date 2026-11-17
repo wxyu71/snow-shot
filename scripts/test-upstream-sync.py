@@ -85,6 +85,20 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_community_updater_has_no_trusted_remote_signer(self):
         upstream_sync.assert_community_update_signers_disabled()
 
+    def test_sensitive_local_control_defaults_are_fail_closed(self):
+        upstream_sync.assert_sensitive_local_control_defaults_disabled()
+
+    def test_local_control_privilege_boundaries_are_protected(self):
+        for path in (
+            "snow_shot/src/app/mcp/screenshotmcpserver.cpp",
+            "snow_shot/src/app/singleinstancecoordinator.cpp",
+            "snow_shot/src/platform/windows/administratorlaunch.cpp",
+            "snow_shot/src/storage/configurationschema.cpp",
+        ):
+            result = self.decision([path])
+            self.assertEqual(result["mode"], "review")
+            self.assertEqual(result["protected"], [path])
+
     def test_current_tree_has_no_account_telemetry_or_upstream_runtime_endpoints(self):
         upstream_sync.assert_forbidden_runtime_content_absent()
 

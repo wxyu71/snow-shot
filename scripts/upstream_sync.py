@@ -16,6 +16,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / ".github" / "upstream-protection.json"
 COMMUNITY_UPDATE_KEYS = ROOT / "snow_shot" / "resources" / "update-trusted-keys.json"
+CONFIGURATION_SCHEMA = ROOT / "snow_shot" / "src" / "storage" / "configurationschema.cpp"
 COMMERCIAL_PATH = re.compile(
     r"(?:^|[/_-])(account|membership|membercenter|billing|payment|purchase|topup|"
     r"recharge|credits?|points?|paywall|subscription|login|signin|signup|register|checkout)(?:[/_.-]|$)", re.I
@@ -192,6 +193,23 @@ def assert_community_update_signers_disabled() -> None:
         )
 
 
+def assert_sensitive_local_control_defaults_disabled() -> None:
+    try:
+        schema = CONFIGURATION_SCHEMA.read_text(encoding="utf-8")
+    except OSError as error:
+        raise SystemExit(f"Community configuration schema is unavailable: {error}") from error
+    required = (
+        '{u"system/launch_as_administrator", booleanDefault(false), ConfigurationValueKind::Boolean}',
+        '{u"mcp/enabled", booleanDefault(false), ConfigurationValueKind::Boolean}',
+    )
+    missing = [entry for entry in required if entry not in schema]
+    if missing:
+        raise SystemExit(
+            "Sensitive local-control defaults must remain fail-closed in Community: " +
+            ", ".join(missing)
+        )
+
+
 def assert_deleted_files_absent() -> None:
     policy = json.loads(POLICY.read_text(encoding="utf-8"))
     for path in policy["deleted_files"]:
@@ -202,6 +220,7 @@ def assert_deleted_files_absent() -> None:
             raise SystemExit(f"Previously removed commercial file was restored: {path}")
     assert_forbidden_runtime_content_absent()
     assert_community_update_signers_disabled()
+    assert_sensitive_local_control_defaults_disabled()
 
 
 def main() -> None:
