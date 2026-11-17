@@ -21,10 +21,10 @@ The selected model reports acquisition failure without switching to another mode
 Verified caches are retained and stale activation results are discarded.
 
 Downloads, extracted runtime files, and packaged assets are verified with SHA-256
-before publication. Normal startup reuses installed assets after checking the
-manifest, file types and sizes, completion markers, and bundled executable
-permissions and architecture. It does not hash the full files again, so same-size
-content changes after installation are not detected by startup validation.
+before publication. Normal startup reuses installed model data after checking the
+manifest, file types and sizes, and completion markers. User-writable cached runtime
+files are re-hashed before every activation because they contain executable code;
+bundled runtime validation continues to rely on the application package trust boundary.
 
 The default maximum-side detector policy selects limits of 960, 1500, or 2000
 according to the screenshot's longest side. Minimum-side mode uses 736. Accuracy

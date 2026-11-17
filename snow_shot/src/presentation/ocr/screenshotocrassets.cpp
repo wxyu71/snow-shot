@@ -984,10 +984,16 @@ class ScreenshotOcrAssets::Impl final {
             *error = QStringLiteral("timed out waiting for OCR component storage");
             return false;
         }
-        bool cachedRuntime = !requireBundledRuntime && !descriptor->bundled &&
-                             validateComponent(runtimeDirectory(options.cacheRoot, *descriptor),
-                                               descriptor->runtimeFiles, descriptor->runtimeVersion,
-                                               true, &validationError);
+        const QString cachedRuntimeDirectory = runtimeDirectory(options.cacheRoot, *descriptor);
+        // Cached runtime files are executable code stored beneath the user-writable
+        // application data directory. Re-hash them on every activation so an
+        // elevated Snow Shot process can never execute a same-size cache replacement.
+        bool cachedRuntime =
+            !requireBundledRuntime && !descriptor->bundled &&
+            validateComponent(cachedRuntimeDirectory, descriptor->runtimeFiles,
+                              descriptor->runtimeVersion, true, &validationError) &&
+            verifyComponentIntegrity(cachedRuntimeDirectory, descriptor->runtimeFiles,
+                                     &validationError);
         bool cachedModel = validateComponent(modelDirectory(options.cacheRoot, *model),
                                              model->files, model->id, true, &validationError);
         const QString stagingRoot = QDir(options.cacheRoot).filePath(QStringLiteral(".staging"));

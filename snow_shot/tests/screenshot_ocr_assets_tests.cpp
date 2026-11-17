@@ -332,8 +332,9 @@ void installedAssetsUseLightweightChecks() {
             const QString payloadRoot = cached ? cache.path() : offline.path();
             const QDir model(
                 QDir(payloadRoot).filePath(QStringLiteral("models/ppocrv6-small-463ea9f")));
-            // Changed content with unchanged sizes must pass startup checks for every
-            // model role and runtime file. Keep the macOS executable header intact.
+            // Model data keeps lightweight same-size startup checks. Packaged runtime
+            // files may do the same because their trust boundary is the application
+            // installation itself; user-writable cached runtime code is covered below.
             for (const auto& name :
                  {QStringLiteral("PP-OCRv6_det_small.onnx"),
                   QStringLiteral("PP-OCRv6_rec_small.onnx"), QStringLiteral("ppocrv6_dict.txt")})
@@ -341,12 +342,14 @@ void installedAssetsUseLightweightChecks() {
 #ifdef Q_OS_MACOS
             changeFixtureContentsWithoutResizing(QDir(offline.path()).filePath(kWorkerName));
 #else
-            const QDir runtime(
-                QDir(payloadRoot)
-                    .filePath(QStringLiteral("runtimes/1.2.2/%1").arg(kWindowsPlatform)));
-            changeFixtureContentsWithoutResizing(runtime.filePath(kWindowsWorkerName));
-            changeFixtureContentsWithoutResizing(
-                runtime.filePath(QStringLiteral("runtime-manifest.json")));
+            if (!cached) {
+                const QDir runtime(
+                    QDir(payloadRoot)
+                        .filePath(QStringLiteral("runtimes/1.2.2/%1").arg(kWindowsPlatform)));
+                changeFixtureContentsWithoutResizing(runtime.filePath(kWindowsWorkerName));
+                changeFixtureContentsWithoutResizing(
+                    runtime.filePath(QStringLiteral("runtime-manifest.json")));
+            }
 #endif
             const QString detector = model.filePath(QStringLiteral("PP-OCRv6_det_small.onnx"));
             const QString marker = model.filePath(QStringLiteral(".complete.json"));
@@ -401,6 +404,46 @@ void installedAssetsUseLightweightChecks() {
             }
         }
     }
+}
+
+void cachedRuntimeRequiresMatchingHashes() {
+#ifndef Q_OS_MACOS
+    QTemporaryDir offline;
+    QTemporaryDir cache;
+    require(offline.isValid() && cache.isValid(),
+            "temporary cached OCR runtime roots should be available");
+    writeAssetManifest(offline.path(), false);
+    writeAssetManifest(cache.path(), true);
+    const QDir runtime(
+        QDir(cache.path()).filePath(QStringLiteral("runtimes/1.2.2/%1").arg(kWindowsPlatform)));
+    changeFixtureContentsWithoutResizing(runtime.filePath(kWindowsWorkerName));
+
+    ScreenshotOcrAssets::Options options;
+    options.offlineRoot = offline.path();
+    options.cacheRoot = cache.path();
+    std::atomic<int> downloads = 0;
+    options.downloadOverride = [&](const QString& url, const QString&, QString* error) {
+        ++downloads;
+        require(url == QStringLiteral("https://example.invalid/runtime"),
+                "cached runtime corruption must reacquire only executable runtime code");
+        *error = QStringLiteral("fixture runtime reacquisition stopped");
+        return false;
+    };
+
+    ScreenshotOcrAssets assets(options);
+    bool ready = false;
+    QString failure;
+    QObject::connect(&assets, &ScreenshotOcrAssets::ready, &assets,
+                     [&](const ScreenshotOcrResolvedAssets&) { ready = true; });
+    QObject::connect(&assets, &ScreenshotOcrAssets::failed, &assets,
+                     [&](const QString& error) { failure = error; });
+    assets.prepare();
+    require(waitUntil([&] { return ready || !failure.isEmpty(); }, 5'000),
+            "cached runtime integrity validation should complete");
+    require(!ready && downloads == 1 &&
+                failure == QStringLiteral("fixture runtime reacquisition stopped"),
+            "same-size cached executable replacement must never be activated");
+#endif
 }
 
 void downloadedModelsStillRequireMatchingHashes() {
@@ -1343,6 +1386,7 @@ int main(int argc, char** argv) {
     }
     validOfflineAssetsAreSelectedWithoutNetwork();
     installedAssetsUseLightweightChecks();
+    cachedRuntimeRequiresMatchingHashes();
     downloadedModelsStillRequireMatchingHashes();
     acquiredRuntimeStillRequiresMatchingHashes();
     incompleteOfflineAssetsFallBackToOnlineAcquisition();
