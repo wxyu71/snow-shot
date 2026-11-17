@@ -18,7 +18,7 @@ POLICY = ROOT / ".github" / "upstream-protection.json"
 COMMUNITY_UPDATE_KEYS = ROOT / "snow_shot" / "resources" / "update-trusted-keys.json"
 CONFIGURATION_SCHEMA = ROOT / "snow_shot" / "src" / "storage" / "configurationschema.cpp"
 WORKFLOW_ROOT = ROOT / ".github" / "workflows"
-ACTION_USE = re.compile(r"uses:\\s+([^@\\s]+)@([^\\s#]+)")
+ACTION_USE = re.compile(r"uses:\s+([^@\s]+)@([^\s#]+)")
 COMMERCIAL_PATH = re.compile(
     r"(?:^|[/_-])(account|membership|membercenter|billing|payment|purchase|topup|"
     r"recharge|credits?|points?|paywall|subscription|login|signin|signup|register|checkout)(?:[/_.-]|$)", re.I

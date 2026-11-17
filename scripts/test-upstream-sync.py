@@ -91,6 +91,11 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_privacy_persistence_defaults_are_opt_in(self):
         upstream_sync.assert_privacy_persistence_defaults_disabled()
 
+    def test_workflow_action_parser_detects_mutable_major_tag(self):
+        match = upstream_sync.ACTION_USE.search("      - uses: actions/checkout@v4")
+        self.assertIsNotNone(match)
+        self.assertEqual(match.groups(), ("actions/checkout", "v4"))
+
     def test_workflow_actions_are_pinned_to_commit_shas(self):
         upstream_sync.assert_workflow_actions_pinned()
 
