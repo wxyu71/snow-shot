@@ -93,6 +93,7 @@ enum class SettingsSelectBinding {
     PinMouseWheelZoomMode,
     PinTextSelectionOnRecognitionResults,
     PinDuplicateContentAction,
+    FloatingToolbarDropBehavior,
     PinDoubleClickAction,
     PinMiddleClickAction,
     ScreenRecordingClarity,
@@ -372,7 +373,6 @@ struct SettingsLocalShortcutDefinition {
 };
 
 enum class SettingsActionBinding {
-    OpenLoginItemSettings,
     RestartAsAdministrator,
     ClearCaptureHistory,
     ClearPinnedHistory,

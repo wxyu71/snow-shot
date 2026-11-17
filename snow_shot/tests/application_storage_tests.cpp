@@ -2790,8 +2790,12 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
     auto& applicationStorage = initialize(executable, temporary.path());
 
     const storage::SystemSettings system;
-    require(system.autoStartAtBoot() && !system.launchAsAdministrator(),
-            "elevated startup must default off");
+    require(system.autoStartAtBoot() == storage::ConfigurationSchema::defaultValue(
+                                            QStringLiteral("system/auto_start_at_boot"))
+                                            .toBool() &&
+                !system.launchAsAdministrator(),
+            "startup uses the platform default and elevated startup defaults off");
+    require(system.setAutoStartAtBoot(true), "enable startup before testing elevation");
     require(system.setLaunchAsAdministrator(true) && system.launchAsAdministrator(),
             "elevated startup preference must persist");
     require(applicationStorage.flushNow().success, "startup preferences must flush");

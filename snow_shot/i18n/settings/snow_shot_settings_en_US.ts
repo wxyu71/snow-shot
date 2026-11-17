@@ -726,10 +726,6 @@
     <context>
         <name>LoginItemService</name>
         <message>
-            <source>%1 needs a valid code signature to use launch at login. Reinstall the signed app</source>
-            <translation>%1 needs a valid code signature to use launch at login. Reinstall the signed app</translation>
-        </message>
-        <message>
             <source>A launch-at-login change is already in progress</source>
             <translation>A launch-at-login change is already in progress</translation>
         </message>
@@ -742,24 +738,8 @@
             <translation>Could not change launch at login: %1</translation>
         </message>
         <message>
-            <source>Could not save launch-at-login initialization. Registration was not changed</source>
-            <translation>Could not save launch-at-login initialization. Registration was not changed</translation>
-        </message>
-        <message>
             <source>Could not save the launch-at-login preference. The displayed macOS status is still current</source>
             <translation>Could not save the launch-at-login preference. The displayed macOS status is still current</translation>
-        </message>
-        <message>
-            <source>Move the signed %1 app to /Applications or ~/Applications to use launch at login</source>
-            <translation>Move the signed %1 app to /Applications or ~/Applications to use launch at login</translation>
-        </message>
-        <message>
-            <source>Move the signed Snow Shot app to /Applications or ~/Applications to use launch at login</source>
-            <translation>Move the signed Snow Shot app to /Applications or ~/Applications to use launch at login</translation>
-        </message>
-        <message>
-            <source>Snow Shot needs a valid code signature to use launch at login. Reinstall the signed app</source>
-            <translation>Snow Shot needs a valid code signature to use launch at login. Reinstall the signed app</translation>
         </message>
         <message>
             <source>macOS did not apply the launch-at-login change. Check Login Items in System Settings</source>
@@ -1499,6 +1479,10 @@
             <translation>Automatically select newly created elements</translation>
         </message>
         <message>
+            <source>Automatically start Snow Shot in the background when you log in to your Mac</source>
+            <translation>Automatically start Snow Shot in the background when you log in to your Mac</translation>
+        </message>
+        <message>
             <source>Autostart</source>
             <translation>Autostart</translation>
         </message>
@@ -1841,6 +1825,10 @@
         <message>
             <source>Choose what happens automatically when text recognition completes</source>
             <translation>Choose what happens automatically when text recognition completes</translation>
+        </message>
+        <message>
+            <source>Choose what happens when content is dropped on the floating toolbar</source>
+            <translation>Choose what happens when content is dropped on the floating toolbar</translation>
         </message>
         <message>
             <source>Choose what happens when the clipboard content or selected file is already pinned</source>
@@ -2751,6 +2739,10 @@
             <translation>Image and document files</translation>
         </message>
         <message>
+            <source>Image editing</source>
+            <translation>Image editing</translation>
+        </message>
+        <message>
             <source>Image export</source>
             <translation>Image export</translation>
         </message>
@@ -2785,6 +2777,14 @@
         <message>
             <source>Image size</source>
             <translation>Image size</translation>
+        </message>
+        <message>
+            <source>Image splitting</source>
+            <translation>Image splitting</translation>
+        </message>
+        <message>
+            <source>Image stitching</source>
+            <translation>Image stitching</translation>
         </message>
         <message>
             <source>Import</source>
@@ -3035,10 +3035,6 @@
             <translation>Maintain selection aspect ratio</translation>
         </message>
         <message>
-            <source>Manage Snow Shot's login permission in macOS System Settings</source>
-            <translation>Manage Snow Shot's login permission in macOS System Settings</translation>
-        </message>
-        <message>
             <source>Manage macOS permissions for Snow Shot</source>
             <translation>Manage macOS permissions for Snow Shot</translation>
         </message>
@@ -3244,16 +3240,12 @@
             <translation>Only when displayed</translation>
         </message>
         <message>
-            <source>Open</source>
-            <translation>Open</translation>
-        </message>
-        <message>
-            <source>Open Login Items settings</source>
-            <translation>Open Login Items settings</translation>
-        </message>
-        <message>
             <source>Open a canvas on the current display or toggle click-through</source>
             <translation>Open a canvas on the current display or toggle click-through</translation>
+        </message>
+        <message>
+            <source>Open at login</source>
+            <translation>Open at login</translation>
         </message>
         <message>
             <source>Open image editing for each selected image file, or an empty window if no images are selected</source>
@@ -4674,6 +4666,10 @@
         <message>
             <source>Tool positions</source>
             <translation>Tool positions</translation>
+        </message>
+        <message>
+            <source>Toolbar drop behavior</source>
+            <translation>Toolbar drop behavior</translation>
         </message>
         <message>
             <source>Toolbar opacity</source>
