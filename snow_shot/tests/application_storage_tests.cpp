@@ -661,7 +661,7 @@ void portableSystemIntegrationDefaults() {
     const QString enabledKey = QStringLiteral("system/auto_start_at_boot");
     const QString menuKey = QStringLiteral("system/context_menu_mode");
     auto& appStorage = initialize(executable, fallback);
-    require(storage::SystemSettings().autoStartAtBoot() &&
+    require(!storage::SystemSettings().autoStartAtBoot() &&
                 appStorage.configuration().value(menuKey) == QStringLiteral("image_files"),
             "application data storage keeps the standard integration defaults");
     require(QDir().mkpath(executable), "create a portable executable directory");
@@ -670,7 +670,7 @@ void portableSystemIntegrationDefaults() {
     static_cast<void>(initialize(executable, fallback));
     if (snow_shot::app::distribution::isStoreManaged()) {
         require(appStorage.status().effectiveMode == storage::StorageMode::ApplicationData &&
-                    storage::SystemSettings().autoStartAtBoot() &&
+                    !storage::SystemSettings().autoStartAtBoot() &&
                     appStorage.configuration().value(menuKey) == QStringLiteral("image_files"),
                 "Store distribution ignores portable defaults");
         return;
@@ -817,7 +817,7 @@ void defaultsAndTypedRoundTrip() {
                         .toObject()
                         .value(QStringLiteral("smart_selection")) ==
                     QStringLiteral("window_sub_element") &&
-                history.value(QStringLiteral("enabled")).toBool() &&
+                !history.value(QStringLiteral("enabled")).toBool() &&
                 history.value(QStringLiteral("retention_days")).toInt() == 7 &&
                 history.value(QStringLiteral("max_entries")).toInt() == 100 &&
                 history.value(QStringLiteral("max_disk_mib")).toInt() == 1024 &&
@@ -1007,7 +1007,7 @@ void settingsSchemaDefaultsAndValidationAreComplete() {
         return storage::ConfigurationSchema::defaultValue(QString::fromLatin1(key));
     };
     require(
-        defaultValue("system/auto_start_at_boot").toBool() &&
+        !defaultValue("system/auto_start_at_boot").toBool() &&
             defaultValue("network/proxy").toString() == QStringLiteral("none") &&
             defaultValue("text_recognition/model_type").toString() == QStringLiteral("small") &&
             defaultValue("text_recognition/detector_resize_policy").toString() ==
@@ -4586,7 +4586,7 @@ void pinnedManagementConfigurationAndTrayMigration() {
                                          true, 30000);
     require(retained.value(QStringLiteral("tray/menu_options")).toArray() == customized,
             "customized tray menu remains unchanged");
-    require(migrated.value(QStringLiteral("pinned_history/enabled")).toBool() &&
+    require(!migrated.value(QStringLiteral("pinned_history/enabled")).toBool() &&
                 migrated.value(QStringLiteral("pinned_history/retention_days")).toInt() == 7 &&
                 migrated.value(QStringLiteral("pinned_history/max_entries")).toInt() == 100 &&
                 migrated.value(QStringLiteral("pinned_history/max_disk_mib")).toInt() == 1024,

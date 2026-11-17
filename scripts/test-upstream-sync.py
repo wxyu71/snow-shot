@@ -88,6 +88,9 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_sensitive_local_control_defaults_are_fail_closed(self):
         upstream_sync.assert_sensitive_local_control_defaults_disabled()
 
+    def test_privacy_persistence_defaults_are_opt_in(self):
+        upstream_sync.assert_privacy_persistence_defaults_disabled()
+
     def test_local_control_privilege_boundaries_are_protected(self):
         for path in (
             "snow_shot/src/app/mcp/screenshotmcpserver.cpp",

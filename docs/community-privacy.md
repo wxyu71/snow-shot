@@ -6,7 +6,9 @@ code. Diagnostics and crash capture are local-only; Crashpad uploads are
 explicitly disabled.
 
 Screenshots and the optional offline PP-OCRv6 engine run on the local computer
-without remote OCR requests.
+without remote OCR requests. Fresh Community profiles also keep automatic startup,
+capture history, and pinned-image history disabled until the user explicitly
+enables them. Existing saved preferences are preserved.
 
 **Online OCR is optional and provider-controlled in Settings.**
 
