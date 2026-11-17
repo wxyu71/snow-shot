@@ -642,12 +642,16 @@ class ScreenshotOcrRecognitionService::Impl final {
         return m_processState == ProcessState::Stopping;
     }
     bool residentEffective() const {
-        return m_configuration.residentProcess && !m_residentSuspended;
+        // Residency is a post-use optimization, never a startup trigger. In particular,
+        // loading a saved resident_process=true preference must not download or execute
+        // OCR runtime code before an interactive recognition request.
+        return m_configuration.residentProcess && m_residencyArmed && !m_residentSuspended;
     }
     bool hotEffective() const {
         return residentEffective() && m_configuration.modelHotStart;
     }
     void rearmResidency() {
+        m_residencyArmed = true;
         if (!m_residentSuspended && !m_retryPending)
             return;
         m_residentSuspended = false;
@@ -1394,6 +1398,7 @@ class ScreenshotOcrRecognitionService::Impl final {
     quint64 m_idleGeneration = 0, m_sessionIdleGeneration = 0;
     bool m_sessionUsed = false, m_sessionWarm = false, m_invalidateWarmSession = false;
     bool m_accelerationReadyPending = false;
+    bool m_residencyArmed = false;
     bool m_residentSuspended = false, m_retryPending = false, m_assetPreparing = false;
     bool m_reconcileScheduled = false, m_delivering = false;
     int m_assetRetryCount = 0;

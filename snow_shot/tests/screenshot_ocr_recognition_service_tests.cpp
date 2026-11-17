@@ -293,13 +293,12 @@ void residentRuntimeRebuildsWarmSessions(
         ScreenshotOcrRuntimeConfiguration configuration;
         configuration.residentProcess = configuration.modelHotStart = true;
         service.setRuntimeConfiguration(configuration);
-        require(waitUntil([&] { return count(QStringLiteral("ocr.engine_ready")) == 1; },
-                          kRecognitionTimeoutMs),
-                "real warm-up must create the selected engine");
-        const auto pid = service.processId();
-        require(pid != 0 && count(QStringLiteral("ocr.buffer_allocated")) == 0 &&
-                    count(QStringLiteral("ocr.worker_finished")) == 0,
-                "real warm-up must hold no transfer buffer and perform no inference");
+        processEventsFor(100);
+        require(service.processId() == 0 &&
+                    count(QStringLiteral("ocr.process_started")) == 0 &&
+                    count(QStringLiteral("ocr.engine_ready")) == 0,
+                "resident settings alone must not start or warm OCR before first use");
+        qint64 pid = 0;
         QObject receiver;
         int completed = 0;
         for (int cycle = 1; cycle <= 2; ++cycle) {
@@ -335,9 +334,11 @@ void residentRuntimeRebuildsWarmSessions(
                     count(QStringLiteral("ocr.engine_ready"), QStringLiteral("request_reset")) ==
                         cycle,
                 "hot reset must reuse compiled models after each real inference");
-            require(service.processId() == pid &&
+            if (cycle == 1)
+                pid = service.processId();
+            require(pid != 0 && service.processId() == pid &&
                         count(QStringLiteral("ocr.buffer_released")) == cycle,
-                    "warm cycles must retain the process and release every transfer mapping");
+                    "first use must arm residency and warm cycles must retain the process");
         }
         configuration.modelHotStart = false;
         service.setRuntimeConfiguration(configuration);
@@ -1253,11 +1254,23 @@ void storageRelocationAppliesLatestConfiguration() {
     require(events().isEmpty() && service.processId() == 0,
             "configuration while paused cannot create a process or warm session");
     service.resumeStorage(fixture.filePath(QStringLiteral("new")));
-    require(waitUntil([&] { return !preparations().isEmpty(); }, 5000) &&
-                preparations().back().startsWith("prepare 010101") && service.processId() != 0,
-            "resumed resident hot start uses current detector, processing and acceleration flags");
+    processEventsFor(100);
+    require(events().isEmpty() && service.processId() == 0,
+            "resuming storage must not let residency alone start OCR");
     require(service.runtimeConfiguration() == configuration,
             "resumed resources retain the selected model and latest runtime policy");
+    int residentCompletions = 0;
+    require(service.recognize({image, QRectF(0, 0, 8, 8)}, &receiver,
+                              [&](ScreenshotOcrRecognitionResult result) {
+                                  require(result.error.isEmpty(),
+                                          "first post-relocation OCR request succeeds");
+                                  ++residentCompletions;
+                              }) != 0 &&
+                waitUntil([&] { return residentCompletions == 1 && service.processId() != 0; },
+                          5000) &&
+                !preparations().isEmpty() &&
+                preparations().back().startsWith("prepare 010101"),
+            "first interactive OCR use arms residency with the latest runtime policy");
 
     service.suspendStorage();
     auto secondDrain = std::async(std::launch::async, [&] { service.drainStorage(); });

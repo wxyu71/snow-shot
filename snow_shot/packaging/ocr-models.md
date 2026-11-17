@@ -32,8 +32,10 @@ First uses a recognition-width floor of 320; Speed First uses 48. Widths align t
 32 pixels. Recognition text and confidence can differ from the previous runtime.
 The recognizer uses the model's Softmax probabilities for confidence. Empty
 lines and confidence below 0.5 are filtered. Residency defaults on in Full and off
-in Mini. Hot start defaults off in both editions and is effective only when
-residency is enabled.
+in Mini, but it is a post-use optimization: loading the setting at application
+startup never acquires assets or starts the OCR worker. The first interactive
+local OCR request arms residency for the process lifetime. Hot start defaults off
+in both editions and is effective only after residency has been armed.
 
 Hardware acceleration also defaults off. Windows builds enable Vulkan 1.3
 through the GPU driver's loader; Apple Silicon builds enable Metal. Device
@@ -63,10 +65,11 @@ capacity. The mapping is released after the last image is copied into the child,
 independently of inference and session lifetime.
 
 After three unexpected exits in 60 seconds, background residency is suspended.
-The first two retries wait 1 and 2 seconds. The next user recognition re-arms
-residency; automatic prefetch runs on demand while suspended. Background resource
-acquisition retries after 5, 15, and then 60 seconds without showing settings
-errors. Warm-up failures are logged and retried on the next recognition.
+The first two retries wait 1 and 2 seconds. The next interactive user recognition
+re-arms residency; automatic prefetch runs only on demand while suspended. Asset
+acquisition retries after 5, 15, and then 60 seconds only after OCR demand has
+armed or requested the runtime; startup configuration alone never begins that
+retry loop. Warm-up failures are logged and retried on the next recognition.
 
 ## Runtime preparation and publication
 
