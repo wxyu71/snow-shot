@@ -17,6 +17,7 @@
     "scripts/test-close-legacy-issues.ps1"
   ],
   "protected_globs": [
+    ".gitmodules",
     "CMakeLists.txt",
     "snow_shot/CMakeLists.txt",
     "cmake/SnowShotMini.cmake",
@@ -55,6 +56,11 @@
     "snow_shot/src/presentation/ocr/screenshotimageconversionview.cpp",
     "snow_shot/include/snow_shot/presentation/screenshotimageconversionview.h",
     "snow_shot/include/snow_shot/update/updateservice.h",
+    "snow_shot/resources/update-trusted-keys.json",
+    "snow_shot/rust/snow-shot-updater/build.rs",
+    "snow_shot/rust/snow-shot-updater/src/contract.rs",
+    "snow_shot/src/update/startupupdate.cpp",
+    "snow_shot/src/update/updateservice.cpp",
     "snow_shot/rust/snow-shot-updater/src/github.rs",
     "snow_shot/rust/snow-shot-updater/src/gitee.rs",
     "snow_shot/i18n/settings/*.ts",

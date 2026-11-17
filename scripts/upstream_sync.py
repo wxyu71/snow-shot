@@ -15,6 +15,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / ".github" / "upstream-protection.json"
+COMMUNITY_UPDATE_KEYS = ROOT / "snow_shot" / "resources" / "update-trusted-keys.json"
 COMMERCIAL_PATH = re.compile(
     r"(?:^|[/_-])(account|membership|membercenter|billing|payment|purchase|topup|"
     r"recharge|credits?|points?|paywall|subscription|login|signin|signup|register|checkout)(?:[/_.-]|$)", re.I
@@ -179,6 +180,18 @@ def assert_forbidden_runtime_content_absent() -> None:
         )
 
 
+def assert_community_update_signers_disabled() -> None:
+    try:
+        document = json.loads(COMMUNITY_UPDATE_KEYS.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"Community update trust store is invalid: {error}") from error
+    if not isinstance(document, dict) or set(document) != {"keys"} or document["keys"] != []:
+        raise SystemExit(
+            "Community updater must not embed remote release signing keys; "
+            "publishers are disabled until the community establishes its own signer."
+        )
+
+
 def assert_deleted_files_absent() -> None:
     policy = json.loads(POLICY.read_text(encoding="utf-8"))
     for path in policy["deleted_files"]:
@@ -188,6 +201,7 @@ def assert_deleted_files_absent() -> None:
         ).returncode == 0:
             raise SystemExit(f"Previously removed commercial file was restored: {path}")
     assert_forbidden_runtime_content_absent()
+    assert_community_update_signers_disabled()
 
 
 def main() -> None:

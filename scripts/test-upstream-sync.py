@@ -73,6 +73,18 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_release_configuration_is_protected(self):
         self.assertEqual(self.decision(["CMakeLists.txt"])["mode"], "review")
 
+    def test_update_trust_store_and_submodule_metadata_are_protected(self):
+        for path in (
+            "snow_shot/resources/update-trusted-keys.json",
+            ".gitmodules",
+        ):
+            result = self.decision([path])
+            self.assertEqual(result["mode"], "review")
+            self.assertEqual(result["protected"], [path])
+
+    def test_community_updater_has_no_trusted_remote_signer(self):
+        upstream_sync.assert_community_update_signers_disabled()
+
     def test_current_tree_has_no_account_telemetry_or_upstream_runtime_endpoints(self):
         upstream_sync.assert_forbidden_runtime_content_absent()
 
