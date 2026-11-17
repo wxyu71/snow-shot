@@ -133,7 +133,8 @@ void persistence(const QString& provider) {
     require(textTranslationConfigurationsFromJson(reopened.value(key)).first() == value,
             "roundtrip retains endpoint and identity");
     for (const auto& url :
-         {QStringLiteral("ftp://host/path"), QStringLiteral("https://user:pass@host/path"),
+         {QStringLiteral("ftp://host/path"), QStringLiteral("http://example.com/path"),
+          QStringLiteral("https://user:pass@host/path"),
           QStringLiteral("https://host/path#fragment")})
         require(!validTranslationEndpoint(url), "invalid endpoint rejected");
     auto json = textTranslationConfigurationsToJson({value}).first().toObject();

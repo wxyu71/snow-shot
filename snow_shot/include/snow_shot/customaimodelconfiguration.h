@@ -1,6 +1,8 @@
 #ifndef SNOW_SHOT_CUSTOMAIMODELCONFIGURATION_H
 #define SNOW_SHOT_CUSTOMAIMODELCONFIGURATION_H
 
+#include "snow_shot/serverconfiguration.h"
+
 #include <QCryptographicHash>
 #include <QJsonDocument>
 #include <QJsonArray>
@@ -48,8 +50,8 @@ enum class CustomAiModelUrlError { None, InvalidBaseUrl, FullEndpoint };
 inline CustomAiModelUrlError customAiModelUrlError(const QString& value) {
     const QUrl url(value, QUrl::StrictMode);
     if (!url.isValid() || url.isRelative() || url.host().isEmpty() ||
-        (url.scheme() != QStringLiteral("https") && url.scheme() != QStringLiteral("http")) ||
-        !url.userInfo().isEmpty() || url.hasQuery() || url.hasFragment()) {
+        !secureServiceUrl(url) || !url.userInfo().isEmpty() || url.hasQuery() ||
+        url.hasFragment()) {
         return CustomAiModelUrlError::InvalidBaseUrl;
     }
     if (url.path().endsWith(QStringLiteral("/chat/completions"), Qt::CaseInsensitive)) {

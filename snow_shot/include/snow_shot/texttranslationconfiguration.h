@@ -1,6 +1,8 @@
 #ifndef SNOW_SHOT_TEXTTRANSLATIONCONFIGURATION_H
 #define SNOW_SHOT_TEXTTRANSLATIONCONFIGURATION_H
 
+#include "snow_shot/serverconfiguration.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMetaType>
@@ -30,8 +32,7 @@ using TextTranslationConfigurations = QVector<TextTranslationConfiguration>;
 inline bool validTranslationEndpoint(const QString& endpoint) {
     const QUrl url(endpoint, QUrl::StrictMode);
     return url.isValid() && !url.isRelative() && !url.host().isEmpty() &&
-           (url.scheme() == QStringLiteral("https") || url.scheme() == QStringLiteral("http")) &&
-           url.userInfo().isEmpty() && !url.hasFragment();
+           secureServiceUrl(url) && url.userInfo().isEmpty() && !url.hasFragment();
 }
 
 inline QJsonArray textTranslationConfigurationsToJson(const TextTranslationConfigurations& values) {

@@ -1830,6 +1830,9 @@ void customServerDefaultsAndValidation() {
     require(!client.setBaseUrl(QStringLiteral("https://user@example.test")) &&
                 client.baseUrl() == buildDefault && changes == 0,
             "invalid setter preserves server");
+    require(!client.setBaseUrl(QStringLiteral("http://example.test/service")) &&
+                client.baseUrl() == buildDefault && changes == 0,
+            "remote plaintext HTTP server is rejected");
     require(client.setBaseUrl(QStringLiteral(" https://example.test/prefix/// ")) &&
                 client.baseUrl() == QStringLiteral("https://example.test/prefix") && changes == 1,
             "valid server is normalized and notified");

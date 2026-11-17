@@ -263,6 +263,7 @@ void storageContracts() {
         require(!store.setValue(key, QJsonArray()), "read-only storage rejects deletion");
     }
     for (const auto& url : {QStringLiteral("ftp://example.com"),
+                            QStringLiteral("http://example.com/v1"),
                             QStringLiteral("https://user:password@example.com/v1"),
                             QStringLiteral("https://example.com/v1?key=x"),
                             QStringLiteral("https://example.com/v1#x"), QStringLiteral("/v1"),

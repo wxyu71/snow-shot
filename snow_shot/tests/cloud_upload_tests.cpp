@@ -75,8 +75,9 @@ void settingsContracts() {
     require(cloudUploadSettingsFromJson(reopened.value(key)) == settings,
             "cloud settings roundtrip");
     for (const auto& endpoint :
-         {QStringLiteral("https://user:pass@host"), QStringLiteral("https://host?a=1"),
-          QStringLiteral("https://host#x"), QStringLiteral("ftp://host")})
+         {QStringLiteral("http://example.com"), QStringLiteral("https://user:pass@host"),
+          QStringLiteral("https://host?a=1"), QStringLiteral("https://host#x"),
+          QStringLiteral("ftp://host")})
         require(!validCloudUploadUrl(endpoint), "invalid cloud endpoint rejected");
     auto virtualInvalid = profile;
     virtualInvalid.addressingStyle = QStringLiteral("virtual");
