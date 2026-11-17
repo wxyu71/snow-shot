@@ -27,7 +27,6 @@
 #include <QNetworkReply>
 #include <QNetworkRequest>
 #include <QTimer>
-#include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QCoreApplication>
 #include <QThreadPool>
@@ -625,11 +624,7 @@ struct SnowShotApiClient::Request {
 QString SnowShotApiClient::configuredBaseUrl(const QString& savedUrl) {
     if (const auto url = snow_shot::normalizedServerUrl(savedUrl); url && !url->isEmpty())
         return *url;
-    const QString overrideUrl =
-        QProcessEnvironment::systemEnvironment().value(QStringLiteral("SNOW_SHOT_API_BASE_URL"));
-    if (const auto url = snow_shot::normalizedServerUrl(overrideUrl); url && !url->isEmpty())
-        return *url;
-    // No silent fallback to Snow Shot-operated endpoints.
+    // Community routing is explicit: only a saved user configuration may select this service.
     return {};
 }
 

@@ -54,6 +54,8 @@
     "scripts/test-upstream-sync.py",
     "docs/community-*",
     "snow_shot/src/network/baidupaddleocrclient.cpp",
+    "snow_shot/src/network/snowshotapiclient.cpp",
+    "snow_shot/tests/snowshot_api_client_tests.cpp",
     "snow_shot/include/snow_shot/network/baidupaddleocrclient.h",
     "snow_shot/src/presentation/ocr/screenshotimageconversioncontroller.cpp",
     "snow_shot/include/snow_shot/presentation/screenshotimageconversioncontroller.h",

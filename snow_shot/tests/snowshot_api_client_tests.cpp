@@ -1817,15 +1817,13 @@ void latexResponseContracts() {
 void customServerDefaultsAndValidation() {
     const QByteArray previous = qgetenv("SNOW_SHOT_API_BASE_URL");
     const bool wasSet = qEnvironmentVariableIsSet("SNOW_SHOT_API_BASE_URL");
-    qunsetenv("SNOW_SHOT_API_BASE_URL");
-    const QString buildDefault = SnowShotApiClient::configuredBaseUrl();
-    require(buildDefault.isEmpty(), "community build never defaults to Snow Shot services");
     qputenv("SNOW_SHOT_API_BASE_URL", " http://localhost:9876/dev/// ");
-    require(SnowShotApiClient::configuredBaseUrl() == QStringLiteral("http://localhost:9876/dev"),
-            "environment overrides build default and normalizes it");
+    const QString buildDefault = SnowShotApiClient::configuredBaseUrl();
+    require(buildDefault.isEmpty(),
+            "community routing ignores hidden environment server overrides");
     require(SnowShotApiClient::configuredBaseUrl(QStringLiteral("https://example.test/service/")) ==
                 QStringLiteral("https://example.test/service"),
-            "saved server takes precedence");
+            "explicit saved server is normalized");
     SnowShotApiClient client(buildDefault);
     int changes = 0;
     QObject::connect(&client, &SnowShotApiClient::baseUrlChanged, &client, [&] { ++changes; });
