@@ -171,6 +171,7 @@ void storageContracts() {
     QTemporaryDir directory;
     const auto path = directory.filePath(QStringLiteral("config.json"));
     auto model = example();
+    model.apiKey = QStringLiteral("community-custom-ai-secret");
     require(model.provider == QStringLiteral("openai"), "new models default to OpenAI");
     require(!model.supportsReasoning, "custom models disable reasoning by default");
     auto legacy = customAiModelsToJson({model}).first().toObject();
@@ -231,6 +232,17 @@ void storageContracts() {
                 "rejection preserves previous records");
         require(store.flushNow().success, "configuration flush succeeds");
     }
+#ifdef Q_OS_WIN
+    {
+        QFile persisted(path);
+        require(persisted.open(QIODevice::ReadOnly), "open protected custom model configuration");
+        const QByteArray bytes = persisted.readAll();
+        require(!bytes.contains(model.apiKey.toUtf8()) &&
+                    bytes.contains("\"$protected\"") &&
+                    bytes.contains("windows-dpapi-v1"),
+                "Windows custom AI credentials are DPAPI-protected on disk");
+    }
+#endif
     {
         storage::ConfigurationStore store(path, true, true, 8000);
         require(customAiModelsFromJson(store.value(key)) == CustomAiModels{model},
@@ -282,12 +294,24 @@ void storageContracts() {
         static_cast<void>(store.flushNow());
     }
     require(file.open(QIODevice::ReadOnly), "read preserved document");
-    require(QJsonDocument::fromJson(file.readAll())
+    const QByteArray persistedMalformed = file.readAll();
+    file.close();
+#ifdef Q_OS_WIN
+    require(!persistedMalformed.contains(model.apiKey.toUtf8()) &&
+                !persistedMalformed.contains("never-log-this") &&
+                persistedMalformed.contains("windows-dpapi-v1"),
+            "Windows protects credentials even inside a partially invalid stored collection");
+    storage::ConfigurationStore protectedReload(path, true, true, 8000);
+    require(customAiModelsFromJson(protectedReload.value(key)) == CustomAiModels{model},
+            "protected valid records survive a partially invalid collection reload");
+#else
+    require(QJsonDocument::fromJson(persistedMalformed)
                     .object()
                     .value(QStringLiteral("api_configuration"))
                     .toObject()
                     .value(QStringLiteral("custom_models")) == raw,
             "opening malformed collection must preserve every original record");
+#endif
 }
 
 void widgetContracts(QApplication& application) {

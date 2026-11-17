@@ -27,9 +27,12 @@ user explicitly configures or selects. Provider terms and data-retention
 practices apply to those requests.
 
 On Windows, the PaddleOCR Access Token is stored with user-scoped DPAPI
-protection. On other platforms it is currently stored in the user's Qt settings
-and should be treated as sensitive. Never attach settings files or credentials
-to bug reports.
+protection. Custom AI / translation API keys and S3 access credentials are also
+DPAPI-protected at the `config.json` disk boundary; legacy plaintext Windows
+profiles are rewritten to the protected form after loading. Configuration
+archives remain credential-redacted by default. On other platforms these
+credentials are currently stored in user settings/configuration and should be
+treated as sensitive. Never attach settings files or credentials to bug reports.
 
 Community update/release links point to this fork's public GitHub/Gitee release
 infrastructure. Required upstream copyright and license notices are retained;

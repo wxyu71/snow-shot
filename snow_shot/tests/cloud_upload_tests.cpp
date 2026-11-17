@@ -59,6 +59,18 @@ void settingsContracts() {
                 "reject duplicate names atomically");
         require(store.flushNow().success, "flush cloud settings");
     }
+#ifdef Q_OS_WIN
+    {
+        QFile persisted(path);
+        require(persisted.open(QIODevice::ReadOnly), "open protected cloud configuration");
+        const QByteArray bytes = persisted.readAll();
+        require(!bytes.contains(profile.accessKeyId.toUtf8()) &&
+                    !bytes.contains(profile.secretAccessKey.toUtf8()) &&
+                    !bytes.contains(profile.sessionToken.toUtf8()) &&
+                    bytes.contains("windows-dpapi-v1"),
+                "Windows S3 credentials are DPAPI-protected on disk");
+    }
+#endif
     storage::ConfigurationStore reopened(path, true, true, 0);
     require(cloudUploadSettingsFromJson(reopened.value(key)) == settings,
             "cloud settings roundtrip");

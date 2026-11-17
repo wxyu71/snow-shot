@@ -1,6 +1,7 @@
 #include "snow_shot/shortcuts/screenshotshortcutcontext.h"
 #include "snow_shot/shortcuts/pinnedshortcutcontext.h"
 #include "snow_shot/storage/configurationstore.h"
+#include "configurationsecretprotection_p.h"
 #include "snow_shot/clouduploadconfiguration.h"
 #include "snow_shot/app/edition.h"
 #if SNOW_SHOT_ENABLE_API_CONFIGURATION
@@ -610,7 +611,14 @@ StorageResult ConfigurationStore::flushNow() {
             revision = m_revision;
         }
 
-        const QByteArray bytes = serializedDocument(document);
+        QJsonObject persistedDocument = document;
+        QString credentialsError;
+        if (!protectConfigurationSecrets(&persistedDocument, &credentialsError)) {
+            qCWarning(storageLog) << credentialsError << m_configurationFile;
+            setLastError(credentialsError);
+            return StorageResult::failure(credentialsError);
+        }
+        const QByteArray bytes = serializedDocument(persistedDocument);
         QSaveFile file(m_configurationFile);
         if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() ||
             !file.commit()) {
@@ -679,7 +687,7 @@ void ConfigurationStore::load() {
             preserveCorruptFile(m_configurationFile);
             qCWarning(storageLog) << error;
         } else {
-            const QJsonObject parsedObject = parsed.object();
+            QJsonObject parsedObject = parsed.object();
             const QJsonValue versionValue = valueAtPath(parsedObject, kSchemaVersionKey);
             if (!ConfigurationSchema::parseIntegerVersion(versionValue, &version)) {
                 compatibility = ConfigurationCompatibility::RecoveredDefaults;
@@ -690,6 +698,8 @@ void ConfigurationStore::load() {
                 preserveCorruptFile(m_configurationFile);
                 qCWarning(storageLog) << error;
             } else {
+                const ConfigurationSecretLoadResult secretLoad =
+                    unprotectConfigurationSecrets(&parsedObject);
                 document = parsedObject;
                 if (version > ConfigurationSchema::currentVersion()) {
                     compatibility = ConfigurationCompatibility::FutureVersion;
@@ -702,10 +712,17 @@ void ConfigurationStore::load() {
                     compatibility, ConfigurationOverlayPolicy::MergeFromDisk);
                 loaded = materialized.values;
                 document = materialized.document;
-                dirty = materialized.dirty;
+                dirty = materialized.dirty || secretLoad.rewrite;
                 if (materialized.customConfigurationsRepaired) {
                     error = tr("Some custom API configurations are invalid and were ignored");
                     qCWarning(storageLog) << error;
+                }
+                if (secretLoad.decryptionFailed) {
+                    const QString credentialsError = QStringLiteral(
+                        "Some protected configuration credentials could not be decrypted and were cleared");
+                    if (error.isEmpty())
+                        error = credentialsError;
+                    qCWarning(storageLog) << credentialsError;
                 }
             }
         }

@@ -723,6 +723,8 @@ set(SNOW_SHOT_STORAGE_SOURCES
     src/storage/capturehistoryrepository.cpp
     src/storage/configurationarchive.cpp
     src/storage/configurationstore.cpp
+    src/storage/configurationsecretprotection.cpp
+    src/storage/configurationsecretprotection_p.h
     src/storage/configurationschema.cpp
     src/storage/exportfilename.cpp
     src/storage/timevariables.cpp
@@ -794,9 +796,13 @@ set_source_files_properties(
     src/storage/capturehistoryrepository.cpp
     src/storage/pinnedwindowrepository.cpp
     src/storage/configurationschema.cpp
+    src/storage/configurationsecretprotection.cpp
     PROPERTIES SKIP_UNITY_BUILD_INCLUSION ON)
 target_include_directories(snow_shot_storage PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(snow_shot_storage PRIVATE snow_draw_engine_c)
+if(WIN32)
+    target_link_libraries(snow_shot_storage PRIVATE crypt32)
+endif()
 target_link_libraries(snow_shot_storage PUBLIC
     snow_shot_runtime_activity
     snow_shot_diagnostics
