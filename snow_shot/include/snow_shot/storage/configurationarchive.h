@@ -34,6 +34,8 @@ class ConfigurationArchive final {
   public:
     // Writes `values` (excluding local save directories and the store-managed
     // schema version) together with a manifest stamped with `schemaVersion`.
+    // User-facing exports should pass redactCredentials=true. Explicit false remains
+    // available for internal fixtures that require a complete round trip.
     // Returns an empty string on success and a translated error otherwise.
     [[nodiscard]] static QString write(const QString& archivePath,
                                        const QMap<QString, QJsonValue>& values, int schemaVersion,

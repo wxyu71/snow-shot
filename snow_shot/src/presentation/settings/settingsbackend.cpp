@@ -2451,7 +2451,7 @@ bool BuiltInSettingsBackend::triggerAction(SettingsActionBinding binding, const 
             }
         }
         const QString archiveError = storage::ConfigurationArchive::write(
-            archivePath, values, storage::ConfigurationStore::currentSchemaVersion());
+            archivePath, values, storage::ConfigurationStore::currentSchemaVersion(), true);
         if (!archiveError.isEmpty()) {
             m_configurationBusy = false;
             emit synchronized();
