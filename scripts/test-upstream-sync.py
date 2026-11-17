@@ -134,6 +134,17 @@ class UpstreamSyncGuardTests(unittest.TestCase):
             self.assertEqual(result["mode"], "review")
             self.assertEqual(result["protected"], [path])
 
+    def test_upstream_workflow_reuses_manual_review_and_reports_pr_permission_limit(self):
+        workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('startswith("review/upstream-main-")', workflow)
+        self.assertIn("GITHUB_STEP_SUMMARY", workflow)
+        self.assertIn("GitHub Actions is not permitted to create or approve pull requests", workflow)
+        self.assertIn("No changes were merged into main.", workflow)
+        self.assertIn("exit 1", workflow)  # Other PR creation errors still fail.
+
+
     def test_current_tree_has_no_account_telemetry_or_upstream_runtime_endpoints(self):
         upstream_sync.assert_forbidden_runtime_content_absent()
 
