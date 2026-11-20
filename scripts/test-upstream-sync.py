@@ -3,6 +3,8 @@
 import json
 import os
 import pathlib
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -100,7 +102,8 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertIn('git ls-remote --exit-code --heads origin "$branch"', workflow)
         self.assertIn('automation/upstream-review-${upstream_sha:0:12}-${base_sha:0:8}', workflow)
         self.assertNotIn('git push --force origin', workflow)
-        self.assertNotIn('upstream-review-pending.md', workflow)
+        self.assertIn('upstream-review-pending.md', workflow)
+        self.assertIn('refusing to allow a GitHub App to create or update workflow', workflow)
 
     def test_upstream_review_candidate_is_real_and_retries_preserve_it(self):
         workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
@@ -111,8 +114,8 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         )[1].split("        run: |\n", 1)[1])
         subprocess.run(["bash", "-n"], input=script, text=True, check=True)
 
-        for overlapping in (False, True):
-            with self.subTest(conflict=overlapping), tempfile.TemporaryDirectory() as temp:
+        for overlapping, blocked in ((False, False), (True, False), (True, True)):
+            with self.subTest(conflict=overlapping, token_blocked=blocked), tempfile.TemporaryDirectory() as temp:
                 base = pathlib.Path(temp)
                 work, bare = base / "work", base / "origin.git"
                 subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
@@ -125,6 +128,8 @@ class UpstreamSyncGuardTests(unittest.TestCase):
 
                 git("config", "user.name", "CI test")
                 git("config", "user.email", "ci-test@example.invalid")
+                (work / ".github").mkdir()
+                (work / ".github" / "keep.txt").write_text("baseline\n", encoding="utf-8")
                 (work / "shared.txt").write_text("base\n", encoding="utf-8")
                 git("add", ".")
                 git("commit", "-m", "common ancestor")
@@ -158,6 +163,20 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                     encoding="utf-8",
                 )
                 mock_gh.chmod(0o755)
+                mock_git = mock_bin / "git"
+                mock_git.write_text(
+                    '#!/usr/bin/env bash\n'
+                    'if [[ "$1" == "push" && "$MOCK_BLOCK_WORKFLOWS" == "1" '
+                    '&& ! -f "$MOCK_BLOCKED_FILE" ]]; then\n'
+                    '  touch "$MOCK_BLOCKED_FILE"\n'
+                    '  echo "remote: refusing to allow a GitHub App to create or '
+                    'update workflow .github/workflows/example.yml without workflows permission" >&2\n'
+                    '  exit 1\n'
+                    'fi\n'
+                    'exec "' + str(shutil.which("git")) + '" "$@"\n',
+                    encoding="utf-8",
+                )
+                mock_git.chmod(0o755)
                 sync_file = base / "sync.json"
                 sync_file.write_text(json.dumps({
                     "upstream_commit": upstream_sha,
@@ -174,6 +193,8 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                     "CLASSIFIED_MODE": "review",
                     "MOCK_REVIEW_PR": "",
                     "MOCK_EVENT_FILE": str(events),
+                    "MOCK_BLOCK_WORKFLOWS": "1" if blocked else "0",
+                    "MOCK_BLOCKED_FILE": str(base / "push-blocked"),
                 })
                 subprocess.run(
                     ["bash", "-c", script], cwd=work, env=env,
@@ -185,15 +206,27 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                 )
                 review_sha = git("--git-dir=" + str(bare), "rev-parse", review_ref)
                 self.assertEqual(git("--git-dir=" + str(bare), "rev-parse", "main"), main_sha)
-                self.assertEqual(
-                    git("merge-base", review_sha, upstream_sha), upstream_sha
-                )
-                if overlapping:
-                    self.assertEqual(review_sha, upstream_sha)
+                if blocked:
+                    self.assertNotEqual(
+                        subprocess.run(
+                            ["git", "merge-base", "--is-ancestor", upstream_sha, review_sha],
+                            cwd=work, capture_output=True
+                        ).returncode, 0
+                    )
+                    self.assertIn(
+                        "Unresolved upstream integration",
+                        git("show", review_sha + ":.github/upstream-review-pending.md")
+                    )
                 else:
                     self.assertEqual(
-                        len(git("rev-list", "--parents", "-n1", review_sha).split()), 3
+                        git("merge-base", review_sha, upstream_sha), upstream_sha
                     )
+                    if overlapping:
+                        self.assertEqual(review_sha, upstream_sha)
+                    else:
+                        self.assertEqual(
+                            len(git("rev-list", "--parents", "-n1", review_sha).split()), 3
+                        )
 
                 # A subsequent scheduled run must reuse the PR, not replace its
                 # branch or create a new PR.
@@ -206,6 +239,33 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                     git("--git-dir=" + str(bare), "rev-parse", review_ref), review_sha
                 )
                 self.assertEqual(events.read_text(encoding="utf-8"), "create\n")
+
+
+    def test_review_pr_requires_upstream_ancestry(self):
+        # Runs as a PR preflight check. A marker-only PR can never pass simply
+        # by deleting its conflict report: it must contain the actual target.
+        head_ref = os.environ.get("GITHUB_HEAD_REF", "")
+        if not head_ref.startswith("automation/upstream-review-"):
+            return
+        match = re.fullmatch(
+            r"automation/upstream-review-([0-9a-f]{12})-[0-9a-f]{8}",
+            head_ref,
+        )
+        self.assertIsNotNone(match, "Invalid automated upstream review branch")
+        self.assertFalse(
+            (ROOT / ".github/upstream-review-pending.md").exists(),
+            "Resolve the upstream merge and remove the pending marker first",
+        )
+        target = match.group(1)
+        result = subprocess.run(
+            ["git", "merge-base", "--is-ancestor", target, "HEAD"],
+            cwd=ROOT, capture_output=True, text=True,
+        )
+        self.assertEqual(
+            result.returncode, 0,
+            "Upstream review must contain the real upstream commit " + target
+            + "; a report-only branch must not be merged",
+        )
 
 
 if __name__ == "__main__":
