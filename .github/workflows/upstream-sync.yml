@@ -63,65 +63,79 @@ jobs:
               'Automatic documentation merge could not be verified; inspect the real merge candidate.')"
           fi
 
-          # A manually reconciled upstream sync PR may already be in review.
-          # Do not open a duplicate conflict-report PR or replace its head.
+          # A human-resolved upstream PR is authoritative. Never overwrite its head.
+          # Pending review is not a sync failure, even if upstream advances again.
           existing_review="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main \
-            --state open --json number,headRefName \
-            --jq '[.[] | select((.headRefName | startswith("review/upstream-main-")) or .headRefName == "automation/upstream-review") | .number] | first // empty')"
+            --state open --limit 100 --json number,headRefName \
+            --jq '[.[] | select((.headRefName | startswith("review/upstream-main-")) or
+              (.headRefName | startswith("automation/upstream-review-")) or
+              .headRefName == "automation/upstream-review") | .number] | first // empty')"
           if [[ -n "$existing_review" ]]; then
             {
-              echo "### Upstream synchronization needs manual review"
-              echo "- Current upstream: $upstream_sha"
+              echo "### Upstream integration is awaiting manual review"
+              echo "- Latest upstream: $upstream_sha"
               echo "- Existing review: https://github.com/${GITHUB_REPOSITORY}/pull/${existing_review}"
-              echo "- **No changes were merged into main.** Update the review PR before merging."
+              echo "- **No changes were merged into main.** Update the existing PR manually."
+              echo "- Automation deliberately did not change the reviewed PR branch."
             } >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning title=Existing upstream review::PR #${existing_review} is open; review new upstream commit ${upstream_sha} there."
+            echo "::warning title=Pending upstream review::Review PR #${existing_review} against upstream ${upstream_sha}; existing PR head was preserved."
             exit 0
           fi
 
-          branch="automation/upstream-review"
-          git switch -C "$branch" origin/main
-          if git merge --no-ff --no-edit upstream/main; then
-            candidate="The branch contains the actual upstream merge candidate. Review it and let the normal PR CI validate the integrated tree."
-            rm -f .github/upstream-review-pending.md
+          base_sha="$(git rev-parse origin/main)"
+          # Deterministic per upstream/base pair: safe to retry, never force-push
+          # an existing branch, and never replace human commits.
+          branch="automation/upstream-review-${upstream_sha:0:12}-${base_sha:0:8}"
+          conflict_files=""
+          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
+            candidate="An existing review branch is reused unchanged. Inspect it before merging; it may contain prior manual work."
           else
-            git merge --abort
-            candidate="The upstream merge has conflicts. This branch contains only the conflict report; resolve the upstream merge manually before merging the PR."
-            printf '%s\n\n%s\n\n%s\n' \
-              '# Upstream synchronization requires conflict resolution' \
-              "Upstream commit: $upstream_sha" \
-              "$reasons" > .github/upstream-review-pending.md
-            git add .github/upstream-review-pending.md
-            git commit -m "chore(sync): report upstream merge conflict"
-          fi
-
-          git push --force origin "$branch"
-          body="$(printf 'Upstream commit: %s\n\n%s\n\nReasons reported by the fork policy:\n%s' \
-            "$upstream_sha" "$candidate" "$reasons")"
-
-          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main \
-            --state open --json number --jq '.[0].number // empty')"
-          if [[ -n "$number" ]]; then
-            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" \
-              --title "review(sync): integrate upstream main" --body "$body"
-          else
-            if ! create_output="$(gh pr create --draft --repo "$GITHUB_REPOSITORY" \
-              --base main --head "$branch" \
-              --title "review(sync): integrate upstream main" --body "$body" 2>&1)"; then
-              if [[ "$create_output" == *"GitHub Actions is not permitted to create or approve pull requests"* ]]; then
-                {
-                  echo "### Manual upstream sync PR required"
-                  echo "- Upstream: $upstream_sha"
-                  echo "- Review branch: $branch"
-                  echo "- Create a draft PR: https://github.com/${GITHUB_REPOSITORY}/pull/new/${branch}"
-                  echo "- **No changes were merged into main.**"
-                  echo "- To enable automation, allow GitHub Actions to create pull requests in repository Actions settings."
-                } >> "$GITHUB_STEP_SUMMARY"
-                echo "::warning title=GitHub Actions PR creation disabled::Review branch $branch was pushed; manually open a draft PR or enable repository Actions PR creation."
-                exit 0
+            git switch -C "$branch" origin/main
+            if git merge --no-ff --no-edit upstream/main; then
+              candidate="This branch contains a real two-parent Git merge of upstream into Community. Review its changes and validate the normal PR checks."
+            else
+              conflict_files="$(git diff --name-only --diff-filter=U)"
+              if [[ -z "$conflict_files" ]]; then
+                echo "::error::Upstream merge failed for a reason other than file conflicts."
+                exit 1
               fi
-              printf '%s\n' "$create_output" >&2
-              exit 1
+              git merge --abort
+              # A report-only commit is NOT a sync candidate. Instead, push the
+              # actual upstream commit. GitHub will mark the PR as conflicting,
+              # and resolving it will preserve the real upstream ancestry.
+              git switch -C "$branch" upstream/main
+              candidate="GitHub should show a real merge conflict: this branch points at upstream/main, not a dummy report. Merge Community main INTO this review branch, resolve conflicts, test, and push. Do not merge before resolving conflicts and reviewing the Community protection policy."
             fi
-            printf '%s\n' "$create_output"
+            git push origin "HEAD:refs/heads/$branch"
           fi
+
+          body="$(printf '## Upstream integration (manual review required)\n\nUpstream: mg-chao/snow-shot@%s\nFork main at detection: %s\nReview branch: %s\n\n%s\n\n### Policy reasons\n%s\n\n### Conflicted files (if detected this run)\n%s\n\n### Resolve locally\n\n1. Fetch the review branch and main from this fork, and upstream/main.\n2. Check out the review branch, then run git merge origin/main if it is based on upstream; resolve any conflicts carefully and commit.\n3. Run Community policy checks and native CI, then push to the SAME review branch.\n4. Merge only after reviewing protected Community OCR, account-removal, updater, version, and packaging behavior.\n\n**Never merge the initial conflict branch without resolving it. No changes were merged to main by this workflow.**\n' \
+            "$upstream_sha" "$base_sha" "$branch" "$candidate" "$reasons" "$conflict_files")"
+
+          if ! create_output="$(gh pr create --draft --repo "$GITHUB_REPOSITORY" \
+            --base main --head "$branch" \
+            --title "review(sync): integrate upstream ${upstream_sha:0:12}" --body "$body" 2>&1)"; then
+            if [[ "$create_output" == *"GitHub Actions is not permitted to create or approve pull requests"* ]]; then
+              {
+                echo "### Manual upstream sync PR required"
+                echo "- Upstream: $upstream_sha"
+                echo "- Review branch: $branch"
+                echo "- Create a draft PR: https://github.com/${GITHUB_REPOSITORY}/pull/new/${branch}"
+                echo "- **No changes were merged into main.**"
+                echo "- Enable Actions PR creation in repository settings (if disabled)."
+              } >> "$GITHUB_STEP_SUMMARY"
+              echo "::warning title=PR creation restricted::Review branch $branch was preserved; manually open a draft PR."
+              exit 0
+            fi
+            printf '%s\n' "$create_output" >&2
+            exit 1
+          fi
+          {
+            echo "### Upstream integration requires review"
+            echo "- PR: $create_output"
+            echo "- Latest upstream: $upstream_sha"
+            echo "- Review branch: $branch"
+            echo "- **No changes were merged into main.**"
+            echo "- PR CI created by GITHUB_TOKEN may need a maintainer to approve workflow runs."
+          } >> "$GITHUB_STEP_SUMMARY"
+          printf '%s\n' "$create_output"
