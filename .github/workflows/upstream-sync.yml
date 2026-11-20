@@ -106,7 +106,40 @@ jobs:
               git switch -C "$branch" upstream/main
               candidate="GitHub should show a real merge conflict: this branch points at upstream/main, not a dummy report. Merge Community main INTO this review branch, resolve conflicts, test, and push. Do not merge before resolving conflicts and reviewing the Community protection policy."
             fi
-            git push origin "HEAD:refs/heads/$branch"
+            if ! push_output="$(git push origin "HEAD:refs/heads/$branch" 2>&1)"; then
+              # Built-in GITHUB_TOKEN cannot be granted the extra 'workflows'
+              # permission needed to push certain upstream workflow changes.
+              # Fall back ONLY for that exact GitHub policy error. Never hide
+              # branch protections, network failures, or unrelated Git errors.
+              if [[ "$push_output" == *"refusing to allow a GitHub App to create or update workflow"* ]]; then
+                git switch -C "$branch" origin/main
+                {
+                  echo "# Unresolved upstream integration: do not merge"
+                  echo
+                  echo "Upstream commit: $upstream_sha"
+                  echo "Community main at detection: $base_sha"
+                  echo
+                  echo "GitHub rejected the real upstream review branch because the"
+                  echo "default GITHUB_TOKEN lacks workflow-file update permission."
+                  echo "This commit is a tracking placeholder, NOT an upstream merge."
+                  echo
+                  echo "Resolve by fetching upstream/main and performing a real Git"
+                  echo "merge on THIS branch, preserving the Community policy, then"
+                  echo "removing this marker. CI must verify upstream ancestry."
+                  echo
+                  echo "Conflicted files (if any):"
+                  printf '%s\n' "$conflict_files"
+                } > .github/upstream-review-pending.md
+                git add .github/upstream-review-pending.md
+                git commit -m "chore(sync): require manual upstream integration"
+                git push origin "HEAD:refs/heads/$branch"
+                candidate="GitHub blocked pushing actual upstream workflow history with the built-in token. This Draft PR is a **non-mergeable tracking placeholder** containing .github/upstream-review-pending.md. Manually merge upstream/main into this branch, resolve conflicts, remove the marker, run CI, and push before merging. The upstream-ancestry regression gate rejects a report-only PR."
+                echo "::warning title=Workflow write permission::Preserved a manual integration PR branch; no changes were merged into main."
+              else
+                printf '%s\n' "$push_output" >&2
+                exit 1
+              fi
+            fi
           fi
 
           body="$(printf '## Upstream integration (manual review required)\n\nUpstream: mg-chao/snow-shot@%s\nFork main at detection: %s\nReview branch: %s\n\n%s\n\n### Policy reasons\n%s\n\n### Conflicted files (if detected this run)\n%s\n\n### Resolve locally\n\n1. Fetch the review branch and main from this fork, and upstream/main.\n2. Check out the review branch, then run git merge origin/main if it is based on upstream; resolve any conflicts carefully and commit.\n3. Run Community policy checks and native CI, then push to the SAME review branch.\n4. Merge only after reviewing protected Community OCR, account-removal, updater, version, and packaging behavior.\n\n**Never merge the initial conflict branch without resolving it. No changes were merged to main by this workflow.**\n' \
