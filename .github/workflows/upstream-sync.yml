@@ -63,6 +63,22 @@ jobs:
               'Automatic documentation merge could not be verified; inspect the real merge candidate.')"
           fi
 
+          # A manually reconciled upstream sync PR may already be in review.
+          # Do not open a duplicate conflict-report PR or replace its head.
+          existing_review="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main \
+            --state open --json number,headRefName \
+            --jq '[.[] | select((.headRefName | startswith("review/upstream-main-")) or .headRefName == "automation/upstream-review") | .number] | first // empty')"
+          if [[ -n "$existing_review" ]]; then
+            {
+              echo "### Upstream synchronization needs manual review"
+              echo "- Current upstream: $upstream_sha"
+              echo "- Existing review: https://github.com/${GITHUB_REPOSITORY}/pull/${existing_review}"
+              echo "- **No changes were merged into main.** Update the review PR before merging."
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "::warning title=Existing upstream review::PR #${existing_review} is open; review new upstream commit ${upstream_sha} there."
+            exit 0
+          fi
+
           branch="automation/upstream-review"
           git switch -C "$branch" origin/main
           if git merge --no-ff --no-edit upstream/main; then
@@ -89,6 +105,23 @@ jobs:
             gh pr edit "$number" --repo "$GITHUB_REPOSITORY" \
               --title "review(sync): integrate upstream main" --body "$body"
           else
-            gh pr create --draft --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
-              --title "review(sync): integrate upstream main" --body "$body"
+            if ! create_output="$(gh pr create --draft --repo "$GITHUB_REPOSITORY" \
+              --base main --head "$branch" \
+              --title "review(sync): integrate upstream main" --body "$body" 2>&1)"; then
+              if [[ "$create_output" == *"GitHub Actions is not permitted to create or approve pull requests"* ]]; then
+                {
+                  echo "### Manual upstream sync PR required"
+                  echo "- Upstream: $upstream_sha"
+                  echo "- Review branch: $branch"
+                  echo "- Create a draft PR: https://github.com/${GITHUB_REPOSITORY}/pull/new/${branch}"
+                  echo "- **No changes were merged into main.**"
+                  echo "- To enable automation, allow GitHub Actions to create pull requests in repository Actions settings."
+                } >> "$GITHUB_STEP_SUMMARY"
+                echo "::warning title=GitHub Actions PR creation disabled::Review branch $branch was pushed; manually open a draft PR or enable repository Actions PR creation."
+                exit 0
+              fi
+              printf '%s\n' "$create_output" >&2
+              exit 1
+            fi
+            printf '%s\n' "$create_output"
           fi
