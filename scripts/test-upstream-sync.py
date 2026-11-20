@@ -74,5 +74,22 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertEqual(self.decision(["CMakeLists.txt"])["mode"], "review")
 
 
+    def test_sync_workflow_reuses_review_pr_and_handles_pr_restriction(self):
+        workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn('startswith("review/upstream-main-")', workflow)
+        self.assertIn('.headRefName == "automation/upstream-review"', workflow)
+        self.assertLess(
+            workflow.index("existing_review="),
+            workflow.index('git switch -C "$branch"'),
+        )  # Do not force-push over a PR that is being resolved manually.
+        self.assertIn("GitHub Actions is not permitted to create or approve pull requests", workflow)
+        self.assertIn("GITHUB_STEP_SUMMARY", workflow)
+        self.assertIn("pull/new/${branch}", workflow)
+        self.assertIn("No changes were merged into main.", workflow)
+        self.assertIn("exit 1", workflow)  # Unexpected PR failures remain fatal.
+
+
 if __name__ == "__main__":
     unittest.main(verbosity=2)
