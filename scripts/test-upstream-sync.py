@@ -1,8 +1,12 @@
 #!/usr/bin/env python3
 """Unit tests for automatic upstream reconciliation safety policy."""
 import json
+import os
 import pathlib
+import subprocess
 import sys
+import tempfile
+import textwrap
 import unittest
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
@@ -89,6 +93,119 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertIn("pull/new/${branch}", workflow)
         self.assertIn("No changes were merged into main.", workflow)
         self.assertIn("exit 1", workflow)  # Unexpected PR failures remain fatal.
+
+        self.assertIn('git switch -C "$branch" upstream/main', workflow)
+        self.assertIn('git diff --name-only --diff-filter=U', workflow)
+        self.assertIn('git push origin "HEAD:refs/heads/$branch"', workflow)
+        self.assertIn('git ls-remote --exit-code --heads origin "$branch"', workflow)
+        self.assertIn('automation/upstream-review-${upstream_sha:0:12}-${base_sha:0:8}', workflow)
+        self.assertNotIn('git push --force origin', workflow)
+        self.assertNotIn('upstream-review-pending.md', workflow)
+
+    def test_upstream_review_candidate_is_real_and_retries_preserve_it(self):
+        workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
+            encoding="utf-8"
+        )
+        script = textwrap.dedent(workflow.split(
+            "      - name: Apply safe sync or update the review candidate\n", 1
+        )[1].split("        run: |\n", 1)[1])
+        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
+
+        for overlapping in (False, True):
+            with self.subTest(conflict=overlapping), tempfile.TemporaryDirectory() as temp:
+                base = pathlib.Path(temp)
+                work, bare = base / "work", base / "origin.git"
+                subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
+                subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
+
+                def git(*args):
+                    return subprocess.check_output(
+                        ["git", *args], cwd=work, text=True, stderr=subprocess.PIPE
+                    ).strip()
+
+                git("config", "user.name", "CI test")
+                git("config", "user.email", "ci-test@example.invalid")
+                (work / "shared.txt").write_text("base\n", encoding="utf-8")
+                git("add", ".")
+                git("commit", "-m", "common ancestor")
+                git("remote", "add", "origin", str(bare))
+                git("push", "-u", "origin", "main")
+                git("switch", "-c", "official")
+                (work / "shared.txt").write_text("official\n", encoding="utf-8")
+                git("add", ".")
+                git("commit", "-m", "official upstream")
+                upstream_sha = git("rev-parse", "HEAD")
+                git("update-ref", "refs/remotes/upstream/main", upstream_sha)
+                git("switch", "main")
+                local_file = "shared.txt" if overlapping else "community.txt"
+                (work / local_file).write_text("community\n", encoding="utf-8")
+                git("add", ".")
+                git("commit", "-m", "community customization")
+                main_sha = git("rev-parse", "HEAD")
+                git("push", "origin", "main")
+
+                mock_bin = base / "bin"
+                mock_bin.mkdir()
+                mock_gh = mock_bin / "gh"
+                mock_gh.write_text(
+                    '#!/usr/bin/env bash\n'
+                    'if [[ "$1 $2" == "pr list" ]]; then\n'
+                    '  printf "%s" "$MOCK_REVIEW_PR"\n'
+                    'elif [[ "$1 $2" == "pr create" ]]; then\n'
+                    '  echo create >> "$MOCK_EVENT_FILE"\n'
+                    '  echo "https://github.com/example/fork/pull/42"\n'
+                    'else exit 99; fi\n',
+                    encoding="utf-8",
+                )
+                mock_gh.chmod(0o755)
+                sync_file = base / "sync.json"
+                sync_file.write_text(json.dumps({
+                    "upstream_commit": upstream_sha,
+                    "reasons": ["manual review requested"],
+                }), encoding="utf-8")
+                events = base / "events"
+                env = dict(os.environ)
+                env.update({
+                    "PATH": str(mock_bin) + os.pathsep + env["PATH"],
+                    "RUNNER_TEMP": str(base),
+                    "GITHUB_STEP_SUMMARY": str(base / "summary.md"),
+                    "GITHUB_REPOSITORY": "example/fork",
+                    "GH_TOKEN": "test",
+                    "CLASSIFIED_MODE": "review",
+                    "MOCK_REVIEW_PR": "",
+                    "MOCK_EVENT_FILE": str(events),
+                })
+                subprocess.run(
+                    ["bash", "-c", script], cwd=work, env=env,
+                    capture_output=True, text=True, check=True
+                )
+                review_ref = (
+                    "refs/heads/automation/upstream-review-"
+                    + upstream_sha[:12] + "-" + main_sha[:8]
+                )
+                review_sha = git("--git-dir=" + str(bare), "rev-parse", review_ref)
+                self.assertEqual(git("--git-dir=" + str(bare), "rev-parse", "main"), main_sha)
+                self.assertEqual(
+                    git("merge-base", review_sha, upstream_sha), upstream_sha
+                )
+                if overlapping:
+                    self.assertEqual(review_sha, upstream_sha)
+                else:
+                    self.assertEqual(
+                        len(git("rev-list", "--parents", "-n1", review_sha).split()), 3
+                    )
+
+                # A subsequent scheduled run must reuse the PR, not replace its
+                # branch or create a new PR.
+                env["MOCK_REVIEW_PR"] = "42"
+                subprocess.run(
+                    ["bash", "-c", script], cwd=work, env=env,
+                    capture_output=True, text=True, check=True
+                )
+                self.assertEqual(
+                    git("--git-dir=" + str(bare), "rev-parse", review_ref), review_sha
+                )
+                self.assertEqual(events.read_text(encoding="utf-8"), "create\n")
 
 
 if __name__ == "__main__":
