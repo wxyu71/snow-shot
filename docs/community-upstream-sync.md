@@ -11,9 +11,12 @@ dispatched workflow is `.github/workflows/upstream-sync.yml`. The policy is
    All executable code, release/build metadata and workflow changes need review.
 2. **An upstream review PR is a real code review, not a report-only PR.**
    With a clean Git merge, its branch contains a two-parent merge commit.
-   With merge conflicts, its head starts at the actual upstream commit;
-   GitHub detects the conflict against Community `main`. It must be reconciled
-   before merging, preserving both sides' ancestry and Community behavior.
+   With merge conflicts, the workflow first tries to push the actual upstream
+   commit so GitHub detects the conflict against Community `main`.
+   If GitHub rejects a push of incoming `.github/workflows/` changes due to
+   the built-in token's missing workflow-write scope, it instead opens a Draft
+   tracking PR with an explicit pending marker; the PR's ancestry gate fails
+   until a maintainer actually integrates upstream.
 3. **Human work wins.** If an upstream review PR is already open, scheduled
    syncs only write a warning and job summary with the latest upstream SHA.
    They never mutate its head or create duplicate review PRs.
@@ -31,7 +34,8 @@ dispatched workflow is `.github/workflows/upstream-sync.yml`. The policy is
 | Only policy-allowed documentation, clean merge | Run guards, merge and push to `main` | Success |
 | Changes requiring review, an upstream PR is already open | Preserve its branch; summarize upstream SHA and PR link | Success with warning |
 | Review required, merge is clean, no prior PR | Push a real merge commit to a new immutable review branch | Draft PR |
-| Review required, merge conflicts, no prior PR | Push the actual upstream head to a new immutable review branch | Draft PR showing real conflicts |
+| Review required, merge conflicts, no prior PR | Try pushing the real upstream head | Draft PR showing real conflicts |
+| Workflow-file push rejected by built-in token | Push pending marker based on Community `main`; do not disguise the missing integration | Draft PR blocked by ancestry gate |
 | Previously pushed review branch, PR creation interrupted | Reuse branch, retry opening the PR | Draft PR, no force push |
 | Unexpected push, Git or API problem | Do not bypass the error | Failed |
 
@@ -48,14 +52,28 @@ small conflicts; for complex code, resolve locally:
 ```sh
 gh pr checkout <PR_NUMBER>
 git fetch origin main
-git merge origin/main
-# Resolve conflicts; preserve Community OCR, edition, updater and release policy.
-git add <resolved-files>
+if test -f .github/upstream-review-pending.md; then
+  git remote add upstream https://github.com/mg-chao/snow-shot.git
+  git fetch upstream main
+  git merge --no-ff upstream/main
+  # Resolve conflicts, retaining Community policies.
+  rm .github/upstream-review-pending.md
+else
+  git merge origin/main
+  # Resolve conflicts, retaining Community policies.
+fi
+git add -A
 git commit
 python3 scripts/test-upstream-sync.py
 python3 scripts/upstream_sync.py verify-deletions
 git push
 ```
+
+An upstream review PR is checked for the target upstream commit's ancestry
+(`GITHUB_HEAD_REF` encodes the upstream SHA). Merely deleting a pending marker
+without performing a real Git merge does **not** pass the preflight check.
+To enforce that gate at merge time, the repo's branch protection/ruleset must
+require CI status checks.
 
 For a clean review candidate, `git merge origin/main` may report "Already up to
 date"; that is expected. The policy and normal Community PR CI must still pass,
@@ -89,7 +107,7 @@ git fetch upstream main
 python3 scripts/upstream_sync.py classify --upstream upstream/main
 ```
 
-The regression suite builds local Git fixtures for clean merges and true
-conflicts, checks that the review branch carries real upstream history, and
-checks that an already-open PR prevents duplicate creation or branch overwrite.
+The regression suite builds local Git fixtures for clean merges, true conflicts,
+and workflow-token write denial. It checks upstream ancestry, explicit pending
+markers and reusing already-open PRs without overwriting their branches.
 The scheduled workflow runs from **main**, not from an unmerged workflow PR.
