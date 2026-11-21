@@ -1,5 +1,6 @@
 #include "snow_shot/globalmouseactivationkeys.h"
 #include "snow_shot/storage/configurationschema.h"
+#include "snow_shot/storage/exporttasks.h"
 #include "snow_shot/ocrtextoptions.h"
 #include "snow_shot/proxyconfiguration.h"
 #include "snow_shot/selectiontransitionanimation.h"
@@ -465,7 +466,7 @@ constexpr SchemaString kFloatingToolbarDropBehaviors[] = {u"pin_to_screen", u"im
                                                           u"image_splitting", u"image_editing"};
 constexpr SchemaAllowedValues kFloatingToolbarDropBehaviorValues = {
     kFloatingToolbarDropBehaviors, std::size(kFloatingToolbarDropBehaviors)};
-constexpr int kConfigurationSchemaVersion = 7;
+constexpr int kConfigurationSchemaVersion = 8;
 constexpr ConfigurationIntegerRange kSchemaRange1{kConfigurationSchemaVersion,
                                                   kConfigurationSchemaVersion, 1};
 constexpr SchemaString kSchemaStrings4[] = {u"system", u"light", u"dark"};
@@ -480,6 +481,9 @@ constexpr SchemaAllowedValues kSchemaAllowed4 = {kSchemaStrings6, std::size(kSch
 constexpr SchemaString kSchemaStrings7[] = {u"user_interactive", u"user_initiated", u"default",
                                             u"utility", u"background"};
 constexpr SchemaAllowedValues kSchemaAllowed5 = {kSchemaStrings7, std::size(kSchemaStrings7)};
+constexpr SchemaString kPowerQoSValues[] = {u"performance", u"normal", u"power_saving"};
+constexpr SchemaAllowedValues kPowerQoSAllowedValues = {kPowerQoSValues,
+                                                        std::size(kPowerQoSValues)};
 constexpr SchemaString kSchemaStrings8[] = {u"smart_control", u"disabled"};
 constexpr SchemaAllowedValues kSchemaAllowed6 = {kSchemaStrings8, std::size(kSchemaStrings8)};
 constexpr SchemaString kSchemaStrings9[] = {u"images_only", u"image_files", u"disabled"};
@@ -690,6 +694,9 @@ constexpr SchemaString kSchemaStrings117[] = {u"none",
                                               u"show_main_window",
                                               u"screenshot_copy",
                                               u"screenshot_fixed",
+                                              u"pin_clipboard_content",
+                                              u"restore_last_closed_windows",
+                                              u"hide_show_all_windows",
                                               u"open_capture_history",
                                               u"open_pin_to_screen_management",
                                               u"open_function_settings"};
@@ -718,6 +725,7 @@ constexpr SchemaString kSchemaStrings119[] = {u"quick.screenshot",
                                               u"quick.screenshot-quick-save",
                                               u"quick.screenshot-full-screen",
                                               u"quick.screenshot-focused-window",
+                                              u"quick.open-capture-history",
                                               u"quick.pin-clipboard-content",
                                               u"quick.pin-selected-files",
                                               u"quick.restore-last-closed-windows",
@@ -726,11 +734,11 @@ constexpr SchemaString kSchemaStrings119[] = {u"quick.screenshot",
                                               u"quick.screen-record",
                                               u"quick.screen-record-copy",
                                               u"quick.open-screen-recording-folder",
-                                              u"quick.open-capture-history",
                                               u"quick.global-canvas",
                                               u"quick.stitch-selected-images",
                                               u"quick.split-selected-images",
                                               u"quick.edit-selected-images",
+                                              u"quick.compress-selected-images",
                                               u"quick.translate-selected-text",
                                               u"quick.toggle-window-under-cursor-always-on-top",
                                               u"quick.toggle-global-hotkeys",
@@ -754,6 +762,7 @@ constexpr SchemaString kSchemaStrings120[] = {u"quick.screenshot",
                                               u"quick.screenshot-quick-save",
                                               u"quick.screenshot-full-screen",
                                               u"quick.screenshot-focused-window",
+                                              u"quick.open-capture-history",
                                               u"quick.pin-clipboard-content",
                                               u"quick.pin-selected-files",
                                               u"quick.restore-last-closed-windows",
@@ -762,11 +771,11 @@ constexpr SchemaString kSchemaStrings120[] = {u"quick.screenshot",
                                               u"quick.screen-record",
                                               u"quick.screen-record-copy",
                                               u"quick.open-screen-recording-folder",
-                                              u"quick.open-capture-history",
                                               u"quick.global-canvas",
                                               u"quick.stitch-selected-images",
                                               u"quick.split-selected-images",
                                               u"quick.edit-selected-images",
+                                              u"quick.compress-selected-images",
                                               u"quick.translate-selected-text",
                                               u"quick.toggle-global-hotkeys",
                                               u"quick.toggle-global-mouse",
@@ -809,10 +818,6 @@ constexpr SchemaAllowedValues kHiDpiImageScalingAllowed = {kHiDpiImageScalingVal
 
 constexpr SchemaString kSchemaStrings127[] = {u"follow_mouse_movement", u"follow_mouse_position"};
 constexpr SchemaAllowedValues kSchemaAllowed58 = {kSchemaStrings127, std::size(kSchemaStrings127)};
-constexpr SchemaString kSchemaStrings128[] = {
-    u"copy_screenshot",        u"copy_scrolling_screenshot", u"copy_pinned_image",
-    u"capture_focused_window", u"capture_current_monitor",   u"pin_to_screen"};
-constexpr SchemaAllowedValues kSchemaAllowed59 = {kSchemaStrings128, std::size(kSchemaStrings128)};
 constexpr SchemaString kSchemaStrings129[] = {u"png", u"jpeg", u"bmp",  u"webp",
                                               u"jxl", u"avif", u"tiff", u"pdf"};
 constexpr SchemaAllowedValues kSchemaAllowed60 = {kSchemaStrings129, std::size(kSchemaStrings129)};
@@ -918,6 +923,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      nullptr, &kSchemaAllowed4},
     {u"system/application_qos", stringDefault(u"user_interactive"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed5},
+    {u"system/power_qos", stringDefault(u"performance"), ConfigurationValueKind::String, nullptr,
+     &kPowerQoSAllowedValues},
     {u"system/memory_optimization_policy", stringDefault(u"smart_control"),
      ConfigurationValueKind::String, nullptr, &kSchemaAllowed6},
     {u"system/auto_start_at_boot", booleanDefault(false), ConfigurationValueKind::Boolean},
@@ -1064,6 +1071,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"global_shortcuts/split_selected_images", emptyArrayDefault(),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"global_shortcuts/edit_selected_images", emptyArrayDefault(),
+     ConfigurationValueKind::StringList, nullptr, nullptr, 2},
+    {u"global_shortcuts/compress_selected_images", emptyArrayDefault(),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"global_shortcuts/open_settings", emptyArrayDefault(), ConfigurationValueKind::StringList,
      nullptr, nullptr, 2},
@@ -1302,6 +1311,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"drawing_shortcuts/reset_canvas", stringsDefault(kSchemaStrings46),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"drawing_shortcuts/watermark", stringsDefault(kSchemaStrings47),
+     ConfigurationValueKind::StringList, nullptr, nullptr, 2},
+    {u"drawing_shortcuts/cycle_annotation_tool_options", stringsDefault(kSchemaStrings56),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"screenshot_shortcuts/move_tool", stringsDefault(kSchemaStrings48),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
@@ -1671,11 +1682,7 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      nullptr, &kHiDpiImageScalingAllowed},
     {u"screenshot/selection_resize_mode", stringDefault(u"follow_mouse_movement"),
      ConfigurationValueKind::String, nullptr, &kSchemaAllowed58},
-    {u"screenshot/auto_save_after_execution_actions", emptyArrayDefault(),
-     ConfigurationValueKind::StringList, nullptr, &kSchemaAllowed59},
     {u"screenshot/copy_image_file_to_clipboard", booleanDefault(false),
-     ConfigurationValueKind::Boolean},
-    {u"screenshot/copy_after_pinning_to_screen", booleanDefault(false),
      ConfigurationValueKind::Boolean},
     {u"screenshot/keep_annotations_editable_after_pinning_to_screen", booleanDefault(false),
      ConfigurationValueKind::Boolean},
@@ -1881,9 +1888,12 @@ QJsonArray macGlobalShortcutDefault(const QString& portableText, quint32 virtual
 
 QVector<ConfigurationSchemaEntry> buildEntries() {
     QVector<ConfigurationSchemaEntry> result;
-    result.reserve(static_cast<qsizetype>(std::size(kEntryDescriptors)));
+    result.reserve(static_cast<qsizetype>(std::size(kEntryDescriptors) + exportTaskRows.size()));
     for (const SchemaEntryDescriptor& descriptor : kEntryDescriptors)
         result.push_back(materializeEntry(descriptor));
+    for (const auto& row : exportTaskRows)
+        result.push_back({row.key.toString(), QJsonArray{}, ConfigurationValueKind::StringList,
+                          std::nullopt, exportTaskIds(row.allowed)});
     for (ConfigurationSchemaEntry& entry : result) {
         if (!shortcutConfigurationKey(entry.key) ||
             entry.valueKind != ConfigurationValueKind::StringList) {
@@ -3091,6 +3101,35 @@ ConfigurationSchema::migrateLegacyValues(QMap<QString, QJsonValue> values) {
                 QStringLiteral("capture_current_monitor")};
         }
         values.insert(actionsKey, actions);
+    }
+    const auto oldActions = values.take(actionsKey);
+    const auto pinCopy = values.take(QStringLiteral("screenshot/copy_after_pinning_to_screen"));
+    QSet<QString> actions;
+    for (const auto& value : oldActions.toArray())
+        actions.insert(value.toString().trimmed().toLower());
+    const auto migrate = [&](ExportTrigger trigger, ExportTasks tasks) {
+        const auto key = exportTaskRow(trigger).key.toString();
+        if (!values.contains(key))
+            values.insert(key, QJsonArray::fromStringList(exportTaskIds(tasks)));
+    };
+    if (!oldActions.isUndefined() && !oldActions.isNull()) {
+        const bool screenshotCopy = actions.contains(QStringLiteral("copy_screenshot")) ||
+                                    actions.contains(QStringLiteral("copy_scrolling_screenshot")) ||
+                                    actions.contains(QStringLiteral("capture_current_monitor")) ||
+                                    actions.contains(QStringLiteral("capture_focused_window"));
+        migrate(ExportTrigger::ScreenshotCopy,
+                screenshotCopy ? ExportTask::AutoSave : ExportTasks{});
+        migrate(ExportTrigger::PinnedCopy, actions.contains(QStringLiteral("copy_pinned_image"))
+                                               ? ExportTask::AutoSave
+                                               : ExportTasks{});
+    }
+    if (!oldActions.isNull() || !pinCopy.isNull()) {
+        ExportTasks pin;
+        if (actions.contains(QStringLiteral("pin_to_screen")))
+            pin |= ExportTask::AutoSave;
+        if (pinCopy.toBool())
+            pin |= ExportTask::CopyImage;
+        migrate(ExportTrigger::ScreenshotPin, pin);
     }
     return values;
 }
