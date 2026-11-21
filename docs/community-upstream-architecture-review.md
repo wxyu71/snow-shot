@@ -1,6 +1,6 @@
 # Community upstream architecture and placement review
 
-Status: **review in progress; do not merge or publish**. Updated 2026-11-21.
+Status: **source reconciliation completed in a separate Beta integration branch; native Windows CI and product acceptance still pending**. Updated 2026-11-21.
 
 ## Exact Git scope
 
@@ -69,3 +69,26 @@ Current Community README and `docs/community-*.md` relative references were insp
 4. Do not merge to Community `main` or publish a beta until these gates pass and the source/feature decisions are approved.
 
 The review does **not** conclude that new upstream code is malicious or that every highlighted location is wrong. It distinguishes proven mismatches from architecture decisions and unverified integration risk.
+
+
+## Beta consolidation results — 2026-11-21
+
+The acceptance candidate is the **single** `review/beta-integrated-7f34f246-20261121` branch. This section supersedes the earlier risk-phase statements above that say the incoming code is not yet integrated: the upstream code has now been staged into this candidate, but **not merged to Community `main` or certified for release**.
+
+- Compared the exact official baseline `637f8caec369e4ebaf4db71ae3d0ffb2336361ea`, reviewed Community PR #2, and upstream `7f34f24696c06200bc7d707eab4f35d0a7fbdae1` by Git tree contents.
+- **281** official changed paths: **244** applied verbatim where Community had not changed the baseline; **37** reconciled using line-based three-way merge while preserving Community-local edits. Binary/source-mode changes include an explicitly pinned `simd-paddle-ocr-rs` gitlink. No deleted commercial account files were restored.
+- Two substantive overlapping decisions: retain `SNOW_SHOT_VERSION "1.5.8-beta.1"` rather than the official `1.6.1` product identity; keep Community OCR cache tampering regression while migrating its fixture references from runtime `1.2.2` to `1.3.0`. Both independent `markdownCopied` and new `exportTaskFailed` signals were kept.
+- Included new upstream paragraph grouping (OCR protocol 8), model manifest pinning, and selected upstream export, image compression, pinned interaction, Qt UI and native test changes while retaining the Community PaddleOCR/Markdown interface. Changes **must be tested** as a set, not cherry-picked blindly.
+- Existing Community policy still forbids reintroducing account/session/secret files and the removed Homebrew workflow. The standalone updater trust list remains empty, and original document recognition remains disabled by the Community edition feature flag.
+- Found a real regression hazard in an upstream frozen configuration-schema fixture: official history defaults are `true` while Community intentionally defaults capture/pinned histories to `false`. **The frozen official fixtures remain unmodified**; `configuration_schema_tests.cpp` now permits exactly these two explicit Community privacy overrides.
+- Structural checks verified upstream new source paths are present in final CMake registrations, all 13 audited C++ source/test registrations exist, the Community workflow uses immutable Action commit SHAs, and the three settings locale catalogs contain the same 1,426 source messages, with no unfinished translations.
+- Git object-level validation confirmed **all 244 non-overlapping upstream files** were imported byte-for-byte from the original official commit. The 37 overlap files have composite Community/upstream contents instead of wholesale upstream replacements.
+
+### Final gates before promoting to a published Beta
+
+1. Consolidate official PR #5 and sync fix PR #3 as real **Git parents** of the validated candidate, so both change histories are in one PR #2 integration branch. Keep #2 Draft until CI is current.
+2. Run the repository policy and targeted unit checks for upstream merge, OCR protocol and staging, config schema, toolbar/edit/export, Markdown cloud conversion, settings and Windows NSIS package. The code-level checks above **do not imply a successful compilation or install**.
+3. Verify externally downloaded ModelScope runtime/model SHA-256 contents, linked Rust OCR submodule provenance, Windows production build, offscreen native CTest, online/offline installer packaging and live PaddleOCR compatibility.
+4. Manually validate upgrade from official 1.5.7 and persistence/rollback of user settings, hotkeys, offline local OCR, capture history and Community manual release links. Do not ship an untested exe.
+
+Release is **blocked** until these results are recorded; source conflict resolution alone does not demonstrate runtime correctness.
