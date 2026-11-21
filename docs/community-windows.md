@@ -54,7 +54,7 @@ The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
 `.github/workflows/community-windows-x64.yml` validates the build and
 uploads both installers as artifacts **on successful completion**. A prerelease is
-started manually from **Actions > Community Windows x64 installer and beta release**
+started manually from **Actions > Community Windows x64**
 on the current `main` branch with `publish_prerelease=true`. The workflow first
 performs the clean Windows build, native packaging checks, three-model C++ Qt contract
 tests and SHA-256/manifest verification. Only after those pass does it create the
@@ -147,7 +147,7 @@ already resolves the locked Windows release graph and runs the same collector us
 
 ### Prerelease publication
 
-Start **Community Windows x64 installer and beta release** manually from current `main` with
+Start **Community Windows x64** manually from current `main` with
 `publish_prerelease=true`. The workflow runs the same focused Windows tests and a clean production
 build first. Only after the six local release assets pass verification does it create the version
 tag, create or reuse a draft release, upload the assets, download them again and run the same asset
@@ -160,7 +160,10 @@ overwritten.
 ### Upstream synchronization
 
 The scheduled upstream classifier still auto-merges only documentation changes that do not touch
-fork-protected paths. Source changes use one reusable `automation/upstream-review` branch. When
-the upstream merge is conflict-free, that branch contains the real merge candidate so the normal
-pull-request CI tests the code that would actually enter `main`; merge conflicts produce a small
-report on the same branch instead of opening a new notification PR every day.
+fork-protected paths. Source changes require Draft PR review. Existing human-reviewed upstream
+PR branches are preserved without force-push; new review branches use stable upstream/base SHA
+names. A clean integration contains a real two-parent Git merge. Conflicts open a real upstream
+review candidate if GitHub permits; workflow-token restrictions may instead require an explicit
+blocked tracking PR with a pending marker and mandatory upstream-ancestry checks. Report-only PRs
+must never be mistaken for merged code. See [upstream sync](community-upstream-sync.md) and the
+[architecture review](community-upstream-architecture-review.md).
