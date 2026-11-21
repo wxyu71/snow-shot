@@ -1279,10 +1279,6 @@
             <translation>启用非移动工具时，允许从选区边缘调整选区大小</translation>
         </message>
         <message>
-            <source>Also copy the screenshot to the clipboard when pinning it to screen</source>
-            <translation>将截图固定到屏幕时，同时将截图复制到剪贴板</translation>
-        </message>
-        <message>
             <source>Always</source>
             <translation>始终</translation>
         </message>
@@ -1387,6 +1383,18 @@
             <translation>适用于三种皮肤。覆盖模式填满各个界面并裁剪边缘，适应模式显示完整图像</translation>
         </message>
         <message>
+            <source>Applies to pins created from the screenshot window</source>
+            <translation>适用于从截图窗口固定到屏幕的截图</translation>
+        </message>
+        <message>
+            <source>Applies to standard, scrolling, monitor, and focused-window captures</source>
+            <translation>适用于普通截图、滚动截图、当前显示器截图和焦点窗口截图</translation>
+        </message>
+        <message>
+            <source>Applies when Copy current view copies an image</source>
+            <translation>在「复制当前视图」复制图像时执行</translation>
+        </message>
+        <message>
             <source>Apply to recognized text when editing or copying</source>
             <translation>编辑或复制识别文字时应用</translation>
         </message>
@@ -1435,8 +1443,8 @@
             <translation>自动识别二维码</translation>
         </message>
         <message>
-            <source>Auto-save after execution</source>
-            <translation>执行后自动保存</translation>
+            <source>Auto-save</source>
+            <translation>自动保存</translation>
         </message>
         <message>
             <source>Auto-save image filename format</source>
@@ -1683,6 +1691,10 @@
             <translation>选择自动选取窗口或窗口子元素，或手动选择</translation>
         </message>
         <message>
+            <source>Choose how Windows throttles the application's execution speed</source>
+            <translation>选择 Windows 如何限制应用程序的执行速度</translation>
+        </message>
+        <message>
             <source>Choose how much execution time the application receives</source>
             <translation>选择应用程序获得的执行时间</translation>
         </message>
@@ -1855,16 +1867,16 @@
             <translation>选择录制输出文件的保存位置</translation>
         </message>
         <message>
-            <source>Choose which actions also save an image in the selected image format and save directory</source>
-            <translation>选择执行哪些操作时，同时以所选图像格式保存到指定目录</translation>
-        </message>
-        <message>
             <source>Choose which fullscreen windows trigger automatic disabling</source>
             <translation>选择哪些全屏窗口会触发自动禁用</translation>
         </message>
         <message>
             <source>Choose which inputs to disable</source>
             <translation>选择要禁用的输入功能</translation>
+        </message>
+        <message>
+            <source>Choose which tasks run after a successful image export</source>
+            <translation>选择图像导出成功后执行的任务</translation>
         </message>
         <message>
             <source>Clear</source>
@@ -1931,6 +1943,10 @@
             <translation>颜色拾取器显示模式</translation>
         </message>
         <message>
+            <source>Compress selected images</source>
+            <translation>压缩选中的图像</translation>
+        </message>
+        <message>
             <source>Compression level</source>
             <translation>压缩级别</translation>
         </message>
@@ -1995,10 +2011,6 @@
             <translation>复制</translation>
         </message>
         <message>
-            <source>Copy after pinning to screen</source>
-            <translation>固定到屏幕后复制</translation>
-        </message>
-        <message>
             <source>Copy after text recognition</source>
             <translation>文本识别后复制</translation>
         </message>
@@ -2019,12 +2031,8 @@
             <translation>复制颜色</translation>
         </message>
         <message>
-            <source>Copy current monitor</source>
-            <translation>复制当前显示器</translation>
-        </message>
-        <message>
-            <source>Copy focused window</source>
-            <translation>复制焦点窗口</translation>
+            <source>Copy file</source>
+            <translation>复制文件</translation>
         </message>
         <message>
             <source>Copy image file to clipboard</source>
@@ -2035,20 +2043,12 @@
             <translation>复制原始内容</translation>
         </message>
         <message>
-            <source>Copy pinned window</source>
-            <translation>复制固定到屏幕窗口</translation>
-        </message>
-        <message>
             <source>Copy recording</source>
             <translation>复制录制内容</translation>
         </message>
         <message>
             <source>Copy screenshot</source>
             <translation>复制截图</translation>
-        </message>
-        <message>
-            <source>Copy scrolling screenshot</source>
-            <translation>复制滚动截图</translation>
         </message>
         <message>
             <source>Copy text</source>
@@ -2165,6 +2165,10 @@
         <message>
             <source>Customize the screenshot action toolbar</source>
             <translation>自定义截图操作工具栏</translation>
+        </message>
+        <message>
+            <source>Cycle annotation tool options</source>
+            <translation>循环切换标注工具选项</translation>
         </message>
         <message>
             <source>DXGI</source>
@@ -2501,6 +2505,10 @@
         <message>
             <source>Export settings</source>
             <translation>导出设置</translation>
+        </message>
+        <message>
+            <source>Export tasks</source>
+            <translation>导出任务</translation>
         </message>
         <message>
             <source>Extended features settings</source>
@@ -2887,6 +2895,10 @@
             <translation>关闭应用程序后仍保留可用的截图</translation>
         </message>
         <message>
+            <source>Keep selection width and height consistent</source>
+            <translation>保持选区宽高一致</translation>
+        </message>
+        <message>
             <source>Keep the Snow Shot save dialog open after saving to show the result</source>
             <translation>保存后保持 Snow Shot 保存对话框打开，以显示保存结果</translation>
         </message>
@@ -3029,10 +3041,6 @@
         <message>
             <source>Main interface skin position</source>
             <translation>主界面皮肤位置</translation>
-        </message>
-        <message>
-            <source>Maintain selection aspect ratio</source>
-            <translation>保持选区宽高比</translation>
         </message>
         <message>
             <source>Manage macOS permissions for Snow Shot</source>
@@ -3248,6 +3256,10 @@
             <translation>登录时打开</translation>
         </message>
         <message>
+            <source>Open image compression for each selected image file, or an empty window if no images are selected</source>
+            <translation>为每个选中的图像文件打开图像压缩窗口；未选中图像时打开空窗口</translation>
+        </message>
+        <message>
             <source>Open image editing for each selected image file, or an empty window if no images are selected</source>
             <translation>为每个选中的图像文件打开图像编辑窗口；未选中图像时打开空窗口</translation>
         </message>
@@ -3340,6 +3352,10 @@
             <translation>当前焦点窗口符合筛选条件且占据整个显示器时，暂停所选的输入功能</translation>
         </message>
         <message>
+            <source>Performance</source>
+            <translation>性能</translation>
+        </message>
+        <message>
             <source>Permanently remove all saved screenshots</source>
             <translation>永久移除所有已保存的截图</translation>
         </message>
@@ -3362,10 +3378,6 @@
         <message>
             <source>Pin images, supported files, formatted text, or HTML from the clipboard to the screen</source>
             <translation>将剪贴板中的图像、支持的文件、格式化文本或 HTML 固定到屏幕</translation>
-        </message>
-        <message>
-            <source>Pin screenshot to screen</source>
-            <translation>将截图固定到屏幕</translation>
         </message>
         <message>
             <source>Pin selected files to screen</source>
@@ -3478,6 +3490,14 @@
         <message>
             <source>Portrait A4</source>
             <translation>纵向 A4</translation>
+        </message>
+        <message>
+            <source>Power QoS</source>
+            <translation>电源 QoS</translation>
+        </message>
+        <message>
+            <source>Power saving</source>
+            <translation>节能</translation>
         </message>
         <message>
             <source>Preload the selected model for faster recognition. Requires a resident process and uses additional memory</source>
@@ -3784,6 +3804,70 @@
             <translation>延时 %1 秒执行</translation>
         </message>
         <message>
+            <source>Run after copying a pinned window</source>
+            <translation>固定到屏幕窗口复制后执行</translation>
+        </message>
+        <message>
+            <source>Run after copying a screenshot</source>
+            <translation>截图复制后执行</translation>
+        </message>
+        <message>
+            <source>Run after pinning a screenshot to the screen</source>
+            <translation>截图固定到屏幕后执行</translation>
+        </message>
+        <message>
+            <source>Run after printing a pinned window</source>
+            <translation>固定到屏幕窗口打印后执行</translation>
+        </message>
+        <message>
+            <source>Run after printing a screenshot</source>
+            <translation>截图打印后执行</translation>
+        </message>
+        <message>
+            <source>Run after saving a pinned window</source>
+            <translation>固定到屏幕窗口保存后执行</translation>
+        </message>
+        <message>
+            <source>Run after saving a screenshot</source>
+            <translation>截图保存后执行</translation>
+        </message>
+        <message>
+            <source>Run after sharing a pinned window via AirDrop</source>
+            <translation>固定到屏幕窗口通过隔空投送分享后执行</translation>
+        </message>
+        <message>
+            <source>Run after sharing a screenshot via AirDrop</source>
+            <translation>截图通过隔空投送分享后执行</translation>
+        </message>
+        <message>
+            <source>Run after uploading a pinned window</source>
+            <translation>固定到屏幕窗口上传后执行</translation>
+        </message>
+        <message>
+            <source>Run after uploading a screenshot</source>
+            <translation>截图上传后执行</translation>
+        </message>
+        <message>
+            <source>Runs after a successful manual cloud upload</source>
+            <translation>手动上传到云端成功后执行</translation>
+        </message>
+        <message>
+            <source>Runs after each successful Quick save or Save as file</source>
+            <translation>每次快速保存或另存为文件成功后执行</translation>
+        </message>
+        <message>
+            <source>Runs after each successful individual save</source>
+            <translation>每次单独保存成功后执行</translation>
+        </message>
+        <message>
+            <source>Runs after the print job is submitted</source>
+            <translation>打印作业提交后执行</translation>
+        </message>
+        <message>
+            <source>Runs when AirDrop confirms sharing</source>
+            <translation>在隔空投送确认分享成功后执行</translation>
+        </message>
+        <message>
             <source>Save as file</source>
             <translation>保存为文件</translation>
         </message>
@@ -4012,12 +4096,12 @@
             <translation>选择图像保存目录</translation>
         </message>
         <message>
-            <source>Select scenarios</source>
-            <translation>选择场景</translation>
-        </message>
-        <message>
             <source>Select skin image</source>
             <translation>选择皮肤图像</translation>
+        </message>
+        <message>
+            <source>Select tasks</source>
+            <translation>选择任务</translation>
         </message>
         <message>
             <source>Select the language used throughout the application</source>
