@@ -46,28 +46,33 @@ static Qt, NSIS, the repository's vcpkg toolchain and OCR runtime assets:
 
 ```powershell
 ./scripts/build.ps1 -Preset snow-shot-msvc-release
-ctest --test-dir build/snow-shot-msvc-release -C Release --output-on-failure
 ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild
 ```
 
 The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
-`.github/workflows/community-windows-x64.yml` validates the focused native build for
-ordinary PRs. The Beta integration PR #2 additionally builds and packages the
-full production application, tests the actual online/offline NSIS installers,
-and uploads the verified artifacts **only after these checks pass**. A prerelease is
-started manually from **Actions > Community Windows x64**
-on the current `main` branch with `publish_prerelease=true`. The workflow first
-performs the clean Windows build, native packaging checks, three-model C++ Qt contract
-tests and SHA-256/manifest verification. Only after those pass does it create the
-version tag (for example, `v1.5.8-beta.1_snow-shot`), assemble a draft GitHub
-Release, verify that all six expected assets are attached, and publish it as a
-prerelease. Beta PR #2 and manual runs with `publish_prerelease=false` upload
-workflow artifacts without creating tags or GitHub Releases. Other PRs only
-run the focused native checks. Treat artifacts from public-repository CI as
-test outputs, not as private or approved release binaries. Releases contain only
-the x64 Full online/offline NSIS installers, checksums and manifests, never
-Mini, ARM64, macOS or portable builds.
+
+The CI pipeline deliberately separates normal review from release acceptance:
+ordinary PR updates (including Draft Beta PR #2) run only the Ubuntu
+repository-policy and helper **preflight**; they do **not** start a Windows
+runner, build production installers, or upload release candidates. Freeze a
+reviewed Beta candidate, then use **Actions > Community Windows x64 > Run
+workflow** on the exact Beta branch with `publish_prerelease=false`. That
+single explicit `workflow_dispatch` runs focused native Windows tests, builds
+the production application, packages real online/offline NSIS installers,
+verifies their checksums/manifests, exercises online-to-offline installation
+and uninstall, and uploads six verified CI artifacts. The artifacts are
+test outputs, not private or approved release binaries.
+
+Only after the manual official **1.5.7** upgrade acceptance and merge into
+the reviewed current `main` branch may a maintainer start the same workflow
+from `main` with `publish_prerelease=true`. A fresh verified production build
+must succeed before the workflow creates the version tag (for example,
+`v1.5.8-beta.1_snow-shot`), stages a draft release, re-verifies all six
+GitHub-hosted assets, and publishes a prerelease. Neither PR events nor
+`publish_prerelease=false` runs create a tag or GitHub Release. Releases
+contain only the x64 Full online/offline NSIS installers, checksums and
+manifests, never Mini, ARM64, macOS or portable builds.
 
 For reproducible Windows CI, the workflow pins MSVC to the exact installed
 `14.52.37025` toolset and checks it **before** installing dependencies. If
@@ -136,32 +141,43 @@ layer of source-text contract tests. New behavior is tested in the existing C++/
 and executed through CMake/CTest. Compiler, CMake, Cargo and NSIS failures are validated by the
 real tools that produce the application.
 
-Every pull request enters one workflow:
+Every pull request enters the lightweight preflight, while the expensive
+Windows job runs only when the workflow is **explicitly dispatched**:
 
-1. A small Ubuntu preflight runs the upstream-sync policy tests, deletion guard, the existing
-   Qt/CMake contract, PaddleOCR fixture self-test, and release helper self-test. Documentation-only
-   changes stop here.
-2. Native changes use the pinned Windows toolchain and the cached vcpkg/Cargo/static-Qt dependency
-   layers.
-3. A dedicated `snow-shot-msvc-test` build enables the repository's real tests without enabling
-   packaging or release optimization. The normal PR gate intentionally builds only two executables:
-   `snow-shot-paddleocr-client-tests` for the provider protocol and
-   `snow-shot-recognition-session-controller-tests` for the complete in-product Cloud OCR session.
-   Broader Settings/About/storage/toolbar tests remain in the normal native suite but are not paid
-   for on every Community PR. PRs do not link the production `snow_shot.exe`; the core build has
-   its own two-hour timeout so a stalled compiler or linker cannot consume the whole Windows job.
-4. Beta integration PR #2 and a normal `workflow_dispatch` additionally smoke-test the pinned
-   NSIS/CPack toolchain, run the production Cargo/license collector, create the
-   `snow-shot-msvc-release` production build tree, link the full application once, package
-   the Full-only NSIS online/offline installers, and verify their manifests and SHA-256 files.
-   A Windows runner then silently installs the real online NSIS artifact, upgrades it in place
-   to the offline artifact, verifies the embedded OCR payload and uninstall path, and uploads
-   the verified binaries as CI artifacts. Neither path publishes a release by itself.
-5. With `publish_prerelease=true`, the same manually verified production artifacts continue into
-   the draft/prerelease publication gate.
+1. The Ubuntu preflight runs upstream-sync policy tests, deletion guard,
+   Qt/CMake contract tests, PaddleOCR fixture self-test, and the release
+   helper self-test. Documentation-only and native PR changes stop here.
+2. On one deliberate `workflow_dispatch`, the Windows job checks the exact
+   MSVC/SDK toolchain, restores dependency caches, and builds focused
+   `snow-shot-msvc-test` C++/Qt tests:
+   `snow-shot-paddleocr-client-tests` and
+   `snow-shot-recognition-session-controller-tests`. It never substitutes
+   a text-only check for the real compiler, CMake or CTest.
+3. The same Windows job tests NSIS/CPack, validates production Cargo licenses,
+   builds `snow-shot-msvc-release`, creates both real Full NSIS installers,
+   verifies SHA-256/manifest assets, silently installs the online variant,
+   upgrades it in place with the offline variant, checks OCR payloads,
+   uninstalls, and uploads verified CI artifacts.
+4. `publish_prerelease=false` stops after artifact validation. Only
+   `publish_prerelease=true` on current, reviewed `main` can continue
+   to the draft/prerelease publication gate; the release source guard fails
+   closed on other branches.
 
 The pipeline caches dependencies and the audited static Qt kit, not CMake/MSVC application build
 trees. This avoids stale compiled state while retaining the expensive dependency work.
+
+**CI budget for maintainers and automated agents:** Follow
+[repository Agent guidelines](../AGENTS.md). Run only locally relevant
+formatting, static and targeted tests before pushing; consolidate verified
+changes into one commit rather than a push-per-failure loop. Keep PR
+`concurrency` cancellation enabled for obsolete runs. Avoid toggling
+`ready_for_review`, no-op commits, manual reruns or automatic full-build
+dispatches to force CI. Analyze the last failure log, freeze a candidate,
+then spend **one** intentional full Windows CI run on it. If the run fails,
+fix and test a batch of problems before the next manual acceptance run.
+The workflow uses a new concurrency namespace so the first lightweight
+PR check does not cancel the already-running previous full Beta check.
+Do not infer Windows acceptance for a new head commit from a run on an older SHA.
 
 The separate source-grep `test-community-*` scripts, standalone PaddleOCR CMake harness, and
 duplicate OCR license workflow are intentionally removed. The production Cargo license preflight
@@ -169,8 +185,11 @@ already resolves the locked Windows release graph and runs the same collector us
 
 ### Prerelease publication
 
-Start **Community Windows x64** manually from current `main` with
-`publish_prerelease=true`. The workflow runs the same focused Windows tests and a clean production
+After verifying a frozen Beta head with `publish_prerelease=false`,
+complete the official 1.5.7 installed-upgrade check, obtain review approval
+and integrate the accepted candidate. Then start **Community Windows x64**
+manually from current `main` with `publish_prerelease=true`. The workflow
+runs the same focused Windows tests and a clean production
 build first. Only after the six local release assets pass verification does it create the version
 tag, create or reuse a draft release, upload the assets, download them again and run the same asset
 verification on the GitHub-hosted copies. The draft is then published as a prerelease.

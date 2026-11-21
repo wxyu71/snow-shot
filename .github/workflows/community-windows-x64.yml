@@ -1,8 +1,9 @@
 name: Community Windows x64
 
 on:
+  # PR commits are limited to the Ubuntu preflight; full Windows acceptance is manual.
   pull_request:
-    types: [opened, reopened, synchronize, ready_for_review]
+    types: [opened, reopened, synchronize]
   workflow_dispatch:
     inputs:
       publish_prerelease:
@@ -15,7 +16,9 @@ permissions:
   contents: read
 
 concurrency:
-  group: community-windows-x64-${{ github.ref }}
+  # New namespace avoids cancelling an already-running pre-migration Beta validation.
+  # Still cancels superseded PR runs within this lightweight generation.
+  group: community-windows-x64-lightweight-v2-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
@@ -77,7 +80,9 @@ jobs:
 
   windows:
     needs: [preflight]
-    if: needs.preflight.outputs.native == 'true'
+    # No Windows runner for ordinary PR pushes, including Beta PR #2.
+    # workflow_dispatch explicitly opts into full production installer validation.
+    if: needs.preflight.outputs.native == 'true' && github.event_name == 'workflow_dispatch'
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     env:
@@ -104,7 +109,6 @@ jobs:
           Write-Host "Pinned MSVC $env:VCToolsVersion; Windows SDK $env:WindowsSDKVersion"
 
       - name: Bootstrap NSIS and smoke-test CPack
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
         shell: pwsh
         run: ./scripts/bootstrap-community-nsis.ps1
 
@@ -194,7 +198,6 @@ jobs:
         run: ctest --preset test-snow-shot-msvc-community
 
       - name: Verify production license graph
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
         shell: pwsh
         run: ./scripts/preflight-community-release-licenses.ps1
       - name: Save complete Cargo sources
@@ -208,26 +211,21 @@ jobs:
           key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Build production Windows x64
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
         shell: pwsh
         run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
       - name: Package production installers
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
         shell: pwsh
         run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
       - name: Verify installer assets
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
         shell: pwsh
         run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release --allow-build-intermediates
 
       - name: Smoke-test real Windows installers and in-place upgrade
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
         timeout-minutes: 20
         shell: pwsh
         run: ./scripts/test-community-windows-installer-smoke.ps1 -BuildDirectory build/snow-shot-msvc-release
 
       - name: Upload release candidates
-        if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
           name: community-windows-x64-${{ github.sha }}

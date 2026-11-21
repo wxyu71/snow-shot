@@ -41,6 +41,14 @@
 - Rust tests are mostly inline `#[cfg(test)]` modules (a few crates also have `tests/` integration tests). After a crate change, run `cargo test -p <crate>` (optionally `-- <test_name>`) inside `snow-crates/`. Do not run `cargo test --workspace` unless the user explicitly asks.
 - Cover every behavioral change with a deterministic, offscreen-capable test.
 
+## GitHub Actions Budget & Community Beta Acceptance
+- The Community `.github/workflows/community-windows-x64.yml` PR gate runs only the Ubuntu policy and helper preflight. **Do not** make PR pushes, `ready_for_review` toggles, or empty commits to repeatedly trigger expensive Windows CI. Keep ordinary review checks separate from final Beta installer acceptance.
+- Before pushing, review the diff, run formatting and the **smallest related local tests** described above, and group validated changes into one coherent commit. Diagnose the existing Actions log before editing; avoid a push-per-error trial-and-error loop.
+- Keep workflow `concurrency` per PR/ref with `cancel-in-progress` for obsolete PR runs. Do not add a `push` trigger or automatically dispatch full Windows builds. Routine use of `[skip ci]` is discouraged because required GitHub checks can remain pending.
+- When the Beta candidate is frozen, deliberately run **one** `workflow_dispatch` of `Community Windows x64` on that exact candidate branch with `publish_prerelease=false`. It runs focused Windows tests, the production build, actual online/offline NSIS installers, verification and in-place installer smoke tests. If it fails, diagnose and batch fixes **before** another deliberate run.
+- Never merge/publish based solely on green preflight or a historical installer run. Complete real Windows acceptance and a separate manual upgrade from installed official **1.5.7** (settings/shortcuts/OCR). Publish only from current reviewed `main` with `publish_prerelease=true` after those gates.
+- Documentation belongs under `docs/` (Beta runbook: `docs/community-windows.md`; upstream sync: `docs/community-upstream-sync.md`), Agent-wide rules here, test and packaging entry points under `scripts/`, and vcpkg overlays under `cmake/`. Do not scatter release runbooks in the repository root or `scripts/`.
+
 ## Commit & Pull Request Guidelines
 - Conventional Commits, lowercase imperative: `fix(screenshot): stop cursor flicker during smart frame selection`. Types in use: `feat`, `fix`, `refactor`, `perf`, `test`, `style`, `build`. Scopes mirror features (`recording`, `pinned`, `dpi`, `ocr`, `toolbar`).
 - PRs: state motivation, list affected presets/targets, link issues, and confirm format, lint, and related tests pass. Do not run the full suite for a PR unless the user explicitly asks.
