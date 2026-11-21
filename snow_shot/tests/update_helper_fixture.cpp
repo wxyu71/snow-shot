@@ -57,17 +57,17 @@ bool isElevated() {
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
-    wchar_t telemetry[32768]{};
-    const DWORD telemetryLength =
-        GetEnvironmentVariableW(L"SNOW_SHOT_HELPER_CANARY_RESULTS", telemetry, 32768);
+    wchar_t resultDirectory[32768]{};
+    const DWORD resultDirectoryLength =
+        GetEnvironmentVariableW(L"SNOW_SHOT_HELPER_CANARY_RESULTS", resultDirectory, 32768);
     if (argc == 2 && std::wstring(argv[1]) == L"--show-main-window") {
         wchar_t executable[32768]{};
         GetModuleFileNameW(nullptr, executable, 32768);
         std::wstring root(executable);
         root.resize(root.find_last_of(L"\\/"));
         root.resize(root.find_last_of(L"\\/"));
-        if (telemetryLength > 0 && telemetryLength < 32768) {
-            root = telemetry;
+        if (resultDirectoryLength > 0 && resultDirectoryLength < 32768) {
+            root = resultDirectory;
         }
         writeFile(root + L"\\.canary-restarted.txt", userSid());
         writeFile(root + L"\\.canary-restarted-elevation.txt",
@@ -81,7 +81,7 @@ int wmain(int argc, wchar_t** argv) {
     const std::wstring helper(argv[2]);
     const bool cancel = std::wstring(argv[3]) == L"cancel";
     const bool elevationCancel = std::wstring(argv[3]) == L"elevation-cancel";
-    const std::wstring results = telemetryLength > 0 && telemetryLength < 32768 ? telemetry : root;
+    const std::wstring results = resultDirectoryLength > 0 && resultDirectoryLength < 32768 ? resultDirectory : root;
     writeFile(results + L"\\.canary-parent-elevation.txt", isElevated() ? "elevated" : "standard");
     const std::wstring name = L"snow-shot-helper-canary-" + std::to_wstring(GetCurrentProcessId());
     const std::wstring pipePath = L"\\\\.\\pipe\\" + name;

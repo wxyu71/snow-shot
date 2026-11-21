@@ -12,6 +12,9 @@
 #include "snow_shot/presentation/settings/applicationpriority.h"
 #include "snow_shot/platform/applicationqos.h"
 #include "snow_shot/platform/windows/autostartregistration.h"
+#ifdef Q_OS_WIN
+#include "snow_shot/platform/windows/processpowerqos.h"
+#endif
 #ifdef Q_OS_MACOS
 #include "snow_shot/platform/macos/loginitemservice.h"
 #include <QGuiApplication>
@@ -55,6 +58,8 @@ const QString kContextMenuShortcutKey =
     QStringLiteral("context_menu_shortcuts/edit_with_snow_shot");
 
 #ifdef Q_OS_WIN
+const QString kPowerQoSKey = QStringLiteral("system/power_qos");
+
 QString contextMenuAccessKey(const QJsonValue& value) {
     const auto bindings = shortcuts::shortcutBindingsFromJson(value, false);
     return bindings.isEmpty() ? QString() : bindings.first().portableText;
@@ -612,6 +617,15 @@ QVariant BuiltInSettingsBackend::selectValue(SettingsSelectBinding binding) cons
             .value(QStringLiteral("system/application_priority"))
             .toString();
     }
+    case SettingsSelectBinding::PowerQoS:
+#ifdef Q_OS_WIN
+        return storage::ApplicationStorage::instance()
+            .configuration()
+            .value(kPowerQoSKey)
+            .toString();
+#else
+        return {};
+#endif
     case SettingsSelectBinding::Proxy:
         return storage::NetworkSettings().proxy();
     case SettingsSelectBinding::UpdateMode:
@@ -675,6 +689,8 @@ QVariant BuiltInSettingsBackend::selectValue(SettingsSelectBinding binding) cons
         return storage::PinToScreenSettings().middleMouseButtonAction();
     case SettingsSelectBinding::PinDuplicateContentAction:
         return storage::PinToScreenSettings().duplicateContentAction();
+    case SettingsSelectBinding::FloatingToolbarDropBehavior:
+        return storage::FloatingToolbarSettings().dropBehavior();
     case SettingsSelectBinding::PinTextSelectionOnRecognitionResults:
         return storage::PinToScreenSettings().textSelectionOnRecognitionResults();
     case SettingsSelectBinding::PinMouseWheelZoomMode:
@@ -850,6 +866,23 @@ bool BuiltInSettingsBackend::applySelectValue(SettingsSelectBinding binding,
         return persisted;
 #endif
     }
+    case SettingsSelectBinding::PowerQoS: {
+#ifdef Q_OS_WIN
+        auto& configuration = storage::ApplicationStorage::instance().configuration();
+        const QString previous = configuration.value(kPowerQoSKey).toString();
+        const QString requested = value.toString();
+        if (!platform::windows::applyProcessPowerQoS(requested))
+            return false;
+        if (!configuration.setValue(kPowerQoSKey, requested)) {
+            static_cast<void>(platform::windows::applyProcessPowerQoS(previous));
+            return false;
+        }
+        emit synchronized();
+        return true;
+#else
+        return false;
+#endif
+    }
     case SettingsSelectBinding::MemoryOptimizationPolicy:
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
         return storage::ApplicationStorage::instance().configuration().setValue(
@@ -924,6 +957,8 @@ bool BuiltInSettingsBackend::applySelectValue(SettingsSelectBinding binding,
         return storage::PinToScreenSettings().setDoubleClickAction(value.toString());
     case SettingsSelectBinding::PinMiddleClickAction:
         return storage::PinToScreenSettings().setMiddleMouseButtonAction(value.toString());
+    case SettingsSelectBinding::FloatingToolbarDropBehavior:
+        return storage::FloatingToolbarSettings().setDropBehavior(value.toString());
     case SettingsSelectBinding::PinDuplicateContentAction:
         return storage::PinToScreenSettings().setDuplicateContentAction(value.toString());
     case SettingsSelectBinding::PinTextSelectionOnRecognitionResults:
@@ -996,6 +1031,8 @@ bool BuiltInSettingsBackend::switchValue(SettingsSwitchBinding binding) const {
         return storage::ScreenshotUiSettings().screenshotAreaTypeHintEnabled();
     case SettingsSwitchBinding::ShowGuidesByDefault:
         return storage::ScreenshotUiSettings().showGuidesByDefault();
+    case SettingsSwitchBinding::AdaptiveGuideColors:
+        return storage::ScreenshotUiSettings().adaptiveGuideColors();
     case SettingsSwitchBinding::ShowEditSelectionToolbar:
         return storage::ScreenshotUiSettings().showEditSelectionToolbar();
     case SettingsSwitchBinding::FloatingToolbarEnabled:
@@ -1026,8 +1063,6 @@ bool BuiltInSettingsBackend::switchValue(SettingsSwitchBinding binding) const {
         return storage::ScreenshotSettings().restoreOriginalScreenColors();
     case SettingsSwitchBinding::ScreenshotCopyImageFileToClipboard:
         return storage::ScreenshotSettings().copyImageFileToClipboard();
-    case SettingsSwitchBinding::ScreenshotCopyAfterPinningToScreen:
-        return storage::ScreenshotSettings().copyAfterPinningToScreen();
     case SettingsSwitchBinding::ScreenshotKeepAnnotationsEditableAfterPinningToScreen:
         return storage::ScreenshotSettings().keepAnnotationsEditableAfterPinningToScreen();
     case SettingsSwitchBinding::ScreenshotShowSaveResult:
@@ -1219,7 +1254,7 @@ bool BuiltInSettingsBackend::fieldUsesStorageErrors(const QString& fieldId) cons
 }
 bool BuiltInSettingsBackend::fieldPending(const QString& fieldId) const {
 #ifdef Q_OS_MACOS
-    if (fieldId == u"system.auto-start-at-boot" || fieldId == u"system.login-item-settings")
+    if (fieldId == u"system.auto-start-at-boot")
         return m_loginItems->pending();
 #endif
     return platform::windows::administratorOperationPending() &&
@@ -1356,6 +1391,9 @@ bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, boo
     if (binding == SettingsSwitchBinding::ShowGuidesByDefault) {
         return storage::ScreenshotUiSettings().setShowGuidesByDefault(value);
     }
+    if (binding == SettingsSwitchBinding::AdaptiveGuideColors) {
+        return storage::ScreenshotUiSettings().setAdaptiveGuideColors(value);
+    }
     if (binding == SettingsSwitchBinding::ShowEditSelectionToolbar) {
         return storage::ScreenshotUiSettings().setShowEditSelectionToolbar(value);
     }
@@ -1369,9 +1407,6 @@ bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, boo
     }
     if (binding == SettingsSwitchBinding::ScreenshotCopyImageFileToClipboard) {
         return storage::ScreenshotSettings().setCopyImageFileToClipboard(value);
-    }
-    if (binding == SettingsSwitchBinding::ScreenshotCopyAfterPinningToScreen) {
-        return storage::ScreenshotSettings().setCopyAfterPinningToScreen(value);
     }
     if (binding == SettingsSwitchBinding::ScreenshotKeepAnnotationsEditableAfterPinningToScreen) {
         return storage::ScreenshotSettings().setKeepAnnotationsEditableAfterPinningToScreen(value);
@@ -1544,6 +1579,7 @@ bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, boo
         return false;
     case SettingsSwitchBinding::ScreenshotAreaTypeHint:
     case SettingsSwitchBinding::ShowGuidesByDefault:
+    case SettingsSwitchBinding::AdaptiveGuideColors:
     case SettingsSwitchBinding::ShowEditSelectionToolbar:
     case SettingsSwitchBinding::FloatingToolbarEnabled:
     case SettingsSwitchBinding::TrayEnabled:
@@ -1558,7 +1594,6 @@ bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, boo
     case SettingsSwitchBinding::ScreenshotRestoreOriginalScreenColors:
     case SettingsSwitchBinding::ScreenshotCopyImageFileToClipboard:
     case SettingsSwitchBinding::ScreenshotShowSaveResult:
-    case SettingsSwitchBinding::ScreenshotCopyAfterPinningToScreen:
     case SettingsSwitchBinding::ScreenshotKeepAnnotationsEditableAfterPinningToScreen:
     case SettingsSwitchBinding::SaveRecognitionResultAsImage:
     case SettingsSwitchBinding::ShowOriginalImagePreview:
@@ -1721,8 +1756,12 @@ QVariantList BuiltInSettingsBackend::multiSelectValue(SettingsMultiSelectBinding
         for (const QString& value : storage::TraySettings().menuOptions()) {
             values.push_back(value);
         }
-    } else if (binding == SettingsMultiSelectBinding::ScreenshotAutoSaveAfterExecution) {
-        for (const QString& value : storage::ScreenshotSettings().autoSaveAfterExecutionActions()) {
+    } else if (const auto trigger = exportTriggerForBinding(binding)) {
+        for (const auto& value :
+             storage::exportTaskIds(storage::ScreenshotSettings().exportTasks(*trigger)))
+            values.push_back(value);
+    } else if (binding == SettingsMultiSelectBinding::FullscreenDisableScope) {
+        for (const QString& value : storage::GlobalShortcutSettings().fullscreenDisableScope()) {
             values.push_back(value);
         }
     }
@@ -1745,8 +1784,11 @@ bool BuiltInSettingsBackend::applyMultiSelectValue(SettingsMultiSelectBinding bi
     if (binding == SettingsMultiSelectBinding::TrayMenuOptions) {
         return storage::TraySettings().setMenuOptions(tools);
     }
-    if (binding == SettingsMultiSelectBinding::ScreenshotAutoSaveAfterExecution) {
-        return storage::ScreenshotSettings().setAutoSaveAfterExecutionActions(tools);
+    if (const auto trigger = exportTriggerForBinding(binding))
+        return storage::ApplicationStorage::instance().configuration().setValue(
+            storage::exportTaskRow(*trigger).key.toString(), QJsonArray::fromStringList(tools));
+    if (binding == SettingsMultiSelectBinding::FullscreenDisableScope) {
+        return storage::GlobalShortcutSettings().setFullscreenDisableScope(tools);
     }
     return false;
 }
@@ -2270,12 +2312,6 @@ bool BuiltInSettingsBackend::applyGlobalMouseCombination(
 SettingsActionState BuiltInSettingsBackend::actionState(SettingsActionBinding binding) const {
     const storage::StorageStatus status = storage::ApplicationStorage::instance().status();
     switch (binding) {
-    case SettingsActionBinding::OpenLoginItemSettings:
-#ifdef Q_OS_MACOS
-        return {!m_loginItems->pending(), false};
-#else
-        return {false, false};
-#endif
     case SettingsActionBinding::RestartAsAdministrator: {
         const auto state = platform::windows::administratorPresentation(
             platform::windows::administratorState(), storage::SystemSettings().autoStartAtBoot(),
@@ -2314,15 +2350,6 @@ SettingsActionState BuiltInSettingsBackend::actionState(SettingsActionBinding bi
 bool BuiltInSettingsBackend::triggerAction(SettingsActionBinding binding, const QString& filePath,
                                            bool includeToolbarStyles) {
     switch (binding) {
-    case SettingsActionBinding::OpenLoginItemSettings:
-#ifdef Q_OS_MACOS
-        if (!actionState(binding).enabled)
-            return false;
-        m_loginItems->openSettings();
-        return true;
-#else
-        return false;
-#endif
     case SettingsActionBinding::RestartAsAdministrator: {
         emit synchronized();
         const auto result = platform::windows::restartAsAdministrator(
@@ -2438,7 +2465,7 @@ bool BuiltInSettingsBackend::triggerAction(SettingsActionBinding binding, const 
             }
         }
         const QString archiveError = storage::ConfigurationArchive::write(
-            archivePath, values, storage::ConfigurationStore::currentSchemaVersion());
+            archivePath, values, storage::ConfigurationStore::currentSchemaVersion(), true);
         if (!archiveError.isEmpty()) {
             m_configurationBusy = false;
             emit synchronized();
@@ -2566,6 +2593,7 @@ bool BuiltInSettingsBackend::importConfigurationSnapshot(
 #ifdef Q_OS_WIN
     const auto requestedContextMenu = importedValue(contextMenuKey);
     const auto requestedContextMenuShortcuts = importedValue(kContextMenuShortcutKey);
+    const auto requestedPowerQoS = importedValue(kPowerQoSKey);
 #endif
     // Startup preferences are committed by the native transaction. Keep its previous
     // configuration baseline intact even if querying the OS during rollback fails.
@@ -2579,6 +2607,7 @@ bool BuiltInSettingsBackend::importConfigurationSnapshot(
 #ifdef Q_OS_WIN
     staged.insert(contextMenuKey, previous.value(contextMenuKey));
     staged.insert(kContextMenuShortcutKey, previous.value(kContextMenuShortcutKey));
+    staged.insert(kPowerQoSKey, previous.value(kPowerQoSKey));
 #endif
     if (!configuration.applySnapshot(staged, schemaVersion))
         return false;
@@ -2629,6 +2658,10 @@ bool BuiltInSettingsBackend::importConfigurationSnapshot(
 #endif
     }
 #ifdef Q_OS_WIN
+    if (previous.value(kPowerQoSKey) != requestedPowerQoS)
+        accepted =
+            applySelectValue(SettingsSelectBinding::PowerQoS, requestedPowerQoS.toVariant()) &&
+            accepted;
     if (previous.value(contextMenuKey) != requestedContextMenu ||
         previous.value(kContextMenuShortcutKey) != requestedContextMenuShortcuts)
         accepted = applyContextMenuSettings(requestedContextMenu, requestedContextMenuShortcuts) &&
@@ -2694,6 +2727,7 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
         return applyContextMenuSettings(
             storage::ApplicationStorage::instance().configuration().value(kContextMenuModeKey),
             storage::ConfigurationSchema::defaultValue(kContextMenuShortcutKey));
+    case SettingsSectionReset::ExportTasks:
     case SettingsSectionReset::ScreenshotOutput:
     case SettingsSectionReset::Translation:
     case SettingsSectionReset::Tray:
@@ -2777,6 +2811,8 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
                       QStringLiteral("global_shortcuts/screenshot_full_screen"));
         resetShortcut(GlobalShortcutAction::ScreenshotFocusedWindow,
                       QStringLiteral("global_shortcuts/screenshot_focused_window"));
+        resetShortcut(GlobalShortcutAction::OpenCaptureHistory,
+                      QStringLiteral("global_shortcuts/open_capture_history"));
         accepted = applyIntegerValue(SettingsIntegerBinding::ScreenshotDelaySeconds,
                                      storage::ConfigurationSchema::defaultValue(
                                          QStringLiteral("screenshot/delay_seconds"))
@@ -2807,8 +2843,6 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
             if (storage::ConfigurationSchema::contains(key))
                 accepted = applyShortcuts(action, shortcutListDefault(key)) && accepted;
         };
-        resetShortcut(GlobalShortcutAction::OpenCaptureHistory,
-                      QStringLiteral("global_shortcuts/open_capture_history"));
         resetShortcut(GlobalShortcutAction::GlobalCanvas,
                       QStringLiteral("global_shortcuts/global_canvas"));
         resetShortcut(GlobalShortcutAction::StitchSelectedImages,
@@ -2817,12 +2851,16 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
                       QStringLiteral("global_shortcuts/split_selected_images"));
         resetShortcut(GlobalShortcutAction::EditSelectedImages,
                       QStringLiteral("global_shortcuts/edit_selected_images"));
+        resetShortcut(GlobalShortcutAction::CompressSelectedImages,
+                      QStringLiteral("global_shortcuts/compress_selected_images"));
         resetShortcut(GlobalShortcutAction::TranslateSelectedText,
                       QStringLiteral("global_shortcuts/translate_selected_text"));
         resetShortcut(GlobalShortcutAction::ToggleWindowUnderCursorAlwaysOnTop,
                       QStringLiteral("global_shortcuts/toggle_window_under_cursor_always_on_top"));
         resetShortcut(GlobalShortcutAction::ToggleGlobalShortcuts,
                       QStringLiteral("global_shortcuts/toggle_global_hotkeys"));
+        resetShortcut(GlobalShortcutAction::ToggleGlobalMouse,
+                      QStringLiteral("global_shortcuts/toggle_global_mouse"));
         resetShortcut(
             GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow,
             QStringLiteral("global_shortcuts/toggle_disable_on_focused_fullscreen_window"));
@@ -2895,9 +2933,6 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
                    {QStringLiteral("screenshot/keep_annotations_editable_after_pinning_to_screen"),
                     storage::ConfigurationSchema::defaultValue(QStringLiteral(
                         "screenshot/keep_annotations_editable_after_pinning_to_screen"))},
-                   {QStringLiteral("screenshot/copy_after_pinning_to_screen"),
-                    storage::ConfigurationSchema::defaultValue(
-                        QStringLiteral("screenshot/copy_after_pinning_to_screen"))},
                    {QStringLiteral("screenshot/shutter_sound_notification"),
                     storage::ConfigurationSchema::defaultValue(
                         QStringLiteral("screenshot/shutter_sound_notification"))},
@@ -2949,6 +2984,9 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
             {QStringLiteral("screenshot_ui/show_guides_by_default"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("screenshot_ui/show_guides_by_default"))},
+            {QStringLiteral("screenshot_ui/adaptive_guide_colors"),
+             storage::ConfigurationSchema::defaultValue(
+                 QStringLiteral("screenshot_ui/adaptive_guide_colors"))},
             {QStringLiteral("screenshot_ui/cursor_guide_line_color"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("screenshot_ui/cursor_guide_line_color"))},
@@ -3113,6 +3151,9 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
     case SettingsSectionReset::FloatingToolbar:
         return storage::ApplicationStorage::instance().configuration().setValues({
             {QStringLiteral("floating_toolbar/enabled"), false},
+            {QStringLiteral("floating_toolbar/drop_behavior"),
+             storage::ConfigurationSchema::defaultValue(
+                 QStringLiteral("floating_toolbar/drop_behavior"))},
             {QStringLiteral("floating_toolbar/hide_in_fullscreen"), true},
             {QStringLiteral("floating_toolbar/hide_during_capture"), true},
             {QStringLiteral("floating_toolbar/layout"),
@@ -3359,17 +3400,29 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("system/application_priority"))},
         };
+        const bool priorityApplied = priority.has_value() && applyApplicationPriority(*priority);
+        bool runtimeAccepted = priorityApplied;
 #ifdef Q_OS_WIN
         defaults.insert(QStringLiteral("system/memory_optimization_policy"),
                         storage::ConfigurationSchema::defaultValue(
                             QStringLiteral("system/memory_optimization_policy")));
+        const auto defaultPowerQoS = storage::ConfigurationSchema::defaultValue(kPowerQoSKey);
+        defaults.insert(kPowerQoSKey, defaultPowerQoS);
+        const QString previousPowerQoS = storage.configuration().value(kPowerQoSKey).toString();
+        const bool changePowerQoS = previousPowerQoS != defaultPowerQoS.toString();
+        if (priorityApplied && changePowerQoS)
+            runtimeAccepted = platform::windows::applyProcessPowerQoS(defaultPowerQoS.toString());
 #endif
-        const bool accepted = priority.has_value() && applyApplicationPriority(*priority) &&
-                              storage.configuration().setValues(defaults);
+        const bool accepted = runtimeAccepted && storage.configuration().setValues(defaults);
         if (accepted) {
             emit synchronized();
-        } else if (previous.has_value()) {
-            static_cast<void>(applyApplicationPriority(*previous));
+        } else {
+#ifdef Q_OS_WIN
+            if (runtimeAccepted && changePowerQoS)
+                static_cast<void>(platform::windows::applyProcessPowerQoS(previousPowerQoS));
+#endif
+            if (previous.has_value())
+                static_cast<void>(applyApplicationPriority(*previous));
         }
         return accepted;
 #endif

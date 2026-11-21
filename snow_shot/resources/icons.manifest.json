@@ -639,6 +639,14 @@
     },
     {
       "variant": "outlined",
+      "symbol": "DocumentRecognition",
+      "name": "document-recognition",
+      "source": "../src/presentation/components/icons/resources/document-recognition.svg",
+      "colorModel": "monochrome",
+      "fit": "contain"
+    },
+    {
+      "variant": "outlined",
       "symbol": "Duplicate",
       "name": "duplicate",
       "source": "../src/presentation/components/icons/resources/duplicate.svg",
@@ -770,6 +778,14 @@
       "symbol": "Html",
       "name": "html",
       "source": "../src/presentation/components/icons/resources/html.svg",
+      "colorModel": "monochrome",
+      "fit": "contain"
+    },
+    {
+      "variant": "outlined",
+      "symbol": "ImageCompression",
+      "name": "image-compression",
+      "source": "../src/presentation/components/icons/resources/image-compression.svg",
       "colorModel": "monochrome",
       "fit": "contain"
     },
@@ -946,6 +962,14 @@
       "symbol": "Opacity",
       "name": "opacity",
       "source": "../src/presentation/components/icons/resources/opacity.svg",
+      "colorModel": "monochrome",
+      "fit": "contain"
+    },
+    {
+      "variant": "outlined",
+      "symbol": "OpenDocumentFile",
+      "name": "open-document-file",
+      "source": "../src/presentation/components/icons/resources/open-document-file.svg",
       "colorModel": "monochrome",
       "fit": "contain"
     },
@@ -1674,6 +1698,14 @@
       "symbol": "ToolWavyUnderline",
       "name": "tool-wavy-underline",
       "source": "../src/presentation/components/icons/resources/tool-wavy-underline.svg",
+      "colorModel": "monochrome",
+      "fit": "contain"
+    },
+    {
+      "variant": "outlined",
+      "symbol": "TransparentLayer",
+      "name": "transparent-layer",
+      "source": "../src/presentation/components/icons/resources/transparent-layer.svg",
       "colorModel": "monochrome",
       "fit": "contain"
     },

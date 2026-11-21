@@ -1,4 +1,5 @@
 #include "physical_key_test_support.h"
+#include "widgets/detail/window_modality.h"
 #include "../src/presentation/recording/screenshotrecordingworkflow.h"
 #include <QLineEdit>
 #include <QWheelEvent>
@@ -3778,6 +3779,7 @@ void configuredSelectionShortcutsRouteTabHistoryAndColorActions(bool targetSwitc
     int coordinateCancelCalls = 0;
     int printCalls = 0;
     int brushCalls = 0;
+    int annotationOptionCycles = 0;
     bool coordinateInputAllowed = true;
     int selectorHitTestRequests = 0;
     bool previousSelectionAvailable = true;
@@ -3816,6 +3818,10 @@ void configuredSelectionShortcutsRouteTabHistoryAndColorActions(bool targetSwitc
         return false;
     };
     actions.activateDrawingShortcut = [&](const QString& id) {
+        if (id == QStringLiteral("cycle_annotation_tool_options")) {
+            ++annotationOptionCycles;
+            return true;
+        }
         if (id == QStringLiteral("brush")) {
             ++brushCalls;
             return true;
@@ -3945,6 +3951,25 @@ void configuredSelectionShortcutsRouteTabHistoryAndColorActions(bool targetSwitc
             "C did not copy the color-picker color in Move mode");
 
     interaction.setCanvasTool(ScreenshotActiveTool::Shape);
+    require(annotationOptionCycles == 0 && dispatchShortcut(shortcutWindow, Qt::Key_Tab) &&
+                annotationOptionCycles == 1,
+            "Tab must cycle the annotation only after entering capture editing");
+    static_cast<void>(dispatchShortcut(shortcutWindow, Qt::Key_Tab, Qt::NoModifier, true));
+    require(annotationOptionCycles == 1 &&
+                !dispatchShortcut(shortcutWindow, Qt::Key_Backtab, Qt::ShiftModifier),
+            "annotation cycling must ignore auto-repeat and Shift+Tab");
+    const snow_shot::storage::DrawingShortcutSettings drawingShortcuts;
+    const QString cycleId = QStringLiteral("cycle_annotation_tool_options");
+    const auto originalPrint = shortcutSettings.shortcuts(QStringLiteral("print"));
+    const auto originalCycle = drawingShortcuts.shortcuts(cycleId);
+    require(shortcutSettings.setShortcuts(QStringLiteral("print"), {QStringLiteral("F6")}) &&
+                drawingShortcuts.setShortcuts(cycleId, {QStringLiteral("F6")}) &&
+                dispatchShortcut(shortcutWindow, Qt::Key_F6) && printCalls == 2 &&
+                annotationOptionCycles == 1,
+            "the applicable Screenshot binding must outrank annotation cycling");
+    require(shortcutSettings.setShortcuts(QStringLiteral("print"), originalPrint) &&
+                drawingShortcuts.setShortcuts(cycleId, originalCycle),
+            "restore the shortcuts after testing priority");
     require(!dispatchShortcut(shortcutWindow, Qt::Key_P, Qt::ShiftModifier) &&
                 coordinateToggles == 1,
             "coordinate toggle must be inactive in drawing modes");
@@ -4614,6 +4639,9 @@ void shortcutExitConfirmationGatesCancellation() {
     require(settings.setConfirmBeforeExitingViaShortcut(true), "enable exit confirmation");
     QWidget owner;
     owner.show();
+    QWidget otherDisplayOverlay;
+    otherDisplayOverlay.show();
+    otherDisplayOverlay.winId();
     snow_shot::presentation::WindowShortcutManager shortcutManager;
     shortcutManager.addScopeWindow(&owner);
 
@@ -4648,6 +4676,8 @@ void shortcutExitConfirmationGatesCancellation() {
     auto* modal = owner.findChild<adqt::widgets::AdModal*>(
         QStringLiteral("screenshotShortcutExitConfirmation"));
     require(modal != nullptr && modal->ownerWindow() == &owner &&
+                modal->windowModality() == Qt::ApplicationModal &&
+                adqt::widgets::detail::blockingModalWindow(otherDisplayOverlay.windowHandle()) &&
                 modal->mode() == adqt::widgets::AdModal::Mode::Window &&
                 modal->windowTitle() == QStringLiteral("Exit screenshot?") &&
                 modal->text() == QStringLiteral("Your current screenshot will be discarded") &&
@@ -4697,9 +4727,10 @@ void shortcutExitConfirmationGatesCancellation() {
     require(!modal->isOpen(), "Escape must close the confirmation modal");
     require(exits == 0, "Escape must not exit capture");
     require(restores == 2, "Escape must restore the capture owner");
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-
     require(confirmation.request(true, &owner), "acceptance confirmation request was declined");
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    require(!dispatchShortcut(owner, Qt::Key_F11) && unrelatedActivations == 1,
+            "deleting an older confirmation must preserve the new input suspension");
     modal = owner.findChild<adqt::widgets::AdModal*>(
         QStringLiteral("screenshotShortcutExitConfirmation"));
     require(modal != nullptr, "acceptance confirmation modal did not open");

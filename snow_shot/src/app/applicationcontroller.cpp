@@ -27,6 +27,7 @@
 #include "snow_shot/presentation/collagewindowcoordinator.h"
 #include "snow_shot/presentation/imagesplitwindow.h"
 #include "snow_shot/presentation/imageeditingwindow.h"
+#include "snow_shot/presentation/imagecompressionwindow.h"
 #include "snow_shot/presentation/screenshotexportartifact.h"
 #include "snow_shot/presentation/screenshotexportcache.h"
 
@@ -51,7 +52,6 @@
 #include "snow_shot/presentation/screenshotpinnedwindow.h"
 #include "snow_shot/presentation/screenrecordingfolder.h"
 #include "snow_shot/presentation/systemtraycontroller.h"
-#include "snow_shot/presentation/systemnotificationfeedback.h"
 #include "snow_shot/presentation/floatingtoolbarcontroller.h"
 #include "snow_shot/app/mcp/mcpruntimelifecycle.h"
 #include "snow_shot/app/mcp/mcpruntimegraph.h"
@@ -146,18 +146,7 @@ class ApplicationController::Impl {
     Impl(ApplicationController& owner, QApplication& application)
         : q(owner), app(application), restartCoordinator(application),
           groupManager(initializedPinnedWindowRepository()),
-          systemTray(presentation::settings::builtInTrayCommandManifest(), &groupManager) {
-        QObject::connect(&systemTray,
-                         &presentation::SystemTrayController::notificationDeliveryFinished, &q,
-                         [this](const platform::SystemNotificationRequest& request,
-                                const platform::SystemNotificationResult& result) {
-                             presentation::presentSystemNotificationResult(
-                                 request, result, [this]() -> QWidget* {
-                                     MainWindow& window = ensureMainWindow();
-                                     window.showAndActivate();
-                                     return &window;
-                                 });
-                         });
+          systemTray(presentation::settings::builtInTrayCommandManifest(), &groupManager, &q) {
         QObject::connect(&floatingToolbar,
                          &presentation::FloatingToolbarController::actionRequested, &q,
                          [this](const QString& action) { dispatchFloatingAction(action); });
@@ -176,6 +165,37 @@ class ApplicationController::Impl {
                     [this, snapshot = std::move(snapshot), paths = std::move(paths)]() mutable {
                         if (auto* controller = ensureScreenshotController())
                             controller->pinDroppedContent(std::move(snapshot), std::move(paths));
+                    }));
+            });
+        QObject::connect(
+            &floatingToolbar, &presentation::FloatingToolbarController::imageContentDropped, &q,
+            [this](presentation::FloatingToolbarImageAction action,
+                   ScreenshotClipboardContentSnapshot snapshot, QStringList paths,
+                   std::shared_ptr<presentation::ImageStitchingImportReservation> reservation) {
+                if (storage::ApplicationStorage::instance().directoryChanging())
+                    return;
+                static_cast<void>(actionGate.dispatch(
+                    [this, action, snapshot = std::move(snapshot), paths = std::move(paths),
+                     reservation = std::move(reservation)]() mutable {
+                        const auto present = [&](auto& coordinator) {
+                            if (!paths.isEmpty())
+                                coordinator.presentFiles(paths);
+                            else
+                                coordinator.presentDroppedImage(std::move(snapshot),
+                                                                std::move(reservation));
+                        };
+                        using Action = presentation::FloatingToolbarImageAction;
+                        switch (action) {
+                        case Action::Stitch:
+                            present(ensureImageStitchingWindowCoordinator());
+                            break;
+                        case Action::Split:
+                            present(ensureImageSplitWindowCoordinator());
+                            break;
+                        case Action::Edit:
+                            present(ensureImageEditingWindowCoordinator());
+                            break;
+                        }
                     }));
             });
         QObject::connect(&app, &QCoreApplication::aboutToQuit, &floatingToolbar,
@@ -276,6 +296,17 @@ class ApplicationController::Impl {
             &globalShortcutManager,
             &presentation::GlobalShortcutManager::focusedFullscreenSuppressionChanged, &systemTray,
             &presentation::SystemTrayController::setFocusedFullscreenSuppressionActive);
+        QObject::connect(
+            &globalShortcutManager,
+            &presentation::GlobalShortcutManager::focusedFullscreenMouseSuppressionChanged,
+            &globalMouseManager,
+            &presentation::GlobalMouseManager::setFocusedFullscreenSuppressionActive);
+        QObject::connect(&globalMouseManager,
+                         &presentation::GlobalMouseManager::globalMouseEnabledChanged, &q,
+                         [this](bool enabled) {
+                             systemTray.setQuickActionChecked(
+                                 presentation::GlobalShortcutAction::ToggleGlobalMouse, !enabled);
+                         });
         QObject::connect(&app, &QCoreApplication::aboutToQuit, &systemTray,
                          &presentation::SystemTrayController::hide);
         QObject::connect(&app, &QCoreApplication::aboutToQuit, &globalMouseManager,
@@ -593,6 +624,8 @@ class ApplicationController::Impl {
         mcpLifecycle = std::make_unique<mcp::McpRuntimeLifecycle>(mcp::McpRuntimeLifecycle::Hooks{
             [this] { return startMcp(); }, [this](auto done) { mcpGraph.drain(std::move(done)); },
             [this] { mcpGraph.stop(); }});
+        QObject::connect(&app, &QCoreApplication::aboutToQuit, &imageCompression,
+                         &presentation::ImageCompressionWindowCoordinator::shutdown);
         QObject::connect(&app, &QCoreApplication::aboutToQuit, &q, [this] {
             shuttingDown = true;
             deferredStartup.stop();
@@ -1344,6 +1377,9 @@ class ApplicationController::Impl {
                              &ScreenshotController::recordingExportNotificationRequested,
                              &systemTray,
                              &presentation::SystemTrayController::showRecordingExportMessage);
+            QObject::connect(
+                screenshotController.get(), &ScreenshotController::exportTaskFailed, &systemTray,
+                [this](const QString& message) { systemTray.showCaptureMessage(message, true); });
             QObject::connect(screenshotController.get(),
                              &ScreenshotController::markdownCopied, &systemTray,
                              &presentation::SystemTrayController::showMarkdownCopiedMessage);
@@ -1360,6 +1396,12 @@ class ApplicationController::Impl {
                     required.append(presentation::AppPermission::InputMonitoring);
                 return notify ? allowPermissions(required) : permissions.allow(required);
             });
+            screenshotController->setRecordingPreviewPermissionSnapshot(permissions.snapshot());
+            QObject::connect(&permissions, &presentation::AppPermissionService::changed,
+                             screenshotController.get(), [this] {
+                                 screenshotController->setRecordingPreviewPermissionSnapshot(
+                                     permissions.snapshot());
+                             });
 #else
             screenshotController->setRecordingPermissionCheck(
                 [](bool, bool, bool) { return true; });
@@ -1396,6 +1438,13 @@ class ApplicationController::Impl {
                              [this](const ScreenshotExportSource& source) {
                                  static_cast<void>(actionGate.dispatch([this, source] {
                                      ensureImageEditingWindowCoordinator().presentSource(source);
+                                 }));
+                             });
+            QObject::connect(screenshotController.get(),
+                             &ScreenshotController::imageCompressionRequested, &q,
+                             [this](const ScreenshotPinnedImageSnapshot& snapshot) {
+                                 static_cast<void>(actionGate.dispatch([this, snapshot] {
+                                     imageCompression.presentSnapshot(snapshot);
                                  }));
                              });
             QObject::connect(screenshotController.get(),
@@ -1568,6 +1617,11 @@ class ApplicationController::Impl {
                                      ensureImageEditingWindowCoordinator().presentHistory(record);
                                  }));
                              });
+            QObject::connect(mainWindow, &MainWindow::screenshotHistoryImageCompressionRequested,
+                             &q, [this](const storage::CaptureHistoryRecord& record) {
+                                 static_cast<void>(actionGate.dispatch(
+                                     [this, record] { imageCompression.presentHistory(record); }));
+                             });
             QObject::connect(mainWindow, &MainWindow::pinnedWindowStitchImagesRequested, &q,
                              [this](const QStringList& recordIds) {
                                  static_cast<void>(actionGate.dispatch([this, recordIds] {
@@ -1587,6 +1641,12 @@ class ApplicationController::Impl {
                                  static_cast<void>(actionGate.dispatch([this, recordId] {
                                      ensureImageEditingWindowCoordinator().presentPinnedRecord(
                                          recordId);
+                                 }));
+                             });
+            QObject::connect(mainWindow, &MainWindow::pinnedWindowImageCompressionRequested, &q,
+                             [this](const QString& recordId) {
+                                 static_cast<void>(actionGate.dispatch([this, recordId] {
+                                     imageCompression.presentPinnedRecord(recordId);
                                  }));
                              });
         }
@@ -1810,6 +1870,12 @@ class ApplicationController::Impl {
             ensureImageEditingWindowCoordinator().presentSelectedFiles(std::move(backend), target);
             break;
         }
+        case presentation::GlobalShortcutAction::CompressSelectedImages: {
+            auto backend = platform::createSelectedFileBackend();
+            const auto target = backend->captureTarget();
+            imageCompression.presentSelectedFiles(std::move(backend), target);
+            break;
+        }
         case presentation::GlobalShortcutAction::OpenPinToScreenManagement:
             ensureMainWindow().showPinToScreenManagement();
             break;
@@ -1852,6 +1918,9 @@ class ApplicationController::Impl {
         case presentation::GlobalShortcutAction::ToggleGlobalShortcuts:
             globalShortcutManager.setGlobalShortcutsEnabled(
                 !globalShortcutManager.globalShortcutsEnabled());
+            break;
+        case presentation::GlobalShortcutAction::ToggleGlobalMouse:
+            globalMouseManager.setGlobalMouseEnabled(!globalMouseManager.globalMouseEnabled());
             break;
         case presentation::GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow: {
             storage::GlobalShortcutSettings shortcutSettings;
@@ -1925,6 +1994,11 @@ class ApplicationController::Impl {
         if (!imageStitchingWindowCoordinator) {
             presentation::ImageStitchingWindowServices services;
             services.requestPinnedSnapshot = pinnedImageSnapshotRequest();
+            services.openImageEditing = [this](ScreenshotExportSource source) {
+                static_cast<void>(actionGate.dispatch([this, source = std::move(source)]() mutable {
+                    ensureImageEditingWindowCoordinator().presentSource(std::move(source));
+                }));
+            };
             imageStitchingWindowCoordinator =
                 std::make_unique<presentation::ImageStitchingWindowCoordinator>(
                     &q, std::move(services));
@@ -1960,6 +2034,11 @@ class ApplicationController::Impl {
     presentation::DirectCaptureController& ensureDirectCaptureController() {
         if (!directCaptureController) {
             directCaptureController = std::make_unique<presentation::DirectCaptureController>(&q);
+            QObject::connect(directCaptureController.get(),
+                             &presentation::DirectCaptureController::pinRequested, &q,
+                             [this](const QImage& image, const QRect& bounds) {
+                                 ensureScreenshotController()->pinDirectCapture(image, bounds);
+                             });
             QObject::connect(directCaptureController.get(),
                              &presentation::DirectCaptureController::captureActivityChanged,
                              &floatingToolbar,
@@ -2071,6 +2150,8 @@ class ApplicationController::Impl {
     mcp::McpRuntimeGraph mcpGraph{&q};
     std::unique_ptr<mcp::McpRuntimeLifecycle> mcpLifecycle;
     std::unique_ptr<presentation::ImageStitchingWindowCoordinator> imageStitchingWindowCoordinator;
+    presentation::ImageCompressionWindowCoordinator imageCompression{
+        pinnedImageSnapshotRequest(ScreenshotPinnedRenderMode::SourceResolution)};
     std::unique_ptr<presentation::ImageSplitWindowCoordinator> imageSplitWindowCoordinator;
     std::unique_ptr<presentation::ImageEditingWindowCoordinator> imageEditingWindowCoordinator;
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION

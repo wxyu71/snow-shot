@@ -66,6 +66,15 @@ QJsonArray metadata() {
 }
 
 void publicMetadataMatchesOriginal(const QJsonArray& actual) {
+#ifdef Q_OS_MACOS
+    require(
+        !ConfigurationSchema::defaultValue(QStringLiteral("system/auto_start_at_boot")).toBool(),
+        "macOS login registration defaults off in both editions");
+#else
+    require(ConfigurationSchema::defaultValue(QStringLiteral("system/auto_start_at_boot")).toBool(),
+            "other platforms retain the enabled startup default");
+#endif
+
 #ifdef Q_OS_WIN
     QFile file(QString::fromUtf8(SNOW_SCHEMA_BASELINE_JSON));
     require(file.open(QIODevice::ReadOnly), "the original schema metadata fixture must open");
@@ -99,12 +108,23 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
     }
     require(actual.size() == expected.size(), "schema entry counts must match the original");
     for (qsizetype i = 0; i < expected.size(); ++i) {
-        if (actual.at(i) != expected.at(i)) {
+        QJsonObject expectedEntry = expected.at(i).toObject();
+        const auto key = expectedEntry.value(QStringLiteral("key")).toString();
+        // Keep the original-author fixture unchanged for regression provenance.
+        // Community deliberately opts out of persistent capture/pinned histories
+        // on a fresh installation; only these two defaults may differ.
+        if (key == QStringLiteral("capture_history/enabled") ||
+            key == QStringLiteral("pinned_history/enabled")) {
+            require(expectedEntry.value(QStringLiteral("defaultValue")).toBool(),
+                    "the frozen original history defaults must remain enabled");
+            expectedEntry.insert(QStringLiteral("defaultValue"), false);
+        }
+        if (actual.at(i).toObject() != expectedEntry) {
             std::cerr
                 << "schema metadata changed at entry " << i << ": "
-                << actual.at(i).toObject().value(QStringLiteral("key")).toString().toStdString()
+                << key.toStdString()
                 << "\nactual: " << QJsonDocument(actual.at(i).toObject()).toJson().constData()
-                << "expected: " << QJsonDocument(expected.at(i).toObject()).toJson().constData();
+                << "expected: " << QJsonDocument(expectedEntry).toJson().constData();
             std::exit(1);
         }
     }
@@ -185,7 +205,7 @@ void nativeDefaultsRemainIntact(const QString& movies, const QString& pictures) 
         "edition-specific default booleans must remain intact");
 #ifdef Q_OS_MACOS
     require(ConfigurationSchema::defaultValue(QStringLiteral("updates/mode")) ==
-                    QStringLiteral("check") &&
+                    QStringLiteral("next_launch") &&
                 ConfigurationSchema::defaultValue(QStringLiteral(
                     "screenshot_ui/selection_display_unit")) == QStringLiteral("logical_pixels"),
             "native macOS update and coordinate defaults must remain intact");

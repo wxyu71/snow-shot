@@ -88,6 +88,7 @@ enum class Icon {
     Separator,
     BarcodeRecognition,
     TableRecognition,
+    DocumentRecognition,
     RecordScreen,
     PinToScreen,
     PinWindowToScreen,
@@ -211,11 +212,14 @@ struct EditorDescriptor {
             {"barcode-recognition", "ScreenshotToolbarEditorSettingsWidget",
              QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Barcode recognition"),
              Icon::BarcodeRecognition},
+            {"document-recognition", "ScreenshotToolbarEditorSettingsWidget",
+             QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Document recognition"),
+             Icon::DocumentRecognition},
             {"table-recognition", "ScreenshotToolbarEditorSettingsWidget",
              QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Table recognition"),
              Icon::TableRecognition},
             {"convert-to-markdown", "ScreenshotToolbarEditorSettingsWidget",
-             QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Convert to Markdown"),
+             QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget", "Online OCR"),
              Icon::Markdown},
             {"latex-recognition", "ScreenshotToolbarEditorSettingsWidget",
              QT_TRANSLATE_NOOP("ScreenshotToolbarEditorSettingsWidget",
@@ -391,8 +395,13 @@ editorDescriptors(storage::ScreenshotToolbarLayoutKind kind) {
         QVector<EditorDescriptor> result;
         for (const auto& descriptor : actionDescriptors()) {
             const QString id = QString::fromLatin1(descriptor.id);
+            if (id == QStringLiteral("document-recognition") ||
+                id == QStringLiteral("latex-recognition") ||
+                id == QStringLiteral("convert-to-html"))
+                continue;
             if (id == QStringLiteral("barcode-recognition") ||
                 id == QStringLiteral("table-recognition") ||
+                id == QStringLiteral("document-recognition") ||
                 id == QStringLiteral("latex-recognition") ||
                 id == QStringLiteral("convert-to-markdown") ||
                 id == QStringLiteral("convert-to-html") ||
@@ -417,7 +426,11 @@ editorDescriptors(storage::ScreenshotToolbarLayoutKind kind) {
     if (kind == storage::ScreenshotToolbarLayoutKind::ActionTools) {
         auto result = actionDescriptors();
         result.removeIf([](const EditorDescriptor& descriptor) {
-            return QLatin1String(descriptor.id) == QLatin1String("confirm");
+            const QLatin1String id(descriptor.id);
+            return id == QLatin1String("confirm") ||
+                   id == QLatin1String("document-recognition") ||
+                   id == QLatin1String("latex-recognition") ||
+                   id == QLatin1String("convert-to-html");
         });
         result.push_back(
             {"separator", "DrawingToolbarEditorSettingsWidget",
@@ -455,6 +468,41 @@ editorDescriptors(storage::ScreenshotToolbarLayoutKind kind) {
         {QStringLiteral("undo")},
         {QStringLiteral("redo")},
     };
+}
+
+[[nodiscard]] inline bool communityOnlineOcrActionId(const QString& id) {
+    return id == QStringLiteral("table-recognition") ||
+           id == QStringLiteral("document-recognition") ||
+           id == QStringLiteral("convert-to-markdown") ||
+           id == QStringLiteral("latex-recognition") ||
+           id == QStringLiteral("convert-to-html");
+}
+
+[[nodiscard]] inline storage::ScreenshotToolbarLayout
+collapseCommunityOnlineOcrLayout(storage::ScreenshotToolbarLayout layout) {
+    const QString canonical = QStringLiteral("convert-to-markdown");
+    bool positioned = false;
+    for (QStringList& position : layout.positions) {
+        QStringList collapsed;
+        collapsed.reserve(position.size());
+        for (const QString& id : position) {
+            if (!communityOnlineOcrActionId(id)) {
+                collapsed.push_back(id);
+                continue;
+            }
+            if (!positioned) {
+                collapsed.push_back(canonical);
+                positioned = true;
+            }
+        }
+        position = collapsed;
+    }
+
+    const bool explicitlyHidden = layout.hidden.contains(canonical);
+    layout.hidden.removeIf([](const QString& id) { return communityOnlineOcrActionId(id); });
+    if (!positioned && explicitlyHidden)
+        layout.hidden.push_back(canonical);
+    return layout;
 }
 
 [[nodiscard]] inline QVector<QStringList> editionActionPositions(QVector<QStringList> positions) {
@@ -754,6 +802,23 @@ normalizedLayout(const storage::ScreenshotToolbarLayout& input, const QStringLis
             hidden.insert(QStringLiteral("latex-recognition"));
         }
     }
+    if (known.contains(QStringLiteral("document-recognition")) &&
+        !positioned.contains(QStringLiteral("document-recognition")) &&
+        !hidden.contains(QStringLiteral("document-recognition"))) {
+        for (QStringList& position : result.positions) {
+            const auto table = position.indexOf(QStringLiteral("table-recognition"));
+            if (table >= 0) {
+                position.insert(table, QStringLiteral("document-recognition"));
+                positioned.insert(QStringLiteral("document-recognition"));
+                break;
+            }
+        }
+        if (!positioned.contains(QStringLiteral("document-recognition")) &&
+            hidden.contains(QStringLiteral("table-recognition"))) {
+            result.hidden.push_back(QStringLiteral("document-recognition"));
+            hidden.insert(QStringLiteral("document-recognition"));
+        }
+    }
     auto previousDrawingDefaults = defaultLayout;
     QStringList missingAnnotations;
     for (const QString& id : {QStringLiteral("bracket"), QStringLiteral("angle"),
@@ -862,7 +927,12 @@ normalizedLayout(const storage::ScreenshotToolbarLayout& input,
         return normalizedLayout(candidate, defaultOrder(kind), defaultPositions(kind), false,
                                 false);
     }
-    return normalizedLayout(input, defaultOrder(kind), defaultPositions(kind),
+    auto candidate = input;
+    if (kind == storage::ScreenshotToolbarLayoutKind::ActionTools ||
+        kind == storage::ScreenshotToolbarLayoutKind::PinnedActionTools) {
+        candidate = collapseCommunityOnlineOcrLayout(candidate);
+    }
+    return normalizedLayout(candidate, defaultOrder(kind), defaultPositions(kind),
                             kind == storage::ScreenshotToolbarLayoutKind::ActionTools);
 }
 
@@ -1047,6 +1117,8 @@ moveItemToHidden(const storage::ScreenshotToolbarLayout& input,
         return {};
     case Icon::BarcodeRecognition:
         return custom::ScanQrcode();
+    case Icon::DocumentRecognition:
+        return custom::DocumentRecognition();
     case Icon::TableRecognition:
         return custom::TableRecognition();
     case Icon::Latex:

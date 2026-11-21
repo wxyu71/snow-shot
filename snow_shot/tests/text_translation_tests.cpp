@@ -6,6 +6,7 @@
 #include "snow_shot/storage/configurationarchive.h"
 #include "../src/network/texttranslationprotocol.h"
 #include <QTemporaryDir>
+#include <QFile>
 #include <QTimer>
 #include <QUrlQuery>
 #include <algorithm>
@@ -104,6 +105,16 @@ void persistence(const QString& provider) {
         require(store.value(key).toArray().isEmpty(), "empty default");
         require(store.setValue(key, textTranslationConfigurationsToJson({value})), "save config");
         require(store.flushNow().success, "flush");
+#ifdef Q_OS_WIN
+        {
+            QFile persisted(path);
+            require(persisted.open(QIODevice::ReadOnly), "open protected translation configuration");
+            const QByteArray bytes = persisted.readAll();
+            require(!bytes.contains(value.apiKey.toUtf8()) &&
+                        bytes.contains("windows-dpapi-v1"),
+                    "Windows translation credentials are DPAPI-protected on disk");
+        }
+#endif
         auto duplicate = value;
         duplicate.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         duplicate.name = value.name.toUpper();
@@ -122,7 +133,8 @@ void persistence(const QString& provider) {
     require(textTranslationConfigurationsFromJson(reopened.value(key)).first() == value,
             "roundtrip retains endpoint and identity");
     for (const auto& url :
-         {QStringLiteral("ftp://host/path"), QStringLiteral("https://user:pass@host/path"),
+         {QStringLiteral("ftp://host/path"), QStringLiteral("http://example.com/path"),
+          QStringLiteral("https://user:pass@host/path"),
           QStringLiteral("https://host/path#fragment")})
         require(!validTranslationEndpoint(url), "invalid endpoint rejected");
     auto json = textTranslationConfigurationsToJson({value}).first().toObject();

@@ -213,7 +213,7 @@ void jsonResponsesAreBoundedDuringTransfer() {
     }
 }
 
-void officialHttpErrorsDescribeTheFailure() {
+void configuredServiceHttpErrorsDescribeTheFailure() {
     enum class Kind { Table, Latex, Translation };
     const struct {
         Kind kind;
@@ -222,16 +222,16 @@ void officialHttpErrorsDescribeTheFailure() {
         QString code;
         QString expected;
     } cases[]{
-        {Kind::Table, 401, R"({"code":"account_required","detail":"Unauthorized"})",
-         QStringLiteral("account_required"), QStringLiteral("HTTP 401")},
-        {Kind::Latex, 401, R"({"code":"invalid_session"})", QStringLiteral("invalid_session"),
+        {Kind::Table, 401, R"({"code":"access_denied","detail":"Unauthorized"})",
+         QStringLiteral("access_denied"), QStringLiteral("HTTP 401")},
+        {Kind::Latex, 401, R"({"code":"token_rejected"})", QStringLiteral("token_rejected"),
          QStringLiteral("HTTP 401")},
-        {Kind::Translation, 402, R"({"error":{"code":"insufficient_credits"}})",
-         QStringLiteral("insufficient_credits"), QStringLiteral("HTTP 402")},
-        {Kind::Latex, 402, R"({"code":"outstanding_balance"})",
-         QStringLiteral("outstanding_balance"), QStringLiteral("HTTP 402")},
-        {Kind::Table, 429, R"({"code":"funds_temporarily_reserved"})",
-         QStringLiteral("funds_temporarily_reserved"), QStringLiteral("429")},
+        {Kind::Translation, 402, R"({"error":{"code":"request_not_allowed"}})",
+         QStringLiteral("request_not_allowed"), QStringLiteral("HTTP 402")},
+        {Kind::Latex, 402, R"({"code":"service_restriction"})",
+         QStringLiteral("service_restriction"), QStringLiteral("HTTP 402")},
+        {Kind::Table, 429, R"({"code":"quota_temporarily_locked"})",
+         QStringLiteral("quota_temporarily_locked"), QStringLiteral("429")},
         {Kind::Translation, 429, R"({"code":"allowance_exhausted"})",
          QStringLiteral("allowance_exhausted"),
          QStringLiteral("daily allowance is exhausted")},
@@ -650,12 +650,14 @@ void imageConversionUsesVisionAndRejectsIncompleteStreams() {
     const QByteArray delta =
         "data: {\"choices\":[{\"delta\":{\"content\":\"# Hello\\n\"}}]}\r\n\r\n";
     const QVector<QByteArray> streams{
-        delta + "data: [DONE]\n\n",
+        "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"private reasoning\"}}]}\n\n" +
+            delta + "data: [DONE]\n\n",
         "data: [DONE]\n\n",
         delta,
         delta +
             "data: {\"choices\":[{\"finish_reason\":\"length\",\"delta\":{}}]}\n\ndata: [DONE]\n\n",
         delta + "event: error\ndata: {\"code\":\"provider_failure\",\"detail\":\"failed\"}\n\n",
+        "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"private reasoning\"}}]}\n\n"
         "data: invalid-json\n\ndata: [DONE]\n\n",
         "data: {\"choices\":[{\"delta\":{\"reasoning_content\":\"private reasoning\"}}]}\n\ndata: "
         "[DONE]\n\n",
@@ -668,17 +670,23 @@ void imageConversionUsesVisionAndRejectsIncompleteStreams() {
         image.fill(Qt::white);
         bool finished = false;
         QString source;
+        QList<bool> reasoningProgress;
         SnowShotImageConversionResult result;
         QEventLoop loop;
         const auto format = index % 2 == 0 ? SnowShotImageConversionFormat::Markdown
                                            : SnowShotImageConversionFormat::Html;
+        const auto model =
+            index % 2 == 0 ? QStringLiteral("ai-model") : QStringLiteral("qwen3.8-flash");
         const auto token = client.streamImageConversion(
-            {QStringLiteral("vision-test"), image, format}, &client,
-            [&](const QString& text) { source += text; },
+            {model, image, format}, &client, [&](const QString& text) { source += text; },
             [&](SnowShotImageConversionResult value) {
                 result = value;
                 finished = true;
                 loop.quit();
+            },
+            [&](bool active) {
+                require(!finished, "reasoning settles before conversion completion");
+                reasoningProgress.append(active);
             });
         require(token != 0, "conversion starts asynchronously");
         const auto response =
@@ -694,12 +702,21 @@ void imageConversionUsesVisionAndRejectsIncompleteStreams() {
                 "conversion accepts only a nonempty completed stream");
         require(!source.contains(QStringLiteral("private reasoning")),
                 "reasoning is never displayed");
+        require(reasoningProgress == ((index == 0 || index == 5 || index == 6)
+                                          ? QList<bool>{true, false}
+                                          : QList<bool>{}),
+                "output, stream errors, and DONE each end a reported reasoning phase");
         const auto body =
             QJsonDocument::fromJson(request.mid(request.indexOf("\r\n\r\n") + 4)).object();
-        require(body.value(QStringLiteral("model")) == QStringLiteral("vision-test") &&
+        require(body.value(QStringLiteral("model")) == model &&
                     body.value(QStringLiteral("stream")).toBool() &&
                     body.value(QStringLiteral("max_tokens")).toInt() == 8192,
                 "conversion uses selected vision model and bounded streamed output");
+        require(body.value(QStringLiteral("thinking")).toObject().value(QStringLiteral("type")) ==
+                        QStringLiteral("enabled") &&
+                    body.value(QStringLiteral("reasoning_effort")) == QStringLiteral("low") &&
+                    !body.contains(QStringLiteral("enable_thinking")),
+                "Fast conversion requests GLM low reasoning");
         const auto messages = body.value(QStringLiteral("messages")).toArray();
         const QString prompt =
             messages.at(0).toObject().value(QStringLiteral("content")).toString();
@@ -1800,21 +1817,22 @@ void latexResponseContracts() {
 void customServerDefaultsAndValidation() {
     const QByteArray previous = qgetenv("SNOW_SHOT_API_BASE_URL");
     const bool wasSet = qEnvironmentVariableIsSet("SNOW_SHOT_API_BASE_URL");
-    qunsetenv("SNOW_SHOT_API_BASE_URL");
-    const QString buildDefault = SnowShotApiClient::configuredBaseUrl();
-    require(buildDefault.isEmpty(), "community build never defaults to Snow Shot services");
     qputenv("SNOW_SHOT_API_BASE_URL", " http://localhost:9876/dev/// ");
-    require(SnowShotApiClient::configuredBaseUrl() == QStringLiteral("http://localhost:9876/dev"),
-            "environment overrides build default and normalizes it");
+    const QString buildDefault = SnowShotApiClient::configuredBaseUrl();
+    require(buildDefault.isEmpty(),
+            "community routing ignores hidden environment server overrides");
     require(SnowShotApiClient::configuredBaseUrl(QStringLiteral("https://example.test/service/")) ==
                 QStringLiteral("https://example.test/service"),
-            "saved server takes precedence");
+            "explicit saved server is normalized");
     SnowShotApiClient client(buildDefault);
     int changes = 0;
     QObject::connect(&client, &SnowShotApiClient::baseUrlChanged, &client, [&] { ++changes; });
     require(!client.setBaseUrl(QStringLiteral("https://user@example.test")) &&
                 client.baseUrl() == buildDefault && changes == 0,
             "invalid setter preserves server");
+    require(!client.setBaseUrl(QStringLiteral("http://example.test/service")) &&
+                client.baseUrl() == buildDefault && changes == 0,
+            "remote plaintext HTTP server is rejected");
     require(client.setBaseUrl(QStringLiteral(" https://example.test/prefix/// ")) &&
                 client.baseUrl() == QStringLiteral("https://example.test/prefix") && changes == 1,
             "valid server is normalized and notified");
@@ -2184,7 +2202,7 @@ void visionExtractionPreservesTypedOutputAndImageDetails() {
                                           ++tableCompletions;
                                       }) != 0,
             "vision table extraction starts");
-    require(client.extractLatexVision(image, QStringLiteral("latex-vision"), &receiver,
+    require(client.extractLatexVision(image, QStringLiteral("ai-model"), &receiver,
                                       [&](auto result) {
                                           latex = result;
                                           ++latexCompletions;
@@ -2195,12 +2213,22 @@ void visionExtractionPreservesTypedOutputAndImageDetails() {
     for (int index = 0; index < server.streams.size(); ++index) {
         const auto body = server.streams.at(index).body;
         const bool isTable = body.value(QStringLiteral("model")) == QStringLiteral("table-vision");
-        require(isTable || body.value(QStringLiteral("model")) == QStringLiteral("latex-vision"),
+        require(isTable || body.value(QStringLiteral("model")) == QStringLiteral("ai-model"),
                 "vision extraction sends the selected model ID");
         require(body.value(QStringLiteral("stream")).toBool() &&
-                    body.value(QStringLiteral("max_tokens")).toInt() == 8192 &&
-                    !body.value(QStringLiteral("enable_thinking")).toBool(),
+                    body.value(QStringLiteral("max_tokens")).toInt() == 8192,
                 "builtin vision extraction requests bounded deterministic streamed output");
+        if (isTable) {
+            require(body.value(QStringLiteral("enable_thinking")) == QJsonValue(false) &&
+                        !body.contains(QStringLiteral("reasoning_effort")),
+                    "other built-in vision requests use the existing reasoning field");
+        } else {
+            require(
+                body.value(QStringLiteral("thinking")).toObject().value(QStringLiteral("type")) ==
+                        QStringLiteral("enabled") &&
+                    body.value(QStringLiteral("reasoning_effort")) == QStringLiteral("low"),
+                "Fast formula extraction requests GLM low reasoning");
+        }
         const auto messages = body.value(QStringLiteral("messages")).toArray();
         const QString prompt =
             messages.first().toObject().value(QStringLiteral("content")).toString();
@@ -2755,10 +2783,13 @@ void visionExtractionRejectsIncompleteAndInvalidResponses() {
 }
 
 void tableVisionCorrectionsReusePreparedConversation() {
-    for (const bool custom : {false, true}) {
+    for (const auto& builtInModel :
+         {QStringLiteral("ai-model"), QStringLiteral("expert-model"), QString{}}) {
+        const bool custom = builtInModel.isEmpty();
+        const bool expert = snowShotExpertModelId(builtInModel);
         translation_tests::Server server;
         SnowShotApiClient client(server.url());
-        QString model = QStringLiteral("vision");
+        QString model = builtInModel;
         if (custom) {
             snow_shot::CustomAiModelConfiguration config{
                 QStringLiteral("11111111-1111-4111-8111-111111111111"),
@@ -2781,29 +2812,69 @@ void tableVisionCorrectionsReusePreparedConversation() {
         image.fill(Qt::white);
         QString source;
         int completions = 0;
+        QList<bool> reasoningProgress;
         const auto delta = [&](const QString& text) { source += text; };
+        const auto progress = [&](bool active) { reasoningProgress.append(active); };
         const auto completion = [&](SnowShotTranslationResult result) {
             require(result.succeeded(), "table transport does not validate syntax");
             ++completions;
         };
-        require(client.streamTableVision(image, model, conversation, &client, delta, completion) !=
-                    0,
+        require(client.streamTableVision(image, model, conversation, &client, delta, completion,
+                                         progress) != 0,
                 "prepare a streaming table conversation");
         translation_tests::waitUntil([&] { return server.streams.size() == 1; },
                                      "initial table request");
+        if (expert) {
+            server.reasoning(0, QString{});
+            server.reasoning(0, QStringLiteral("first "));
+            server.reasoning(0, QStringLiteral("thought"));
+            translation_tests::waitUntil([&] { return !reasoningProgress.isEmpty(); },
+                                         "reasoning progress arrives before any output");
+        }
         server.delta(0, QStringLiteral("Unusable response"));
         translation_tests::waitUntil([&] { return !source.isEmpty(); },
                                      "raw delta arrives before completion");
         require(completions == 0, "progress does not require a terminal event");
+        require(reasoningProgress == (expert ? QList<bool>{true, false} : QList<bool>{}),
+                "each reasoning phase starts once and content ends it");
         server.finish(0);
         translation_tests::waitUntil([&] { return completions == 1; }, "initial completion");
         const QString failed = std::exchange(source, {});
-        require(client.correctTableVision(conversation, failed, &client, delta, completion) != 0,
+        require(failed == QStringLiteral("Unusable response"),
+                "table output excludes reasoning deltas");
+        reasoningProgress.clear();
+        require(client.correctTableVision(conversation, failed, &client, delta, completion,
+                                          progress) != 0,
                 "correct using the prepared conversation");
         translation_tests::waitUntil([&] { return server.streams.size() == 2; },
                                      "correction request");
         const auto first = server.streams[0].body.value(QStringLiteral("messages")).toArray();
         const auto second = server.streams[1].body.value(QStringLiteral("messages")).toArray();
+        if (expert) {
+            for (const auto& stream : server.streams) {
+                require(stream.body.value(QStringLiteral("reasoning_effort")) ==
+                                QStringLiteral("low") &&
+                            stream.body.value(QStringLiteral("max_completion_tokens")).toInt() ==
+                                8192 &&
+                            !stream.body.contains(QStringLiteral("max_tokens")) &&
+                            !stream.body.contains(QStringLiteral("enable_thinking")) &&
+                            !stream.body.contains(QStringLiteral("thinking")) &&
+                            !stream.body.contains(QStringLiteral("temperature")),
+                        "Expert extraction and correction use Kimi request parameters");
+            }
+            require(second[2].toObject().value(QStringLiteral("reasoning_content")) ==
+                        QStringLiteral("first thought"),
+                    "Expert correction preserves the assistant reasoning");
+        } else if (!custom) {
+            for (const auto& stream : server.streams) {
+                require(stream.body.value(QStringLiteral("reasoning_effort")) ==
+                                QStringLiteral("low") &&
+                            stream.body.value(QStringLiteral("thinking"))
+                                    .toObject()
+                                    .value(QStringLiteral("type")) == QStringLiteral("enabled"),
+                        "Fast table extraction and correction request GLM low reasoning");
+            }
+        }
         require(encodes == 1 && first.size() == 2 && second.size() == 4 && first[0] == second[0] &&
                     first[1] == second[1] &&
                     second[2].toObject().value(QStringLiteral("content")).toString() == failed,
@@ -2817,10 +2888,14 @@ void tableVisionCorrectionsReusePreparedConversation() {
         require(!requestId(server.streams[0].headers).isEmpty() &&
                     requestId(server.streams[0].headers) != requestId(server.streams[1].headers),
                 "correction has an independent operation identity");
-        server.delta(1, QStringLiteral("<table><tr><td>Fixed"));
+        server.send(1, QByteArrayLiteral(
+                           "data: {\"choices\":[{\"delta\":{\"reasoning_content\":"
+                           "\"recheck the source\",\"content\":\"<table><tr><td>Fixed\"}}]}\n\n"));
         server.finish(1);
         translation_tests::waitUntil([&] { return completions == 2; }, "correction completion");
         require(source == QStringLiteral("<table><tr><td>Fixed"), "repair replaces its source");
+        require(reasoningProgress == QList<bool>{true, false},
+                "correction reports independent reasoning progress for every provider");
     }
 }
 
@@ -3200,12 +3275,145 @@ void abortObserversMayDestroyApiClient() {
     }
 }
 
+void documentUploadPreservesPixelsAndRawResults() {
+    QTcpServer server;
+    require(server.listen(QHostAddress::LocalHost), "document fixture listens");
+    SnowShotApiClient client(QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()));
+    QImage original(3001, 13, QImage::Format_RGBA8888);
+    original.fill(QColor(17, 73, 151, 123));
+    original.setPixelColor(1234, 7, QColor(255, 23, 91, 19));
+    bool finished = false;
+    require(client.extractDocument(
+                original, &client,
+                [&](auto result) {
+                    require(result.succeeded() &&
+                                result.raw.value(QStringLiteral("custom")).toInt() == 42,
+                            "provider object remains raw");
+                    finished = true;
+                }) != 0,
+            "document starts immediately");
+    const QByteArray body = R"({"code":0,"data":{"md_results":"# Report","custom":42}})";
+    const auto request = waitForHttpRequest(
+        server, "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: " +
+                    QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" + body);
+    translation_tests::waitUntil([&] { return finished; }, "document completes");
+    require(request.startsWith("POST /api/v1/document/extract ") && request.contains("image/png") &&
+                !request.left(request.indexOf("\r\n\r\n")).toLower().contains("authorization:"),
+            "document PNG route does not depend on an application account");
+    const auto offset = request.indexOf(QByteArray::fromHex("89504e470d0a1a0a"));
+    require(offset >= 0, "PNG signature");
+    const auto image = QImage::fromData(request.mid(offset), "PNG");
+    const auto decoded = image.convertToFormat(original.format());
+    require(decoded.size() == original.size(), "original dimensions survive encoding");
+    for (int row = 0; row < original.height(); ++row)
+        require(std::memcmp(original.constScanLine(row), decoded.constScanLine(row),
+                            static_cast<size_t>(original.width()) * 4) == 0,
+                "every original alpha pixel survives lossless PNG encoding");
+    finished = false;
+    require(client.extractDocument(original, &client,
+                                   [&](auto result) {
+                                       require(result.httpStatus == 413 &&
+                                                   result.error.contains(
+                                                       QStringLiteral("Select a smaller area")),
+                                               "413 uses actionable size message");
+                                       finished = true;
+                                   }) != 0,
+            "second request starts");
+    waitForHttpRequest(server,
+                       "HTTP/1.1 413 Too Large\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
+    translation_tests::waitUntil([&] { return finished; }, "oversize failure completes");
+    finished = false;
+    static_cast<void>(client.extractDocument(original, &client, [&](auto result) {
+        require(!result.succeeded() &&
+                    result.error.contains(QStringLiteral("response is too large")),
+                "document responses have a dedicated 16 MiB bound");
+        finished = true;
+    }));
+    waitForHttpRequest(server,
+                       "HTTP/1.1 200 OK\r\nContent-Length: 16777217\r\nConnection: close\r\n\r\n");
+    translation_tests::waitUntil([&] { return finished; }, "bounded document response completes");
+    QImage noise(1800, 1800, QImage::Format_RGBA8888);
+    quint32 random = 0x12345678;
+    for (qsizetype index = 0; index < noise.sizeInBytes(); ++index) {
+        random ^= random << 13;
+        random ^= random >> 17;
+        random ^= random << 5;
+        noise.bits()[index] = static_cast<uchar>(random);
+    }
+    finished = false;
+    static_cast<void>(client.extractDocument(noise, &client, [&](auto result) {
+        require(!result.succeeded() && result.code == QStringLiteral("payload_too_large"),
+                "encoded PNG limit is enforced before upload");
+        finished = true;
+    }));
+    translation_tests::waitUntil([&] { return finished; }, "oversized encoding completes");
+    require(!server.hasPendingConnections(), "oversized PNG never reaches the server");
+    bool cancelledCallback = false;
+    const auto cancelled =
+        client.extractDocument(original, &client, [&](auto) { cancelledCallback = true; });
+    client.cancel(cancelled);
+    require(QThreadPool::globalInstance()->waitForDone(5000), "cancelled document encoder settles");
+    QCoreApplication::processEvents();
+    require(!cancelledCallback && !server.hasPendingConnections(),
+            "stale encoding cannot upload or publish");
+}
+
+void documentUnauthorizedFailureMatchesTable() {
+    QString tableError;
+    for (const bool document : {false, true}) {
+        QTcpServer server;
+        require(server.listen(QHostAddress::LocalHost), "authorization failure fixture listens");
+        SnowShotApiClient client(
+            QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()));
+        QImage image(8, 8, QImage::Format_RGBA8888);
+        image.fill(Qt::white);
+        int completions = 0;
+        QString message;
+        const auto completion = [&](auto result) {
+            require(!result.succeeded() && result.httpStatus == 401,
+                    "recognition preserves the provider HTTP status");
+            message = result.error;
+            ++completions;
+        };
+        const auto token = document ? client.extractDocument(image, &client, completion)
+                                    : client.extractTable(image, &client, completion);
+        require(token != 0 && completions == 0,
+                "recognition starts without local account-state gating");
+        const QByteArray body = R"({"detail":"Unauthorized"})";
+        const auto request = waitForHttpRequest(
+            server, "HTTP/1.1 401 Unauthorized\r\nContent-Type: application/problem+json\r\n"
+                    "Content-Length: " +
+                        QByteArray::number(body.size()) + "\r\nConnection: close\r\n\r\n" +
+                        body);
+        require(request.startsWith(document ? "POST /api/v1/document/extract "
+                                            : "POST /api/v1/table/extract "),
+                "recognition reaches its configured provider endpoint");
+        const auto headers = request.left(request.indexOf("\r\n\r\n")).toLower();
+        require(!headers.contains("authorization:"),
+                "community recognition does not inject an application account credential");
+        translation_tests::waitUntil([&] { return completions != 0; },
+                                     "provider authorization failure completes");
+        require(completions == 1 && !message.isEmpty(),
+                "provider authorization failure completes exactly once");
+        if (document)
+            require(message == tableError,
+                    "document and table recognition share generic provider errors");
+        else
+            tableError = message;
+    }
+}
+
 int main(int argc, char** argv) {
     QCoreApplication application(argc, argv);
+    if (application.arguments().contains(QStringLiteral("--document-only"))) {
+        documentUploadPreservesPixelsAndRawResults();
+        documentUnauthorizedFailureMatchesTable();
+        return 0;
+    }
 
     if (application.arguments().contains(QStringLiteral("--community-service-only"))) {
         customServerDefaultsAndValidation();
-        officialHttpErrorsDescribeTheFailure();
+        configuredServiceHttpErrorsDescribeTheFailure();
         customModelsUseIndependentOpenAiConnections();
         return 0;
     }
@@ -3269,7 +3477,7 @@ int main(int argc, char** argv) {
             "transport failures without a code should remain concise");
     customServerDefaultsAndValidation();
     jsonResponsesAreBoundedDuringTransfer();
-    officialHttpErrorsDescribeTheFailure();
+    configuredServiceHttpErrorsDescribeTheFailure();
     boundedResponsesMeasureDecodedBodiesAndFollowRedirects();
     requestsKeepTheirOriginalServer();
     oldCatalogCannotReplaceNewServerModels();

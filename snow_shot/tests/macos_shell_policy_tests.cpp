@@ -42,6 +42,7 @@ void shortcutFamiliesAreComplete() {
         {GlobalShortcutAction::StitchSelectedImages, std::nullopt},
         {GlobalShortcutAction::SplitSelectedImages, std::nullopt},
         {GlobalShortcutAction::EditSelectedImages, std::nullopt},
+        {GlobalShortcutAction::CompressSelectedImages, std::nullopt},
         {GlobalShortcutAction::OpenSettings, std::nullopt},
         {GlobalShortcutAction::PinClipboardContent, FeatureFamily::PinToScreen},
         {GlobalShortcutAction::TranslateSelectedText, std::nullopt},
@@ -51,6 +52,7 @@ void shortcutFamiliesAreComplete() {
         {GlobalShortcutAction::SwitchWindowGroup, std::nullopt},
         {GlobalShortcutAction::ToggleWindowUnderCursorAlwaysOnTop, std::nullopt},
         {GlobalShortcutAction::ToggleGlobalShortcuts, std::nullopt},
+        {GlobalShortcutAction::ToggleGlobalMouse, std::nullopt},
         {GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow, std::nullopt},
     };
     require(expected.size() == snow_shot::presentation::globalActionTraitsCatalog.size(),

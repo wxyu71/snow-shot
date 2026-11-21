@@ -1,5 +1,6 @@
 #include "snow_shot/presentation/components/settingspagewidget.h"
 #include "snow_shot/network/communitycloudocrsettings.h"
+#include "snow_shot/customaimodelconfiguration.h"
 #include "snow_shot/presentation/components/formfields.h"
 #include "snow_shot/presentation/components/pathinput.h"
 #include "snow_shot/presentation/components/toolbareditorsettingswidget.h"
@@ -509,6 +510,21 @@ void toolbarReorderingKeepsPageStable(const settings::SettingsRegistry& registry
 
 void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                                settings::SettingsRuntimeSession& session) {
+#if SNOW_SHOT_ENABLE_API_CONFIGURATION && SNOW_SHOT_ENABLE_IMAGE_CONVERSION
+    const auto previousModels = snow_shot::storage::ApiConfigurationSettings().customModels();
+    const snow_shot::CustomAiModelConfiguration visionModel{
+        QStringLiteral("11111111-1111-4111-8111-111111111111"),
+        QStringLiteral("Community Vision Fixture"),
+        QStringLiteral("https://vision.example.test/v1"),
+        QStringLiteral("test-api-key"),
+        QStringLiteral("vision-model"),
+        true,
+        false,
+        1,
+        QStringLiteral("openai")};
+    require(snow_shot::storage::ApiConfigurationSettings().setCustomModels({visionModel}),
+            "install a custom vision model for Online OCR settings");
+#endif
     SettingsPageWidget page(registry, QStringLiteral("text-recognition-translation"), session);
     page.resize(880, 760);
     page.show();
@@ -517,6 +533,10 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     drainEvents();
 
     auto* widget = page.findChild<QWidget*>(QStringLiteral("settings-cloud-ocr"));
+    auto* engine = page.findChild<QComboBox*>(QStringLiteral("onlineOcrEngine"));
+    auto* output = page.findChild<QComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
+    auto* visionModelSelector =
+        page.findChild<QComboBox*>(QStringLiteral("onlineOcrVisionModel"));
     auto* endpoint = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrApiUrl"));
     auto* token = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrAccessToken"));
     auto* model = page.findChild<QComboBox*>(QStringLiteral("paddleOcrModel"));
@@ -524,8 +544,18 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     auto* testConnection =
         page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
     auto* status = page.findChild<QLabel*>(QStringLiteral("paddleOcrConnectionStatus"));
-    require(widget && endpoint && token && model && save && testConnection && status,
-            "Cloud OCR settings materialize their real custom controls");
+    require(widget && engine && output && visionModelSelector && endpoint && token && model &&
+                save && testConnection && status,
+            "Online OCR settings materialize engine, output and provider controls");
+    require(engine->findData(QStringLiteral("paddleocr")) >= 0,
+            "Online OCR settings retain the PaddleOCR engine");
+#if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
+    require(engine->findData(QStringLiteral("vision")) >= 0,
+            "Online OCR settings expose the upstream large-model engine");
+#endif
+    require(output->count() == 1 &&
+                output->currentData().toString() == QStringLiteral("markdown"),
+            "PaddleOCR output is intentionally normalized to Markdown");
     require(token->echoMode() == QLineEdit::Password,
             "Cloud OCR token uses a password editor");
     require(model->count() == 3 &&
@@ -547,11 +577,48 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     save->click();
     drainEvents();
     const auto stored = snow_shot::network::readCommunityCloudOcrSettings();
-    require(status->text() == QStringLiteral("PaddleOCR configuration saved.") &&
+    require(status->text() == QStringLiteral("Online OCR configuration saved.") &&
                 stored.apiUrl == QStringLiteral("http://127.0.0.1:5102") &&
                 stored.accessToken == QStringLiteral("native-test-token") &&
-                stored.model == QStringLiteral("PP-OCRv6"),
-            "the real Cloud OCR settings widget persists and reloads its configuration");
+                stored.model == QStringLiteral("PP-OCRv6") &&
+                stored.engine == QStringLiteral("paddleocr") &&
+                stored.outputFormat == QStringLiteral("markdown"),
+            "the Online OCR settings widget preserves the existing PaddleOCR configuration");
+
+#if SNOW_SHOT_ENABLE_API_CONFIGURATION && SNOW_SHOT_ENABLE_IMAGE_CONVERSION
+    engine->setCurrentIndex(engine->findData(QStringLiteral("vision")));
+    drainEvents();
+    require(output->findData(QStringLiteral("markdown")) >= 0 &&
+                output->findData(QStringLiteral("html")) >= 0,
+            "large-model OCR exposes structured output choices");
+#if SNOW_SHOT_ENABLE_LATEX_RECOGNITION
+    require(output->findData(QStringLiteral("latex")) >= 0,
+            "large-model OCR exposes LaTeX when the upstream recognizer is compiled");
+    output->setCurrentIndex(output->findData(QStringLiteral("latex")));
+#else
+    output->setCurrentIndex(output->findData(QStringLiteral("markdown")));
+#endif
+    require(visionModelSelector->findData(visionModel.selectionId()) >= 0,
+            "Online OCR lists configured OpenAI-compatible vision models");
+    visionModelSelector->setCurrentIndex(
+        visionModelSelector->findData(visionModel.selectionId()));
+    save->click();
+    drainEvents();
+    const auto visionStored = snow_shot::network::readCommunityCloudOcrSettings();
+    require(status->text() == QStringLiteral("Online OCR configuration saved.") &&
+                visionStored.engine == QStringLiteral("vision") &&
+                snow_shot::storage::ScreenshotImageConversionSettings().visionModel() ==
+                    visionModel.selectionId(),
+            "large-model Online OCR persists its provider/model selection");
+#if SNOW_SHOT_ENABLE_LATEX_RECOGNITION
+    require(visionStored.outputFormat == QStringLiteral("latex") &&
+                snow_shot::storage::ScreenshotRecognitionModelSettings().latexModel() ==
+                    visionModel.selectionId(),
+            "LaTeX output reuses the configured upstream vision model");
+#endif
+    require(snow_shot::storage::ApiConfigurationSettings().setCustomModels(previousModels),
+            "restore custom vision models");
+#endif
 #ifdef Q_OS_WIN
     QSettings raw(QSettings::IniFormat, QSettings::UserScope,
                   QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
@@ -1307,7 +1374,10 @@ void reorganizedSettingsPreserveIndependentState(const settings::SettingsRegistr
                                      QStringLiteral("en_US")) &&
                 session.reset(settings::SettingsSectionReset::GeneralSettings),
             "restore language and appearance for subsequent checks");
+}
 
+void fullscreenDisablingSettings(const settings::SettingsRegistry& registry,
+                                 settings::SettingsRuntimeSession& session) {
     SettingsPageWidget shortcuts(registry, QStringLiteral("global-hotkeys"), session);
     shortcuts.resize(880, 760);
     shortcuts.show();
@@ -1324,6 +1394,23 @@ void reorganizedSettingsPreserveIndependentState(const settings::SettingsRegistr
                 session.selectValue(settings::SettingsSelectBinding::FullscreenWindowFilter) ==
                     QStringLiteral("game_windows"),
             "the game filter selector materializes and remains editable while suppression is off");
+    using MultiSelectBinding = settings::SettingsMultiSelectBinding;
+    auto* scope = shortcuts.findChild<adqt::widgets::AdMultiSelect*>(
+        QStringLiteral("settings-control-global-hotkeys-disable-scope"));
+    const QVariantList defaultScope{QStringLiteral("global_shortcuts")};
+    const QVariantList bothScopes{QStringLiteral("global_shortcuts"),
+                                  QStringLiteral("global_mouse")};
+    require(scope && scope->isEnabled() && scope->selectedValues() == defaultScope &&
+                scope->mapTo(&shortcuts, QPoint()).y() > filter->mapTo(&shortcuts, QPoint()).y(),
+            "the scope appears below the window filter with shortcuts selected");
+    scope->setSelectedValues(bothScopes);
+    require(session.multiSelectValue(MultiSelectBinding::FullscreenDisableScope) == bothScopes,
+            "choosing both scopes in the control saves both selections");
+    scope->setSelectedValues({});
+    require(
+        session.multiSelectValue(MultiSelectBinding::FullscreenDisableScope).isEmpty() &&
+            session.applyMultiSelectValue(MultiSelectBinding::FullscreenDisableScope, bothScopes),
+        "the user can clear the scope and then select both options again");
     const auto& configuration = snow_shot::storage::ApplicationStorage::instance().configuration();
     const auto screenshotShortcut =
         configuration.value(QStringLiteral("global_shortcuts/screenshot"));
@@ -1344,12 +1431,15 @@ void reorganizedSettingsPreserveIndependentState(const settings::SettingsRegistr
     drainEvents();
     require(filter->currentValue() == QStringLiteral("game_windows") && filter->isEnabled(),
             "reset refreshes the selected game filter while leaving it editable");
+    require(scope->selectedValues() == defaultScope,
+            "reset restores only the global shortcuts scope");
     auto& filterLanguage = snow_shot::presentation::LanguageManager::instance();
     for (const QString& locale :
          {QStringLiteral("en_US"), QStringLiteral("zh_CN"), QStringLiteral("zh_TW")}) {
         require(filterLanguage.setLanguage(locale), "switch fullscreen filter settings language");
         drainEvents();
         const auto options = filter->options();
+        const auto scopeOptions = scope->options();
         const QString title = QCoreApplication::translate("SettingsCatalog", "Window filter type");
         bool hasTitle = false;
         for (const auto* label : shortcuts.findChildren<QLabel*>())
@@ -1362,6 +1452,17 @@ void reorganizedSettingsPreserveIndependentState(const settings::SettingsRegistr
                     QCoreApplication::translate("SettingsCatalog", "Game windows") &&
                 filter->currentValue() == QStringLiteral("game_windows"),
             "language changes retranslate filter titles and options without changing its value");
+        const QString scopeTitle = QCoreApplication::translate("SettingsCatalog", "Disable scope");
+        bool hasScopeTitle = false;
+        for (const auto* label : shortcuts.findChildren<QLabel*>())
+            hasScopeTitle = hasScopeTitle || label->text() == scopeTitle;
+        require(hasScopeTitle && scopeOptions.size() == 2 &&
+                    scopeOptions.at(0).label ==
+                        QCoreApplication::translate("SettingsCatalog", "Global shortcuts") &&
+                    scopeOptions.at(1).label ==
+                        QCoreApplication::translate("SettingsCatalog", "Global mouse") &&
+                    scope->selectedValues() == defaultScope,
+                "language changes retranslate the scope without changing its selection");
     }
     require(filterLanguage.setLanguage(QStringLiteral("en_US")),
             "restore English fullscreen filter settings");
@@ -1424,8 +1525,15 @@ void selectedImagesSettings(const settings::SettingsRegistry& registry) {
         QStringLiteral("settings-item-quick-split-selected-images"));
     auto* edit =
         page.findChild<ShortcutKeyRow*>(QStringLiteral("settings-item-quick-edit-selected-images"));
+    auto* compress = page.findChild<ShortcutKeyRow*>(
+        QStringLiteral("settings-item-quick-compress-selected-images"));
+    auto* mouseToggle =
+        page.findChild<ShortcutKeyRow*>(QStringLiteral("settings-item-quick-toggle-global-mouse"));
     require(
-        stitch && canvas && split && edit &&
+        stitch && canvas && split && edit && compress &&
+            compress->mapTo(&page, QPoint()).y() > edit->mapTo(&page, QPoint()).y() &&
+            session.shortcutState(GlobalShortcutAction::CompressSelectedImages)
+                .shortcuts.isEmpty() &&
             edit->mapTo(&page, QPoint()).y() > split->mapTo(&page, QPoint()).y() &&
             session.shortcutState(GlobalShortcutAction::EditSelectedImages).shortcuts.isEmpty() &&
             stitch->mapTo(&page, QPoint()).y() > canvas->mapTo(&page, QPoint()).y() &&
@@ -1451,6 +1559,14 @@ void selectedImagesSettings(const settings::SettingsRegistry& registry) {
     expectedAction = GlobalShortcutAction::EditSelectedImages;
     require(QMetaObject::invokeMethod(edit, "clicked", Qt::DirectConnection) && commands == 3,
             "the editing row runs without an assigned key");
+    expectedAction = GlobalShortcutAction::CompressSelectedImages;
+    require(QMetaObject::invokeMethod(compress, "clicked", Qt::DirectConnection) && commands == 4,
+            "the compression row runs without an assigned key");
+    expectedAction = GlobalShortcutAction::ToggleGlobalMouse;
+    require(mouseToggle &&
+                QMetaObject::invokeMethod(mouseToggle, "clicked", Qt::DirectConnection) &&
+                commands == 5,
+            "the mouse toggle row dispatches its action without an assigned key");
     const snow_shot::shortcuts::ShortcutBindingList bindings{QStringLiteral("Ctrl+Alt+F8"),
                                                              QStringLiteral("Ctrl+Alt+F9")};
     const snow_shot::storage::ShortcutSettings stored;
@@ -1458,31 +1574,43 @@ void selectedImagesSettings(const settings::SettingsRegistry& registry) {
     const snow_shot::shortcuts::ShortcutBindingList splitBindings{QStringLiteral("Ctrl+Alt+F10"),
                                                                   QStringLiteral("Ctrl+Alt+F11")};
     const snow_shot::shortcuts::ShortcutBindingList editBindings{QStringLiteral("Ctrl+Alt+F12")};
+    const snow_shot::shortcuts::ShortcutBindingList mouseBindings{QStringLiteral("Ctrl+Alt+F7")};
     require(session.applyShortcuts(action, bindings) && stored.stitchSelectedImages() == bindings &&
                 session.applyShortcuts(GlobalShortcutAction::SplitSelectedImages, splitBindings) &&
                 stored.splitSelectedImages() == splitBindings &&
                 session.applyShortcuts(GlobalShortcutAction::EditSelectedImages, editBindings) &&
                 stored.editSelectedImages() == editBindings &&
+                session.applyShortcuts(GlobalShortcutAction::CompressSelectedImages,
+                                       {QStringLiteral("Ctrl+Alt+F6")}) &&
+                !stored.compressSelectedImages().isEmpty() &&
+                session.applyShortcuts(GlobalShortcutAction::ToggleGlobalMouse, mouseBindings) &&
+                stored.toggleGlobalMouse() == mouseBindings &&
                 session.reset(settings::SettingsSectionReset::OtherShortcuts) &&
-                stored.editSelectedImages().isEmpty() && stored.stitchSelectedImages().isEmpty() &&
-                stored.splitSelectedImages().isEmpty() && stored.screenshot() == screenshot,
-            "Other reset clears stitching and splitting keys and preserves screenshot keys");
+                stored.editSelectedImages().isEmpty() &&
+                stored.compressSelectedImages().isEmpty() &&
+                stored.stitchSelectedImages().isEmpty() && stored.splitSelectedImages().isEmpty() &&
+                stored.toggleGlobalMouse().isEmpty() && stored.screenshot() == screenshot,
+            "Other reset clears its own keys and preserves screenshot keys");
     auto& languages = LanguageManager::instance();
     for (const auto* locale : {"zh_CN", "zh_TW"}) {
         require(languages.setLanguage(QString::fromLatin1(locale)),
                 "switch stitching row language");
         page.retranslateUi();
         drainEvents();
-        require(stitch->accessibleName() ==
-                        QCoreApplication::translate("SettingsCatalog", "Stitch selected images") &&
-                    stitch->accessibleName() != QStringLiteral("Stitch selected images") &&
-                    split->accessibleName() ==
-                        QCoreApplication::translate("SettingsCatalog", "Split selected images") &&
-                    split->accessibleName() != QStringLiteral("Split selected images") &&
-                    edit->accessibleName() ==
-                        QCoreApplication::translate("SettingsCatalog", "Edit selected images") &&
-                    edit->accessibleName() != QStringLiteral("Edit selected images"),
-                "both selected-image actions retranslate in both Chinese catalogs");
+        require(
+            stitch->accessibleName() ==
+                    QCoreApplication::translate("SettingsCatalog", "Stitch selected images") &&
+                stitch->accessibleName() != QStringLiteral("Stitch selected images") &&
+                split->accessibleName() ==
+                    QCoreApplication::translate("SettingsCatalog", "Split selected images") &&
+                split->accessibleName() != QStringLiteral("Split selected images") &&
+                compress->accessibleName() ==
+                    QCoreApplication::translate("SettingsCatalog", "Compress selected images") &&
+                compress->accessibleName() != QStringLiteral("Compress selected images") &&
+                edit->accessibleName() ==
+                    QCoreApplication::translate("SettingsCatalog", "Edit selected images") &&
+                edit->accessibleName() != QStringLiteral("Edit selected images"),
+            "both selected-image actions retranslate in both Chinese catalogs");
     }
     require(languages.setLanguage(QStringLiteral("en_US")), "restore settings test language");
 }
@@ -1934,6 +2062,46 @@ void featureLinksAdvancedControlsAndResets(const settings::SettingsRegistry& reg
             "advanced capture reset preserves cursor visibility");
 #endif
 }
+void floatingToolbarDropSetting(const settings::SettingsRegistry& registry,
+                                settings::SettingsRuntimeSession& session) {
+    const auto id = QStringLiteral("floating-toolbar.drop-behavior");
+    const auto key = QStringLiteral("floating_toolbar/drop_behavior");
+    const auto pin = QStringLiteral("pin_to_screen");
+    const auto edit = QStringLiteral("image_editing");
+    SettingsPageWidget page(registry, QStringLiteral("desktop-tools"), session);
+    page.resize(880, 760);
+    page.show();
+    page.reveal({QStringLiteral("desktop-tools"), QStringLiteral("floating-toolbar"), id});
+    drainEvents();
+    auto* select = page.findChild<adqt::widgets::AdSelect*>(
+        settings::generatedObjectName(QStringLiteral("settings-control"), id));
+    require(select && select->currentValue() == pin &&
+                select->accessibleName() == QStringLiteral("Toolbar drop behavior"),
+            "floating toolbar shows the drop behavior selector with pinning selected");
+    const QStringList labels{QStringLiteral("Pin to screen"), QStringLiteral("Image stitching"),
+                             QStringLiteral("Image splitting"), QStringLiteral("Image editing")};
+    const auto* model = select->model();
+    require(model->rowCount() == labels.size(), "the dropdown offers four options");
+    for (int row = 0; row < model->rowCount(); ++row) {
+        require(model->index(row, 0).data().toString() == labels[row],
+                "the dropdown shows the requested labels in order");
+    }
+    select->setCurrentValue(edit);
+    drainEvents();
+    auto& storage = snow_shot::storage::ApplicationStorage::instance();
+    require(storage.configuration().value(key) == edit && storage.flushNow().success,
+            "changing the dropdown commits the setting");
+    const snow_shot::storage::ConfigurationStore reloaded(
+        QDir(storage.configurationDirectory()).filePath(QStringLiteral("config.json")), true,
+        false);
+    require(reloaded.value(key) == edit, "the stored drop behavior survives a reload");
+    require(session.reset(settings::SettingsSectionReset::FloatingToolbar),
+            "floating toolbar section reset succeeds");
+    drainEvents();
+    require(select->currentValue() == pin && storage.configuration().value(key) == pin,
+            "reset restores Pin to screen in storage and the dropdown");
+}
+
 void catalogResetsPreserveOtherSections(settings::SettingsRuntimeSession& session) {
     using Reset = settings::SettingsSectionReset;
     using Schema = snow_shot::storage::ConfigurationSchema;
@@ -2026,6 +2194,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--catalog-resets-only"))) {
+        floatingToolbarDropSetting(registry, session);
         catalogResetsPreserveOtherSections(session);
         storage.shutdown();
         return 0;
@@ -2066,6 +2235,11 @@ int main(int argc, char** argv) {
         reorganizedSettingsPreserveIndependentState(registry, session);
         pinnedSettingsGroups(registry, session);
         featureLinksAdvancedControlsAndResets(registry, session);
+        storage.shutdown();
+        return 0;
+    }
+    if (application.arguments().contains(QStringLiteral("--fullscreen-settings-only"))) {
+        fullscreenDisablingSettings(registry, session);
         storage.shutdown();
         return 0;
     }

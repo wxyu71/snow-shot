@@ -19,16 +19,18 @@
 - 保留智能窗口/元素框选、截图、快捷键、批注、贴图及原有引擎。
 - **快速离线 PP-OCRv6**：本地运行，无需联网；识别完成自动复制全部文字，
   并保留可局部选择的文字层。
-- **云端智能 OCR**：直接调用[百度 AI Studio PaddleOCR 官方 API]
-  (https://ai.baidu.com/ai-doc/AISTUDIO/fml7mozw5)，使用用户自己的 URL
-  与 Access Token；支持 PP-OCRv6、PP-StructureV3、PaddleOCR-VL-1.6；
-  输出完整 Markdown，自动复制，同时支持预览、编辑、局部复制。
-- 不含 Snow Shot 登录注册、会员、积分支付入口。
+- **一个可配置的“在线 OCR”按钮**：在设置中选择实际 OCR 提供方。
+  百度 AI Studio PaddleOCR 使用用户自己的 HTTPS API URL 与 Access Token，
+  支持 PP-OCRv6、PP-StructureV3、PaddleOCR-VL-1.6，输出结构化 Markdown，
+  其中公式保留为 LaTeX；也可以复用上游的大模型 OCR 管线，使用用户配置的
+  OpenAI-compatible 视觉模型，并选择输出 Markdown、HTML 或 LaTeX。
+- 不含 Snow Shot 登录注册、会员、积分支付、分析统计或遥测。
 - 上游定时同步具备商业文件保护；未经 Windows 回归测试的源码合并必须人工审核。
 
-云 OCR 会将选中的图片**直接发送至用户配置的百度 API**。
-目前 Access Token 由用户目录下的 Qt 设置文件明文保存，不要上传此文件。
-详见[此 Fork 的隐私说明](docs/community-privacy.md)。
+在线 OCR 会将选中的图片**直接发送至用户在设置中选择的 OCR 提供方**，
+不会经过 Snow Shot 账户服务。Windows 上 PaddleOCR Access Token 使用当前
+用户作用域的 DPAPI 保护；其它平台目前仍保存在用户 Qt 设置中，应按敏感信息
+处理。详见[此 Fork 的隐私说明](docs/community-privacy.md)。
 
 ## 构建与测试
 

@@ -726,10 +726,6 @@
     <context>
         <name>LoginItemService</name>
         <message>
-            <source>%1 needs a valid code signature to use launch at login. Reinstall the signed app</source>
-            <translation>%1 需要有效的代码签名才能在登录时启动。请重新安装已签名的应用</translation>
-        </message>
-        <message>
             <source>A launch-at-login change is already in progress</source>
             <translation>正在更改登录时启动设置</translation>
         </message>
@@ -742,24 +738,8 @@
             <translation>无法更改登录时启动设置：%1</translation>
         </message>
         <message>
-            <source>Could not save launch-at-login initialization. Registration was not changed</source>
-            <translation>无法保存登录时启动初始化状态。注册状态未更改</translation>
-        </message>
-        <message>
             <source>Could not save the launch-at-login preference. The displayed macOS status is still current</source>
             <translation>无法保存登录时启动偏好设置。显示的 macOS 状态仍为当前状态</translation>
-        </message>
-        <message>
-            <source>Move the signed %1 app to /Applications or ~/Applications to use launch at login</source>
-            <translation>请将已签名的 %1 应用移至 /Applications 或 ~/Applications，以便在登录时启动</translation>
-        </message>
-        <message>
-            <source>Move the signed Snow Shot app to /Applications or ~/Applications to use launch at login</source>
-            <translation>请将已签名的 Snow Shot 应用移至 /Applications 或 ~/Applications，以使用登录时启动功能</translation>
-        </message>
-        <message>
-            <source>Snow Shot needs a valid code signature to use launch at login. Reinstall the signed app</source>
-            <translation>Snow Shot 需要有效的代码签名才能使用登录时启动功能。请重新安装已签名的应用</translation>
         </message>
         <message>
             <source>macOS did not apply the launch-at-login change. Check Login Items in System Settings</source>
@@ -1016,6 +996,10 @@
             <translation>转换为 Markdown</translation>
         </message>
         <message>
+            <source>Document recognition</source>
+            <translation>文档识别</translation>
+        </message>
+        <message>
             <source>Drag tools here to hide them from the screenshot toolbar</source>
             <translation>将工具拖到此处，即可在截图工具栏中隐藏它们</translation>
         </message>
@@ -1235,6 +1219,10 @@
             <translation>活动窗口</translation>
         </message>
         <message>
+            <source>Adaptive guide colors</source>
+            <translation>自适应辅助线颜色</translation>
+        </message>
+        <message>
             <source>Add a mask to highlight text recognition results</source>
             <translation>添加遮罩以高亮显示文本识别结果</translation>
         </message>
@@ -1289,10 +1277,6 @@
         <message>
             <source>Allow resizing the selection from its borders while non-move tools are active</source>
             <translation>启用非移动工具时，允许从选区边缘调整选区大小</translation>
-        </message>
-        <message>
-            <source>Also copy the screenshot to the clipboard when pinning it to screen</source>
-            <translation>将截图固定到屏幕时，同时将截图复制到剪贴板</translation>
         </message>
         <message>
             <source>Always</source>
@@ -1399,6 +1383,18 @@
             <translation>适用于三种皮肤。覆盖模式填满各个界面并裁剪边缘，适应模式显示完整图像</translation>
         </message>
         <message>
+            <source>Applies to pins created from the screenshot window</source>
+            <translation>适用于从截图窗口固定到屏幕的截图</translation>
+        </message>
+        <message>
+            <source>Applies to standard, scrolling, monitor, and focused-window captures</source>
+            <translation>适用于普通截图、滚动截图、当前显示器截图和焦点窗口截图</translation>
+        </message>
+        <message>
+            <source>Applies when Copy current view copies an image</source>
+            <translation>在「复制当前视图」复制图像时执行</translation>
+        </message>
+        <message>
             <source>Apply to recognized text when editing or copying</source>
             <translation>编辑或复制识别文字时应用</translation>
         </message>
@@ -1447,8 +1443,8 @@
             <translation>自动识别二维码</translation>
         </message>
         <message>
-            <source>Auto-save after execution</source>
-            <translation>执行后自动保存</translation>
+            <source>Auto-save</source>
+            <translation>自动保存</translation>
         </message>
         <message>
             <source>Auto-save image filename format</source>
@@ -1461,6 +1457,10 @@
         <message>
             <source>Automatic disabling</source>
             <translation>自动禁用</translation>
+        </message>
+        <message>
+            <source>Automatic disabling in fullscreen windows</source>
+            <translation>全屏窗口自动禁用</translation>
         </message>
         <message>
             <source>Automatic text recognition</source>
@@ -1485,6 +1485,10 @@
         <message>
             <source>Automatically select newly created elements</source>
             <translation>自动选中新创建的元素</translation>
+        </message>
+        <message>
+            <source>Automatically start Snow Shot in the background when you log in to your Mac</source>
+            <translation>登录 Mac 时自动在后台启动 Snow Shot</translation>
         </message>
         <message>
             <source>Autostart</source>
@@ -1671,10 +1675,6 @@
             <translation>自动检查</translation>
         </message>
         <message>
-            <source>Check for new versions on GitHub and Gitee</source>
-            <translation>在 GitHub 和 Gitee 上检查新版本</translation>
-        </message>
-        <message>
             <source>Child elements</source>
             <translation>子元素</translation>
         </message>
@@ -1689,6 +1689,10 @@
         <message>
             <source>Choose automatic window or window sub-element selection, or select manually</source>
             <translation>选择自动选取窗口或窗口子元素，或手动选择</translation>
+        </message>
+        <message>
+            <source>Choose how Windows throttles the application's execution speed</source>
+            <translation>选择 Windows 如何限制应用程序的执行速度</translation>
         </message>
         <message>
             <source>Choose how much execution time the application receives</source>
@@ -1835,6 +1839,10 @@
             <translation>选择文本识别完成后自动执行的操作</translation>
         </message>
         <message>
+            <source>Choose what happens when content is dropped on the floating toolbar</source>
+            <translation>选择将内容拖放到悬浮工具栏时执行的操作</translation>
+        </message>
+        <message>
             <source>Choose what happens when the clipboard content or selected file is already pinned</source>
             <translation>选择剪贴板内容或所选文件已固定到屏幕时的操作</translation>
         </message>
@@ -1859,12 +1867,16 @@
             <translation>选择录制输出文件的保存位置</translation>
         </message>
         <message>
-            <source>Choose which actions also save an image in the selected image format and save directory</source>
-            <translation>选择执行哪些操作时，同时以所选图像格式保存到指定目录</translation>
+            <source>Choose which fullscreen windows trigger automatic disabling</source>
+            <translation>选择哪些全屏窗口会触发自动禁用</translation>
         </message>
         <message>
-            <source>Choose which fullscreen windows automatically disable global shortcuts</source>
-            <translation>选择哪些全屏窗口会自动禁用全局快捷键</translation>
+            <source>Choose which inputs to disable</source>
+            <translation>选择要禁用的输入功能</translation>
+        </message>
+        <message>
+            <source>Choose which tasks run after a successful image export</source>
+            <translation>选择图像导出成功后执行的任务</translation>
         </message>
         <message>
             <source>Clear</source>
@@ -1931,6 +1943,10 @@
             <translation>颜色拾取器显示模式</translation>
         </message>
         <message>
+            <source>Compress selected images</source>
+            <translation>压缩选中的图像</translation>
+        </message>
+        <message>
             <source>Compression level</source>
             <translation>压缩级别</translation>
         </message>
@@ -1995,10 +2011,6 @@
             <translation>复制</translation>
         </message>
         <message>
-            <source>Copy after pinning to screen</source>
-            <translation>固定到屏幕后复制</translation>
-        </message>
-        <message>
             <source>Copy after text recognition</source>
             <translation>文本识别后复制</translation>
         </message>
@@ -2019,12 +2031,8 @@
             <translation>复制颜色</translation>
         </message>
         <message>
-            <source>Copy current monitor</source>
-            <translation>复制当前显示器</translation>
-        </message>
-        <message>
-            <source>Copy focused window</source>
-            <translation>复制焦点窗口</translation>
+            <source>Copy file</source>
+            <translation>复制文件</translation>
         </message>
         <message>
             <source>Copy image file to clipboard</source>
@@ -2035,20 +2043,12 @@
             <translation>复制原始内容</translation>
         </message>
         <message>
-            <source>Copy pinned window</source>
-            <translation>复制固定到屏幕窗口</translation>
-        </message>
-        <message>
             <source>Copy recording</source>
             <translation>复制录制内容</translation>
         </message>
         <message>
             <source>Copy screenshot</source>
             <translation>复制截图</translation>
-        </message>
-        <message>
-            <source>Copy scrolling screenshot</source>
-            <translation>复制滚动截图</translation>
         </message>
         <message>
             <source>Copy text</source>
@@ -2165,6 +2165,10 @@
         <message>
             <source>Customize the screenshot action toolbar</source>
             <translation>自定义截图操作工具栏</translation>
+        </message>
+        <message>
+            <source>Cycle annotation tool options</source>
+            <translation>循环切换标注工具选项</translation>
         </message>
         <message>
             <source>DXGI</source>
@@ -2287,12 +2291,20 @@
             <translation>诊断</translation>
         </message>
         <message>
+            <source>Disable global mouse</source>
+            <translation>禁用全局鼠标</translation>
+        </message>
+        <message>
             <source>Disable global shortcuts</source>
             <translation>禁用全局快捷键</translation>
         </message>
         <message>
-            <source>Disable shortcuts in fullscreen windows</source>
-            <translation>在全屏窗口中禁用快捷键</translation>
+            <source>Disable scope</source>
+            <translation>禁用范围</translation>
+        </message>
+        <message>
+            <source>Disable/enable global mouse</source>
+            <translation>禁用/启用全局鼠标</translation>
         </message>
         <message>
             <source>Disable/enable global shortcuts</source>
@@ -2495,6 +2507,10 @@
             <translation>导出设置</translation>
         </message>
         <message>
+            <source>Export tasks</source>
+            <translation>导出任务</translation>
+        </message>
+        <message>
             <source>Extended features settings</source>
             <translation>扩展功能设置</translation>
         </message>
@@ -2587,6 +2603,10 @@
             <translation>全屏画布（开启/关闭鼠标穿透）</translation>
         </message>
         <message>
+            <source>Fullscreen input settings</source>
+            <translation>全屏输入设置</translation>
+        </message>
+        <message>
             <source>Fullscreen suppression</source>
             <translation>全屏抑制</translation>
         </message>
@@ -2637,10 +2657,6 @@
         <message>
             <source>Global mouse gestures</source>
             <translation>全局鼠标手势</translation>
-        </message>
-        <message>
-            <source>Global shortcut activation behavior</source>
-            <translation>全局快捷键启用行为</translation>
         </message>
         <message>
             <source>Global shortcuts</source>
@@ -2727,12 +2743,12 @@
             <translation>图标</translation>
         </message>
         <message>
-            <source>Ignore global shortcuts while a matching focused window occupies an entire monitor</source>
-            <translation>符合筛选条件的焦点窗口占满整个显示器时忽略全局快捷键</translation>
-        </message>
-        <message>
             <source>Image and document files</source>
             <translation>图像和文档文件</translation>
+        </message>
+        <message>
+            <source>Image editing</source>
+            <translation>图像编辑</translation>
         </message>
         <message>
             <source>Image export</source>
@@ -2769,6 +2785,14 @@
         <message>
             <source>Image size</source>
             <translation>图像大小</translation>
+        </message>
+        <message>
+            <source>Image splitting</source>
+            <translation>图像分割</translation>
+        </message>
+        <message>
+            <source>Image stitching</source>
+            <translation>图像拼接</translation>
         </message>
         <message>
             <source>Import</source>
@@ -2831,6 +2855,10 @@
             <translation>界面设置</translation>
         </message>
         <message>
+            <source>Invert guide colors that are similar to their sampled background color</source>
+            <translation>辅助线颜色与采样的背景颜色相近时反转辅助线颜色</translation>
+        </message>
+        <message>
             <source>JPEG</source>
             <translation>JPEG</translation>
         </message>
@@ -2865,6 +2893,10 @@
         <message>
             <source>Keep screenshots available after the application closes</source>
             <translation>关闭应用程序后仍保留可用的截图</translation>
+        </message>
+        <message>
+            <source>Keep selection width and height consistent</source>
+            <translation>保持选区宽高一致</translation>
         </message>
         <message>
             <source>Keep the Snow Shot save dialog open after saving to show the result</source>
@@ -3009,14 +3041,6 @@
         <message>
             <source>Main interface skin position</source>
             <translation>主界面皮肤位置</translation>
-        </message>
-        <message>
-            <source>Maintain selection aspect ratio</source>
-            <translation>保持选区宽高比</translation>
-        </message>
-        <message>
-            <source>Manage Snow Shot's login permission in macOS System Settings</source>
-            <translation>在 macOS 系统设置中管理 Snow Shot 的登录权限</translation>
         </message>
         <message>
             <source>Manage macOS permissions for Snow Shot</source>
@@ -3224,16 +3248,16 @@
             <translation>仅在显示时</translation>
         </message>
         <message>
-            <source>Open</source>
-            <translation>打开</translation>
-        </message>
-        <message>
-            <source>Open Login Items settings</source>
-            <translation>打开登录项设置</translation>
-        </message>
-        <message>
             <source>Open a canvas on the current display or toggle click-through</source>
             <translation>在当前显示器上打开画布或切换鼠标穿透</translation>
+        </message>
+        <message>
+            <source>Open at login</source>
+            <translation>登录时打开</translation>
+        </message>
+        <message>
+            <source>Open image compression for each selected image file, or an empty window if no images are selected</source>
+            <translation>为每个选中的图像文件打开图像压缩窗口；未选中图像时打开空窗口</translation>
         </message>
         <message>
             <source>Open image editing for each selected image file, or an empty window if no images are selected</source>
@@ -3320,6 +3344,18 @@
             <translation>页面</translation>
         </message>
         <message>
+            <source>Pause or resume configured global mouse gestures</source>
+            <translation>暂停或恢复已配置的全局鼠标手势</translation>
+        </message>
+        <message>
+            <source>Pause the selected inputs while a matching focused window occupies an entire monitor</source>
+            <translation>当前焦点窗口符合筛选条件且占据整个显示器时，暂停所选的输入功能</translation>
+        </message>
+        <message>
+            <source>Performance</source>
+            <translation>性能</translation>
+        </message>
+        <message>
             <source>Permanently remove all saved screenshots</source>
             <translation>永久移除所有已保存的截图</translation>
         </message>
@@ -3342,10 +3378,6 @@
         <message>
             <source>Pin images, supported files, formatted text, or HTML from the clipboard to the screen</source>
             <translation>将剪贴板中的图像、支持的文件、格式化文本或 HTML 固定到屏幕</translation>
-        </message>
-        <message>
-            <source>Pin screenshot to screen</source>
-            <translation>将截图固定到屏幕</translation>
         </message>
         <message>
             <source>Pin selected files to screen</source>
@@ -3458,6 +3490,14 @@
         <message>
             <source>Portrait A4</source>
             <translation>纵向 A4</translation>
+        </message>
+        <message>
+            <source>Power QoS</source>
+            <translation>电源 QoS</translation>
+        </message>
+        <message>
+            <source>Power saving</source>
+            <translation>节能</translation>
         </message>
         <message>
             <source>Preload the selected model for faster recognition. Requires a resident process and uses additional memory</source>
@@ -3764,6 +3804,70 @@
             <translation>延时 %1 秒执行</translation>
         </message>
         <message>
+            <source>Run after copying a pinned window</source>
+            <translation>固定到屏幕窗口复制后执行</translation>
+        </message>
+        <message>
+            <source>Run after copying a screenshot</source>
+            <translation>截图复制后执行</translation>
+        </message>
+        <message>
+            <source>Run after pinning a screenshot to the screen</source>
+            <translation>截图固定到屏幕后执行</translation>
+        </message>
+        <message>
+            <source>Run after printing a pinned window</source>
+            <translation>固定到屏幕窗口打印后执行</translation>
+        </message>
+        <message>
+            <source>Run after printing a screenshot</source>
+            <translation>截图打印后执行</translation>
+        </message>
+        <message>
+            <source>Run after saving a pinned window</source>
+            <translation>固定到屏幕窗口保存后执行</translation>
+        </message>
+        <message>
+            <source>Run after saving a screenshot</source>
+            <translation>截图保存后执行</translation>
+        </message>
+        <message>
+            <source>Run after sharing a pinned window via AirDrop</source>
+            <translation>固定到屏幕窗口通过隔空投送分享后执行</translation>
+        </message>
+        <message>
+            <source>Run after sharing a screenshot via AirDrop</source>
+            <translation>截图通过隔空投送分享后执行</translation>
+        </message>
+        <message>
+            <source>Run after uploading a pinned window</source>
+            <translation>固定到屏幕窗口上传后执行</translation>
+        </message>
+        <message>
+            <source>Run after uploading a screenshot</source>
+            <translation>截图上传后执行</translation>
+        </message>
+        <message>
+            <source>Runs after a successful manual cloud upload</source>
+            <translation>手动上传到云端成功后执行</translation>
+        </message>
+        <message>
+            <source>Runs after each successful Quick save or Save as file</source>
+            <translation>每次快速保存或另存为文件成功后执行</translation>
+        </message>
+        <message>
+            <source>Runs after each successful individual save</source>
+            <translation>每次单独保存成功后执行</translation>
+        </message>
+        <message>
+            <source>Runs after the print job is submitted</source>
+            <translation>打印作业提交后执行</translation>
+        </message>
+        <message>
+            <source>Runs when AirDrop confirms sharing</source>
+            <translation>在隔空投送确认分享成功后执行</translation>
+        </message>
+        <message>
             <source>Save as file</source>
             <translation>保存为文件</translation>
         </message>
@@ -3992,12 +4096,12 @@
             <translation>选择图像保存目录</translation>
         </message>
         <message>
-            <source>Select scenarios</source>
-            <translation>选择场景</translation>
-        </message>
-        <message>
             <source>Select skin image</source>
             <translation>选择皮肤图像</translation>
+        </message>
+        <message>
+            <source>Select tasks</source>
+            <translation>选择任务</translation>
         </message>
         <message>
             <source>Select the language used throughout the application</source>
@@ -4620,6 +4724,10 @@
             <translation>切换鼠标所在窗口的置顶状态</translation>
         </message>
         <message>
+            <source>Toggle automatic disabling of the selected inputs in fullscreen windows. This shortcut stays active while automatic disabling is enabled</source>
+            <translation>切换全屏时自动禁用所选输入功能。启用自动禁用后，此快捷键仍然有效</translation>
+        </message>
+        <message>
             <source>Toggle cursor visibility</source>
             <translation>切换光标显示</translation>
         </message>
@@ -4642,6 +4750,10 @@
         <message>
             <source>Tool positions</source>
             <translation>工具位置</translation>
+        </message>
+        <message>
+            <source>Toolbar drop behavior</source>
+            <translation>工具栏拖放行为</translation>
         </message>
         <message>
             <source>Toolbar opacity</source>
@@ -4758,10 +4870,6 @@
         <message>
             <source>Turn every global shortcut off or back on; this shortcut stays active while global shortcuts are disabled</source>
             <translation>关闭或重新开启所有全局快捷键；即使全局快捷键已被禁用，此快捷键仍然有效</translation>
-        </message>
-        <message>
-            <source>Turn off or back on the suppression of global shortcuts while the focused window is fullscreen; this shortcut stays active while fullscreen suppression is enabled</source>
-            <translation>关闭或重新开启焦点窗口全屏时对全局快捷键的抑制；即使全屏抑制已生效，此快捷键仍然有效</translation>
         </message>
         <message>
             <source>UIA</source>

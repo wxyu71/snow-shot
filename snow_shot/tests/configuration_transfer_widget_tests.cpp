@@ -6,6 +6,7 @@
 #include "snow_shot/storage/configurationarchive.h"
 #include "snow_shot/storage/configurationschema.h"
 #include "snow_shot/storage/configurationstore.h"
+#include "snow_shot/clouduploadconfiguration.h"
 #include "snow_shot/presentation/globalshortcutmanager.h"
 
 #include "antd_icons.h"
@@ -412,8 +413,22 @@ void realBackendExportFiltersToolbarStyles() {
     const QString styleKey = QStringLiteral("drawing/shape_style");
     const QJsonObject style{{QStringLiteral("test_marker"), QStringLiteral("included")}};
     const QString ordinaryKey = QStringLiteral("drawing/remember_last_used_tool");
+    const QString cloudKey = QStringLiteral("cloud_upload/configuration");
+    snow_shot::CloudUploadConfiguration cloud;
+    cloud.id = QStringLiteral("11111111-1111-4111-8111-111111111111");
+    cloud.name = QStringLiteral("Private S3");
+    cloud.endpoint = QStringLiteral("https://storage.example.invalid");
+    cloud.region = QStringLiteral("us-east-1");
+    cloud.bucket = QStringLiteral("screenshots");
+    cloud.accessKeyId = QStringLiteral("private-access-key");
+    cloud.secretAccessKey = QStringLiteral("private-secret-key");
+    cloud.sessionToken = QStringLiteral("private-session-token");
+    snow_shot::CloudUploadSettings cloudSettings;
+    cloudSettings.configurations = {cloud};
+    cloudSettings.defaultId = cloud.id;
     const auto directories = configuredDirectories();
     require(store.setValue(styleKey, style) && store.setValue(ordinaryKey, true) &&
+                store.setValue(cloudKey, snow_shot::cloudUploadSettingsToJson(cloudSettings)) &&
                 store.setValues(directories),
             "export fixtures must be accepted by the configuration store");
 
@@ -447,6 +462,14 @@ void realBackendExportFiltersToolbarStyles() {
                 "configuration export must retain settings unrelated to toolbar styles");
         require(archive.values.contains(styleKey) == includeStyles,
                 "configuration export must honor the toolbar style option");
+        const auto exportedCloud =
+            snow_shot::cloudUploadSettingsFromJson(archive.values.value(cloudKey));
+        require(exportedCloud.configurations.size() == 1 &&
+                    exportedCloud.configurations.front().accessKeyId.isEmpty() &&
+                    exportedCloud.configurations.front().secretAccessKey.isEmpty() &&
+                    exportedCloud.configurations.front().sessionToken.isEmpty() &&
+                    archive.redactedCredentialIds.contains(QStringLiteral("cloud:") + cloud.id),
+                "UI configuration exports must redact cloud credentials");
         for (auto it = directories.cbegin(); it != directories.cend(); ++it) {
             require(!archive.values.contains(it.key()) && store.value(it.key()) == it.value(),
                     "UI exports must omit local directories without changing their stored values");
@@ -465,6 +488,13 @@ void realBackendExportFiltersToolbarStyles() {
             }
         }
     }
+    const auto storedCloud =
+        snow_shot::cloudUploadSettingsFromJson(store.value(cloudKey));
+    require(storedCloud.configurations.size() == 1 &&
+                storedCloud.configurations.front().accessKeyId == cloud.accessKeyId &&
+                storedCloud.configurations.front().secretAccessKey == cloud.secretAccessKey &&
+                storedCloud.configurations.front().sessionToken == cloud.sessionToken,
+            "export redaction must not mutate stored cloud credentials");
 }
 
 void realBackendImportReplacesConfiguration() {

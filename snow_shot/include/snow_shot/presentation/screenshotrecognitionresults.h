@@ -8,6 +8,7 @@
 #include "snow_shot/presentation/screenshotimageconversion.h"
 
 #include <QString>
+#include "snow_shot/presentation/screenshotrecognizeddocument.h"
 
 #include <optional>
 #include <memory>
@@ -42,6 +43,7 @@ struct ScreenshotLatexRecognitionEntry {
 
 struct ScreenshotRecognitionResults {
     QString key;
+    std::shared_ptr<const ScreenshotRecognizedDocument> document;
     std::optional<SnowShotLatexResult> latex;
     // An empty draft is a valid edit; the successful recognition remains the reset baseline.
     std::optional<QString> latexDraft;
@@ -50,6 +52,8 @@ struct ScreenshotRecognitionResults {
     std::optional<SnowShotTableResult> table;
     std::optional<ScreenshotQrRecognitionResult> qr;
     std::shared_ptr<ScreenshotOcrPresentation> translatedText;
+    // A captured overlay can contain partial output. Older saves lack completion metadata.
+    bool translatedTextComplete = false;
     QVector<ScreenshotImageConversionEntry> conversions;
     std::optional<SnowShotImageConversionFormat> visibleConversion;
     QVector<ScreenshotTableRecognitionEntry> tableEntries;
@@ -61,9 +65,10 @@ struct ScreenshotRecognitionResults {
     QString latexEffectiveModel;
 
     [[nodiscard]] bool isEmpty() const {
-        return !latex.has_value() && !text.has_value() && !table.has_value() && !qr.has_value() &&
-               conversions.isEmpty() && tableEntries.isEmpty() && latexEntries.isEmpty() &&
-               tableModelSelection.isEmpty() && latexModelSelection.isEmpty();
+        return !document && !latex.has_value() && !text.has_value() && !table.has_value() &&
+               !qr.has_value() && conversions.isEmpty() && tableEntries.isEmpty() &&
+               latexEntries.isEmpty() && tableModelSelection.isEmpty() &&
+               latexModelSelection.isEmpty();
     }
 
     [[nodiscard]] bool isValidFor(const QString& targetKey) const {
@@ -73,6 +78,8 @@ struct ScreenshotRecognitionResults {
 
 inline void sanitizeEditionRecognitionResults(ScreenshotRecognitionResults& results) {
     using namespace snow_shot::app;
+    if constexpr (!edition::documentRecognition)
+        results.document.reset();
     if constexpr (!edition::tableRecognition) {
         results.table.reset();
         results.tableEntries.clear();
@@ -93,8 +100,10 @@ inline void sanitizeEditionRecognitionResults(ScreenshotRecognitionResults& resu
         results.conversions.clear();
         results.visibleConversion.reset();
     }
-    if constexpr (!edition::textTranslation)
+    if constexpr (!edition::textTranslation) {
         results.translatedText.reset();
+        results.translatedTextComplete = false;
+    }
 }
 
 #endif // SNOW_SHOT_PRESENTATION_SCREENSHOTRECOGNITIONRESULTS_H

@@ -7,6 +7,7 @@
 
 #include "antd_icons.h"
 #include "snow_shot/presentation/components/icons/snowshoticons.h"
+#include "snow_shot/shortcuts/annotationoptionshortcut.h"
 #include "snow_shot/storage/configurationschema.h"
 
 #include <QCoreApplication>
@@ -341,6 +342,17 @@ SettingsItemDefinition editSelectedImagesItem() {
         {}, GlobalShortcutAction::EditSelectedImages,
         QStringLiteral("global_shortcuts/edit_selected_images"),
         []() { return custom_outlined_icons::ImageEditing(); });
+}
+SettingsItemDefinition compressSelectedImagesItem() {
+    return quickActionItem(
+        QStringLiteral("quick.compress-selected-images"),
+        QT_TRANSLATE_NOOP("SettingsCatalog", "Compress selected images"),
+        QT_TRANSLATE_NOOP("SettingsCatalog",
+                          "Open image compression for each selected image file, or an empty window "
+                          "if no images are selected"),
+        {}, GlobalShortcutAction::CompressSelectedImages,
+        QStringLiteral("global_shortcuts/compress_selected_images"),
+        []() { return custom_outlined_icons::ImageCompression(); });
 }
 
 SettingsItemDefinition themeItem() {
@@ -693,6 +705,17 @@ SettingsItemDefinition showGuidesByDefaultItem() {
             {},
             QStringLiteral("screenshot_ui/show_guides_by_default"),
             SettingsSwitchDefinition{SettingsSwitchBinding::ShowGuidesByDefault}};
+}
+
+SettingsItemDefinition adaptiveGuideColorsItem() {
+    return {QStringLiteral("interface.screenshot.adaptive-guide-colors"),
+            settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Adaptive guide colors")),
+            settingsText(QT_TRANSLATE_NOOP(
+                "SettingsCatalog",
+                "Invert guide colors that are similar to their sampled background color")),
+            {},
+            QStringLiteral("screenshot_ui/adaptive_guide_colors"),
+            SettingsSwitchDefinition{SettingsSwitchBinding::AdaptiveGuideColors}};
 }
 
 SettingsItemDefinition showEditSelectionToolbarItem() {
@@ -1076,6 +1099,29 @@ SettingsItemDefinition applicationQoSItem() {
 }
 #endif
 
+#ifdef Q_OS_WIN
+SettingsItemDefinition powerQoSItem() {
+    SettingsSelectDefinition payload;
+    payload.binding = SettingsSelectBinding::PowerQoS;
+    payload.options = {
+        {QStringLiteral("performance"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Performance"))},
+        {QStringLiteral("normal"), settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Normal"))},
+        {QStringLiteral("power_saving"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Power saving"))},
+    };
+    return {
+        QStringLiteral("system.power-qos"),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Power QoS")),
+        settingsText(QT_TRANSLATE_NOOP(
+            "SettingsCatalog", "Choose how Windows throttles the application's execution speed")),
+        {},
+        QStringLiteral("system/power_qos"),
+        payload,
+    };
+}
+#endif
+
 #if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
 SettingsItemDefinition memoryOptimizationPolicyItem() {
     SettingsSelectDefinition payload;
@@ -1137,19 +1183,14 @@ SettingsItemDefinition updateModeItem() {
 #ifndef Q_OS_MACOS
         {QStringLiteral("download"),
          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Download automatically"))},
+#endif
         {QStringLiteral("next_launch"),
          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Auto-update on next launch"))},
-#endif
     };
     return {QStringLiteral("updates.mode"),
             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Updates")),
-#ifdef Q_OS_MACOS
-            settingsText(
-                QT_TRANSLATE_NOOP("SettingsCatalog", "Check for new versions on GitHub and Gitee")),
-#else
             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
                                            "Choose how updates are downloaded and installed")),
-#endif
             {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Software updates"))},
             QStringLiteral("updates/mode"),
             payload};
@@ -1318,20 +1359,31 @@ SettingsItemDefinition toggleGlobalShortcutsItem() {
         {QT_TRANSLATE_NOOP("SettingsCatalog", "Disable global shortcuts"), true});
 }
 
+SettingsItemDefinition toggleGlobalMouseItem() {
+    return quickActionItem(
+        QStringLiteral("quick.toggle-global-mouse"),
+        QT_TRANSLATE_NOOP("SettingsCatalog", "Disable/enable global mouse"),
+        QT_TRANSLATE_NOOP("SettingsCatalog", "Pause or resume configured global mouse gestures"),
+        {}, GlobalShortcutAction::ToggleGlobalMouse,
+        QStringLiteral("global_shortcuts/toggle_global_mouse"),
+        []() { return custom_outlined_icons::Mouse(); }, SettingsShortcutAdjustment::None,
+        {QT_TRANSLATE_NOOP("SettingsCatalog", "Disable global mouse"), true});
+}
+
 SettingsItemDefinition toggleDisableOnFocusedFullscreenWindowItem() {
     return quickActionItem(
         QStringLiteral("quick.toggle-disable-on-focused-fullscreen-window"),
-        QT_TRANSLATE_NOOP("SettingsCatalog", "Disable shortcuts in fullscreen windows"),
+        QT_TRANSLATE_NOOP("SettingsCatalog", "Automatic disabling in fullscreen windows"),
         QT_TRANSLATE_NOOP(
             "SettingsCatalog",
-            "Turn off or back on the suppression of global shortcuts while the focused window is "
-            "fullscreen; this shortcut stays active while fullscreen suppression is enabled"),
+            "Toggle automatic disabling of the selected inputs in fullscreen windows. This "
+            "shortcut stays active while automatic disabling is enabled"),
         {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Fullscreen suppression"))},
         GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow,
         QStringLiteral("global_shortcuts/toggle_disable_on_focused_fullscreen_window"),
         []() { return custom_outlined_icons::ScreenshotFullScreen(); },
         SettingsShortcutAdjustment::None,
-        {QT_TRANSLATE_NOOP("SettingsCatalog", "Disable shortcuts in fullscreen windows"), true});
+        {QT_TRANSLATE_NOOP("SettingsCatalog", "Automatic disabling in fullscreen windows"), true});
 }
 
 SettingsItemDefinition pinClipboardContentItem() {
@@ -1521,33 +1573,98 @@ SettingsItemDefinition screenshotSaveAsFileDialogItem() {
           settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Snow Shot"))}});
 }
 
-SettingsItemDefinition screenshotAutoSaveAfterExecutionItem() {
-    SettingsMultiSelectDefinition payload;
-    payload.binding = SettingsMultiSelectBinding::ScreenshotAutoSaveAfterExecution;
-    payload.placeholder = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Select scenarios"));
-    payload.options = {
-        {QStringLiteral("copy_screenshot"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy screenshot"))},
-        {QStringLiteral("copy_scrolling_screenshot"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy scrolling screenshot"))},
-        {QStringLiteral("copy_pinned_image"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy pinned window"))},
-        {QStringLiteral("capture_current_monitor"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy current monitor"))},
-        {QStringLiteral("capture_focused_window"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy focused window"))},
-        {QStringLiteral("pin_to_screen"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Pin screenshot to screen"))},
+QVector<SettingsItemDefinition> exportTaskItems() {
+    using storage::ExportTask;
+    using storage::ExportTrigger;
+    const auto item = [](ExportTrigger trigger, TranslatableText title,
+                         TranslatableText description) {
+        const auto& row = storage::exportTaskRow(trigger);
+        SettingsMultiSelectDefinition payload;
+        payload.binding = exportTaskBinding(trigger);
+        payload.placeholder = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Select tasks"));
+        for (const auto& option : storage::exportTaskOptions) {
+            if (!row.allowed.testFlag(option.task))
+                continue;
+            TranslatableText label;
+            switch (option.task) {
+            case ExportTask::CopyImage:
+                label = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy to clipboard"));
+                break;
+            case ExportTask::CopyFile:
+                label = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy file"));
+                break;
+            case ExportTask::AutoSave:
+                label = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Auto-save"));
+                break;
+            case ExportTask::Pin:
+                label = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Pin to screen"));
+                break;
+            case ExportTask::Upload:
+                label = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Upload to cloud"));
+                break;
+            }
+            payload.options.push_back({option.id.toString(), label});
+        }
+        const QString key = row.key.toString();
+        return SettingsItemDefinition{
+            QString(key).replace(u'/', u'.'), title, description, {}, key, std::move(payload)};
     };
     return {
-        QStringLiteral("screenshot.auto-save-after-execution"),
-        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Auto-save after execution")),
-        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
-                                       "Choose which actions also save an image in the "
-                                       "selected image format and save directory")),
-        {},
-        QStringLiteral("screenshot/auto_save_after_execution_actions"),
-        std::move(payload),
+        item(ExportTrigger::ScreenshotCopy,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Run after copying a screenshot")),
+             settingsText(QT_TRANSLATE_NOOP(
+                 "SettingsCatalog",
+                 "Applies to standard, scrolling, monitor, and focused-window captures"))),
+        item(ExportTrigger::ScreenshotSave,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Run after saving a screenshot")),
+             settingsText(QT_TRANSLATE_NOOP(
+                 "SettingsCatalog", "Runs after each successful Quick save or Save as file"))),
+        item(ExportTrigger::ScreenshotPin,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                            "Run after pinning a screenshot to the screen")),
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                            "Applies to pins created from the screenshot window"))),
+        item(ExportTrigger::ScreenshotPrint,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Run after printing a screenshot")),
+             settingsText(
+                 QT_TRANSLATE_NOOP("SettingsCatalog", "Runs after the print job is submitted"))),
+#ifdef Q_OS_MACOS
+        item(ExportTrigger::ScreenshotAirDrop,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                            "Run after sharing a screenshot via AirDrop")),
+             settingsText(
+                 QT_TRANSLATE_NOOP("SettingsCatalog", "Runs when AirDrop confirms sharing"))),
+#endif
+        item(ExportTrigger::ScreenshotUpload,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Run after uploading a screenshot")),
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                            "Runs after a successful manual cloud upload"))),
+        item(
+            ExportTrigger::PinnedCopy,
+            settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Run after copying a pinned window")),
+            settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                           "Applies when Copy current view copies an image"))),
+        item(ExportTrigger::PinnedSave,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Run after saving a pinned window")),
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                            "Runs after each successful individual save"))),
+        item(ExportTrigger::PinnedPrint,
+             settingsText(
+                 QT_TRANSLATE_NOOP("SettingsCatalog", "Run after printing a pinned window")),
+             settingsText(
+                 QT_TRANSLATE_NOOP("SettingsCatalog", "Runs after the print job is submitted"))),
+#ifdef Q_OS_MACOS
+        item(ExportTrigger::PinnedAirDrop,
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                            "Run after sharing a pinned window via AirDrop")),
+             settingsText(
+                 QT_TRANSLATE_NOOP("SettingsCatalog", "Runs when AirDrop confirms sharing"))),
+#endif
+        item(ExportTrigger::PinnedUpload,
+             settingsText(
+                 QT_TRANSLATE_NOOP("SettingsCatalog", "Run after uploading a pinned window")),
+             settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
+                                            "Runs after a successful manual cloud upload"))),
     };
 }
 
@@ -1563,7 +1680,6 @@ SettingsItemDefinition screenshotCopyFileItem() {
 
 QVector<SettingsItemDefinition> screenshotOutputItems() {
     return {
-        screenshotAutoSaveAfterExecutionItem(),
         screenshotCopyFileItem(),
         screenshotSaveAsFileDialogItem(),
         switchItem(QStringLiteral("screenshot.show-save-result"),
@@ -2251,6 +2367,12 @@ QVector<SettingsOptionDefinition> trayClickActionOptions() {
          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy to clipboard"))},
         {QStringLiteral("screenshot_fixed"),
          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Pin to screen"))},
+        {QStringLiteral("pin_clipboard_content"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Pin clipboard content to screen"))},
+        {QStringLiteral("restore_last_closed_windows"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Restore last closed window"))},
+        {QStringLiteral("hide_show_all_windows"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Hide/show all windows"))},
         {QStringLiteral("open_capture_history"),
          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Open screenshot history"))},
         {QStringLiteral("open_pin_to_screen_management"),
@@ -2514,7 +2636,7 @@ SettingsItemDefinition fullscreenShortcutSuppressionItem() {
                           "Automatically disable when a focused fullscreen window exists"),
         QT_TRANSLATE_NOOP(
             "SettingsCatalog",
-            "Ignore global shortcuts while a matching focused window occupies an entire monitor"),
+            "Pause the selected inputs while a matching focused window occupies an entire monitor"),
         QStringLiteral("global_shortcuts/disable_on_focused_fullscreen_window"),
         SettingsSwitchBinding::DisableShortcutsOnFocusedFullscreen);
 }
@@ -2524,13 +2646,32 @@ SettingsItemDefinition fullscreenWindowFilterItem() {
         QStringLiteral("global-hotkeys.window-filter-type"),
         QT_TRANSLATE_NOOP("SettingsCatalog", "Window filter type"),
         QT_TRANSLATE_NOOP("SettingsCatalog",
-                          "Choose which fullscreen windows automatically disable global shortcuts"),
+                          "Choose which fullscreen windows trigger automatic disabling"),
         QStringLiteral("global_shortcuts/fullscreen_window_filter"),
         SettingsSelectBinding::FullscreenWindowFilter,
         {{QStringLiteral("all_windows"),
           settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "All windows"))},
          {QStringLiteral("game_windows"),
           settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Game windows"))}});
+}
+
+SettingsItemDefinition fullscreenDisableScopeItem() {
+    SettingsMultiSelectDefinition payload;
+    payload.binding = SettingsMultiSelectBinding::FullscreenDisableScope;
+    payload.options = {
+        {QStringLiteral("global_shortcuts"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Global shortcuts"))},
+        {QStringLiteral("global_mouse"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Global mouse"))},
+    };
+    return {
+        QStringLiteral("global-hotkeys.disable-scope"),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Disable scope")),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Choose which inputs to disable")),
+        {},
+        QStringLiteral("global_shortcuts/fullscreen_disable_scope"),
+        std::move(payload),
+    };
 }
 
 #ifndef Q_OS_MACOS
@@ -2557,21 +2698,6 @@ SettingsItemDefinition restartAsAdministratorItem() {
             payload};
 }
 #endif
-#ifdef Q_OS_MACOS
-SettingsItemDefinition loginItemSettingsItem() {
-    SettingsActionDefinition payload;
-    payload.binding = SettingsActionBinding::OpenLoginItemSettings;
-    payload.iconFactory = [] { return outlined_icons::Setting(); };
-    payload.buttonText = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Open"));
-    return {QStringLiteral("system.login-item-settings"),
-            settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Open Login Items settings")),
-            settingsText(QT_TRANSLATE_NOOP(
-                "SettingsCatalog", "Manage Snow Shot's login permission in macOS System Settings")),
-            {},
-            {},
-            payload};
-}
-#endif
 SettingsItemDefinition autoStartItem() {
     if (app::distribution::isStoreManaged())
         return switchItem(QStringLiteral("system.auto-start-at-boot"),
@@ -2583,8 +2709,10 @@ SettingsItemDefinition autoStartItem() {
     return switchItem(
         QStringLiteral("system.auto-start-at-boot"),
 #ifdef Q_OS_MACOS
-        QT_TRANSLATE_NOOP("SettingsCatalog", "Launch at login"),
-        QT_TRANSLATE_NOOP("SettingsCatalog", "Start Snow Shot in the background when you log in"),
+        QT_TRANSLATE_NOOP("SettingsCatalog", "Open at login"),
+        QT_TRANSLATE_NOOP(
+            "SettingsCatalog",
+            "Automatically start Snow Shot in the background when you log in to your Mac"),
 #else
         QT_TRANSLATE_NOOP("SettingsCatalog", "Auto start at boot"),
         QT_TRANSLATE_NOOP("SettingsCatalog",
@@ -2693,10 +2821,11 @@ QVector<SettingsItemDefinition> screenshotShortcutItems() {
                           QStringLiteral("move_entire_selection"),
                           QT_TRANSLATE_NOOP("SettingsCatalog", "Move entire selection"),
                           []() { return custom_outlined_icons::ToolMove(); }),
-        localShortcutItem(SettingsLocalShortcutScope::Screenshot,
-                          QStringLiteral("keep_selection_width_and_height_consistent"),
-                          QT_TRANSLATE_NOOP("SettingsCatalog", "Maintain selection aspect ratio"),
-                          []() { return outlined_icons::Control(); }),
+        localShortcutItem(
+            SettingsLocalShortcutScope::Screenshot,
+            QStringLiteral("keep_selection_width_and_height_consistent"),
+            QT_TRANSLATE_NOOP("SettingsCatalog", "Keep selection width and height consistent"),
+            []() { return outlined_icons::Control(); }),
         localShortcutItem(SettingsLocalShortcutScope::Screenshot,
                           QStringLiteral("selection_aspect_ratio_snap"),
                           QT_TRANSLATE_NOOP("SettingsCatalog", "Selection aspect ratio snap"),
@@ -2870,6 +2999,10 @@ QVector<SettingsItemDefinition> drawingShortcutItems() {
         localShortcutItem(SettingsLocalShortcutScope::Drawing, QStringLiteral("watermark"),
                           QT_TRANSLATE_NOOP("SettingsCatalog", "Watermark"),
                           []() { return custom_outlined_icons::ToolWatermark(); }),
+        localShortcutItem(SettingsLocalShortcutScope::Drawing,
+                          shortcuts::kCycleAnnotationToolOptions,
+                          QT_TRANSLATE_NOOP("SettingsCatalog", "Cycle annotation tool options"),
+                          []() { return outlined_icons::Reload(); }),
         localShortcutItem(SettingsLocalShortcutScope::Screenshot, QStringLiteral("undo"),
                           QT_TRANSLATE_NOOP("SettingsCatalog", "Undo"),
                           []() { return outlined_icons::Undo(); }),
@@ -3501,16 +3634,6 @@ constexpr CatalogInlineItem catalogItemSystemAnnotationModeWhenOpeningForEditing
 };
 
 #endif
-constexpr CatalogInlineItem catalogItemScreenshotCopyAfterPinningToScreen{
-    .kind = CatalogItemKind::Switch,
-    .id = u"screenshot.copy-after-pinning-to-screen",
-    .title = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Copy after pinning to screen")),
-    .description = settingsText(QT_TRANSLATE_NOOP(
-        "SettingsCatalog", "Also copy the screenshot to the clipboard when pinning it to screen")),
-    .key = u"screenshot/copy_after_pinning_to_screen",
-    .binding = int(SettingsSwitchBinding ::ScreenshotCopyAfterPinningToScreen),
-};
-
 constexpr CatalogInlineItem catalogItemScreenshotKeepAnnotationsEditableAfterPinningToScreen{
     .kind = CatalogItemKind::Switch,
     .id = u"screenshot.keep-annotations-editable-after-pinning-to-screen",
@@ -3959,6 +4082,7 @@ constexpr CatalogItemFactory catalogPageGlobalHotkeysSectionScreenshotItems[] = 
     {screenshotQuickSaveItem},
     {screenshotFullScreenItem},
     {screenshotFocusedWindowItem},
+    {openCaptureHistoryItem},
 };
 
 constexpr CatalogItemFactory catalogPageGlobalHotkeysSectionPinToScreenItems[] = {
@@ -3973,11 +4097,11 @@ constexpr CatalogItemFactory catalogPageGlobalHotkeysSectionScreenRecordingItems
 };
 
 constexpr CatalogItemFactory catalogPageGlobalHotkeysSectionOtherItems[] = {
-    {openCaptureHistoryItem},
     {globalCanvasItem},
     {stitchSelectedImagesItem},
     {splitSelectedImagesItem},
     {editSelectedImagesItem},
+    {compressSelectedImagesItem},
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION
     {translateSelectedTextItem},
 #endif
@@ -3985,12 +4109,14 @@ constexpr CatalogItemFactory catalogPageGlobalHotkeysSectionOtherItems[] = {
     {toggleWindowUnderCursorAlwaysOnTopItem},
 #endif
     {toggleGlobalShortcutsItem},
+    {toggleGlobalMouseItem},
     {toggleDisableOnFocusedFullscreenWindowItem},
 };
 
 constexpr CatalogItemFactory catalogPageGlobalHotkeysSectionGlobalHotkeysItems[] = {
     {fullscreenShortcutSuppressionItem},
     {fullscreenWindowFilterItem},
+    {fullscreenDisableScopeItem},
 };
 
 constexpr CatalogSectionRecord catalogPageGlobalHotkeysSections[] = {
@@ -4041,8 +4167,8 @@ constexpr CatalogSectionRecord catalogPageGlobalHotkeysSections[] = {
     {
         .id = u"global-hotkeys",
         .title = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Automatic disabling")),
-        .description = settingsText(
-            QT_TRANSLATE_NOOP("SettingsCatalog", "Global shortcut activation behavior")),
+        .description =
+            settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Fullscreen input settings")),
         .reset = SettingsSectionReset ::GlobalShortcuts,
         .items = catalogPageGlobalHotkeysSectionGlobalHotkeysItems,
         .factory = nullptr,
@@ -4109,9 +4235,6 @@ constexpr CatalogItemFactory catalogPageGeneralSectionSystemGeneralItems[] = {
 #if defined(Q_OS_WIN)
     {nullptr, &catalogItemSystemAnnotationModeWhenOpeningForEditing},
 #endif
-#if defined(Q_OS_MACOS)
-    {loginItemSettingsItem},
-#endif
 #ifndef Q_OS_WIN
     {updateModeItem},
 #endif
@@ -4120,6 +4243,9 @@ constexpr CatalogItemFactory catalogPageGeneralSectionSystemGeneralItems[] = {
 constexpr CatalogItemFactory catalogPageGeneralSectionCoreItems[] = {
 #if !defined(Q_OS_MACOS)
     {applicationPriorityItem},
+#endif
+#if defined(Q_OS_WIN)
+    {powerQoSItem},
 #endif
 #if defined(Q_OS_MACOS)
     {applicationQoSItem},
@@ -4229,7 +4355,6 @@ constexpr CatalogItemFactory catalogPageScreenshotsSectionScreenshotSettingsItem
     {screenshotMiddleClickActionItem},
     {quickSelectionModificationItem},
     {hiDpiImageScalingItem},
-    {nullptr, &catalogItemScreenshotCopyAfterPinningToScreen},
     {nullptr, &catalogItemScreenshotKeepAnnotationsEditableAfterPinningToScreen},
     {screenshotShutterSoundNotificationItem},
     {screenshotSoundNotificationItem},
@@ -4247,6 +4372,7 @@ constexpr CatalogItemFactory catalogPageScreenshotsSectionInterfaceScreenshotIte
     {shortcutHintOpacityItem},
     {screenshotAreaTypeHintItem},
     {showGuidesByDefaultItem},
+    {adaptiveGuideColorsItem},
     {nullptr, &catalogItemInterfaceScreenshotCursorGuideLineColor},
     {nullptr, &catalogItemInterfaceScreenshotSelectionCenterGuideLineColor},
     {nullptr, &catalogItemInterfaceScreenshotMonitorCenterGuideLineColor},
@@ -4586,10 +4712,13 @@ constexpr TranslatableText catalogPageScreenRecordingAliases[] = {
 SettingsItemDefinition communityCloudOcrSettingsItem() {
     return {
         QStringLiteral("text-recognition.cloud-ocr"),
-        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Cloud OCR for Markdown")),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Online OCR")),
         settingsText(QT_TRANSLATE_NOOP(
-            "SettingsCatalog", "Configure a provider URL, API key, model and connection test")),
-        {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "PaddleOCR AI Studio"))},
+            "SettingsCatalog", "Choose the online OCR engine, output format and provider settings")),
+        {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "PaddleOCR AI Studio")),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Large-model OCR")),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "LaTeX")),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Markdown"))},
         {},
         SettingsCustomDefinition{SettingsCustomRenderer::CloudOcr},
     };
@@ -4832,8 +4961,27 @@ constexpr CatalogItemFactory catalogPageDesktopToolsSectionTrayItems[] = {
     {trayMenuOptionsItem},
 };
 
+SettingsItemDefinition floatingToolbarDropBehaviorItem() {
+    return fixedSelectItem(
+        QStringLiteral("floating-toolbar.drop-behavior"),
+        QT_TRANSLATE_NOOP("SettingsCatalog", "Toolbar drop behavior"),
+        QT_TRANSLATE_NOOP("SettingsCatalog",
+                          "Choose what happens when content is dropped on the floating toolbar"),
+        QStringLiteral("floating_toolbar/drop_behavior"),
+        SettingsSelectBinding::FloatingToolbarDropBehavior,
+        {{QStringLiteral("pin_to_screen"),
+          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Pin to screen"))},
+         {QStringLiteral("image_stitching"),
+          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Image stitching"))},
+         {QStringLiteral("image_splitting"),
+          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Image splitting"))},
+         {QStringLiteral("image_editing"),
+          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Image editing"))}});
+}
+
 constexpr CatalogItemFactory catalogPageDesktopToolsSectionFloatingToolbarItems[] = {
     {floatingToolbarEnabledItem},
+    {floatingToolbarDropBehaviorItem},
     {floatingToolbarOpacityItem},
     {floatingToolbarEditorItem},
 };
@@ -4902,9 +5050,20 @@ constexpr CatalogSectionRecord catalogPageFilesHistorySections[] = {
         .description = settingsText(QT_TRANSLATE_NOOP(
             "SettingsCatalog",
             "Shared image export settings for screenshot and pin-to-screen windows")),
-        .reset = SettingsSectionReset ::ScreenshotOutput,
+        .reset = SettingsSectionReset::ScreenshotOutput,
         .items = {},
         .factory = screenshotOutputItems,
+        .layout = SettingsSectionItemLayout::VerticalList,
+        .collapsed = false,
+    },
+    {
+        .id = u"export-tasks",
+        .title = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Export tasks")),
+        .description = settingsText(QT_TRANSLATE_NOOP(
+            "SettingsCatalog", "Choose which tasks run after a successful image export")),
+        .reset = SettingsSectionReset::ExportTasks,
+        .items = {},
+        .factory = exportTaskItems,
         .layout = SettingsSectionItemLayout::VerticalList,
         .collapsed = false,
     },
@@ -4913,7 +5072,7 @@ constexpr CatalogSectionRecord catalogPageFilesHistorySections[] = {
         .title = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Video export")),
         .description = settingsText(QT_TRANSLATE_NOOP(
             "SettingsCatalog", "Recording output location and filename settings")),
-        .reset = SettingsSectionReset ::ScreenRecordingOutput,
+        .reset = SettingsSectionReset::ScreenRecordingOutput,
         .items = {},
         .factory = videoOutputItems,
         .layout = SettingsSectionItemLayout::VerticalList,
@@ -4924,7 +5083,7 @@ constexpr CatalogSectionRecord catalogPageFilesHistorySections[] = {
         .title = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Screenshot history")),
         .description = settingsText(QT_TRANSLATE_NOOP(
             "SettingsCatalog", "Screenshot history retention and cleanup settings")),
-        .reset = SettingsSectionReset ::HistoryPolicy,
+        .reset = SettingsSectionReset::HistoryPolicy,
         .items = catalogPageFilesHistorySectionHistoryItems,
         .factory = nullptr,
         .layout = SettingsSectionItemLayout::VerticalList,
@@ -4936,7 +5095,7 @@ constexpr CatalogSectionRecord catalogPageFilesHistorySections[] = {
         .description = settingsText(
             QT_TRANSLATE_NOOP("SettingsCatalog", "Retention limits apply only to closed windows; "
                                                  "retained windows are always protected")),
-        .reset = SettingsSectionReset ::PinnedHistoryPolicy,
+        .reset = SettingsSectionReset::PinnedHistoryPolicy,
         .items = catalogPageFilesHistorySectionPinnedHistoryItems,
         .factory = nullptr,
         .layout = SettingsSectionItemLayout::VerticalList,
@@ -4947,7 +5106,7 @@ constexpr CatalogSectionRecord catalogPageFilesHistorySections[] = {
         .title = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Data storage")),
         .description = settingsText(QT_TRANSLATE_NOOP(
             "SettingsCatalog", "App-wide storage usage, location, mode, errors, and cleanup")),
-        .reset = SettingsSectionReset ::None,
+        .reset = SettingsSectionReset::None,
         .items = catalogPageFilesHistorySectionStorageStatusItems,
         .factory = nullptr,
         .layout = SettingsSectionItemLayout::VerticalList,
@@ -5541,6 +5700,8 @@ QString shortcutConfigurationKey(GlobalShortcutAction action) {
         return QStringLiteral("global_shortcuts/split_selected_images");
     case GlobalShortcutAction::EditSelectedImages:
         return QStringLiteral("global_shortcuts/edit_selected_images");
+    case GlobalShortcutAction::CompressSelectedImages:
+        return QStringLiteral("global_shortcuts/compress_selected_images");
     case GlobalShortcutAction::OpenPinToScreenManagement:
         return QStringLiteral("global_shortcuts/open_pin_to_screen_management");
     case GlobalShortcutAction::OpenSettings:
@@ -5559,6 +5720,8 @@ QString shortcutConfigurationKey(GlobalShortcutAction action) {
         return QStringLiteral("global_shortcuts/toggle_window_under_cursor_always_on_top");
     case GlobalShortcutAction::ToggleGlobalShortcuts:
         return QStringLiteral("global_shortcuts/toggle_global_hotkeys");
+    case GlobalShortcutAction::ToggleGlobalMouse:
+        return QStringLiteral("global_shortcuts/toggle_global_mouse");
     case GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow:
         return QStringLiteral("global_shortcuts/toggle_disable_on_focused_fullscreen_window");
     }
@@ -5899,7 +6062,11 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
           quick(QStringLiteral("quick.screenshot-focused-window"),
                 QT_TRANSLATE_NOOP("SettingsCatalog", "Focused window"),
                 GlobalShortcutAction::ScreenshotFocusedWindow,
-                []() { return custom_outlined_icons::ScreenshotFocusedWindow(); })}},
+                []() { return custom_outlined_icons::ScreenshotFocusedWindow(); }),
+          quick(QStringLiteral("quick.open-capture-history"),
+                QT_TRANSLATE_NOOP("SettingsCatalog", "Screenshot history"),
+                GlobalShortcutAction::OpenCaptureHistory,
+                []() { return outlined_icons::History(); })}},
         {QStringLiteral("pin-to-screen"),
          {quick(QStringLiteral("quick.pin-clipboard-content"),
                 QT_TRANSLATE_NOOP("SettingsCatalog", "Pin clipboard content to screen"),
@@ -5934,11 +6101,7 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
                 GlobalShortcutAction::OpenScreenRecordingFolder,
                 []() { return custom_outlined_icons::RecordingFolder(); })}},
         {QStringLiteral("other"),
-         {quick(QStringLiteral("quick.open-capture-history"),
-                QT_TRANSLATE_NOOP("SettingsCatalog", "Screenshot history"),
-                GlobalShortcutAction::OpenCaptureHistory,
-                []() { return outlined_icons::History(); }),
-          quick(QStringLiteral("quick.global-canvas"),
+         {quick(QStringLiteral("quick.global-canvas"),
                 QT_TRANSLATE_NOOP("SettingsCatalog",
                                   "Full-screen canvas (enable/disable click-through)"),
                 GlobalShortcutAction::GlobalCanvas,
@@ -5955,6 +6118,10 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
                 QT_TRANSLATE_NOOP("SettingsCatalog", "Edit selected images"),
                 GlobalShortcutAction::EditSelectedImages,
                 []() { return custom_outlined_icons::ImageEditing(); }),
+          quick(QStringLiteral("quick.compress-selected-images"),
+                QT_TRANSLATE_NOOP("SettingsCatalog", "Compress selected images"),
+                GlobalShortcutAction::CompressSelectedImages,
+                []() { return custom_outlined_icons::ImageCompression(); }),
           quick(QStringLiteral("quick.translate-selected-text"),
                 QT_TRANSLATE_NOOP("SettingsCatalog", "Translate selected text"),
                 GlobalShortcutAction::TranslateSelectedText,
@@ -5973,8 +6140,14 @@ TrayCommandManifest buildBuiltInTrayCommandManifest() {
               []() { return custom_outlined_icons::Disabled(); }, SettingsShortcutAdjustment::None,
               true),
           quick(
+              QStringLiteral("quick.toggle-global-mouse"),
+              QT_TRANSLATE_NOOP("SettingsCatalog", "Disable global mouse"),
+              GlobalShortcutAction::ToggleGlobalMouse,
+              []() { return custom_outlined_icons::Mouse(); }, SettingsShortcutAdjustment::None,
+              true),
+          quick(
               QStringLiteral("quick.toggle-disable-on-focused-fullscreen-window"),
-              QT_TRANSLATE_NOOP("SettingsCatalog", "Disable shortcuts in fullscreen windows"),
+              QT_TRANSLATE_NOOP("SettingsCatalog", "Automatic disabling in fullscreen windows"),
               GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow,
               []() { return custom_outlined_icons::ScreenshotFullScreen(); },
               SettingsShortcutAdjustment::None, true)}},
@@ -6188,6 +6361,9 @@ QStringList SettingsCatalog::validationErrors() const {
                     case SettingsSelectBinding::ApplicationPriority:
                         expectedKey = QStringLiteral("system/application_priority");
                         break;
+                    case SettingsSelectBinding::PowerQoS:
+                        expectedKey = QStringLiteral("system/power_qos");
+                        break;
                     case SettingsSelectBinding::MemoryOptimizationPolicy:
                         expectedKey = QStringLiteral("system/memory_optimization_policy");
                         break;
@@ -6258,6 +6434,9 @@ QStringList SettingsCatalog::validationErrors() const {
                         break;
                     case SettingsSelectBinding::PinDuplicateContentAction:
                         expectedKey = QStringLiteral("pin_to_screen/duplicate_content_action");
+                        break;
+                    case SettingsSelectBinding::FloatingToolbarDropBehavior:
+                        expectedKey = QStringLiteral("floating_toolbar/drop_behavior");
                         break;
                     case SettingsSelectBinding::PinTextSelectionOnRecognitionResults:
                         expectedKey =
@@ -6402,6 +6581,9 @@ QStringList SettingsCatalog::validationErrors() const {
                     case SettingsSwitchBinding::ShowGuidesByDefault:
                         expectedKey = QStringLiteral("screenshot_ui/show_guides_by_default");
                         break;
+                    case SettingsSwitchBinding::AdaptiveGuideColors:
+                        expectedKey = QStringLiteral("screenshot_ui/adaptive_guide_colors");
+                        break;
                     case SettingsSwitchBinding::ShowEditSelectionToolbar:
                         expectedKey = QStringLiteral("screenshot_ui/show_edit_selection_toolbar");
                         break;
@@ -6442,9 +6624,6 @@ QStringList SettingsCatalog::validationErrors() const {
                         break;
                     case SettingsSwitchBinding::ScreenshotCopyImageFileToClipboard:
                         expectedKey = QStringLiteral("screenshot/copy_image_file_to_clipboard");
-                        break;
-                    case SettingsSwitchBinding::ScreenshotCopyAfterPinningToScreen:
-                        expectedKey = QStringLiteral("screenshot/copy_after_pinning_to_screen");
                         break;
                     case SettingsSwitchBinding::
                         ScreenshotKeepAnnotationsEditableAfterPinningToScreen:
@@ -6598,9 +6777,12 @@ QStringList SettingsCatalog::validationErrors() const {
                     case SettingsMultiSelectBinding::TrayMenuOptions:
                         expectedKey = QStringLiteral("tray/menu_options");
                         break;
-                    case SettingsMultiSelectBinding::ScreenshotAutoSaveAfterExecution:
-                        expectedKey =
-                            QStringLiteral("screenshot/auto_save_after_execution_actions");
+                    default:
+                        if (const auto trigger = exportTriggerForBinding(multi->binding))
+                            expectedKey = storage::exportTaskRow(*trigger).key.toString();
+                        break;
+                    case SettingsMultiSelectBinding::FullscreenDisableScope:
+                        expectedKey = QStringLiteral("global_shortcuts/fullscreen_disable_scope");
                         break;
                     }
                     QSet<QString> configuredValues;

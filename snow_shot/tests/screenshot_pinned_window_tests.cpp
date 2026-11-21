@@ -36,6 +36,9 @@
 #ifdef Q_OS_MACOS
 #include <CoreGraphics/CoreGraphics.h>
 int macLivePinnedWindowTests();
+void macPlacePinnedTestUnderlay(QWidget& underlay, QWidget& pin);
+bool macPinnedHitTest(QWidget& expected, const QPoint& globalPoint);
+qintptr macPinnedWindowNumber(QWidget& pin);
 #endif
 #include "snow_shot/presentation/screenshotautofiltercontroller.h"
 #include "snow_shot/presentation/screenshottoolbarmainpanel.h"
@@ -203,6 +206,7 @@ int macPinnedContentDragTests(
 #include <iostream>
 #include <memory>
 #include <stdexcept>
+#include <tuple>
 #include <utility>
 #include <vector>
 #include <qpa/qplatformscreen.h>
@@ -1393,6 +1397,10 @@ QRect qRectForNativeRect(const RECT& rect) {
                  std::max(1L, rect.bottom - rect.top));
 }
 
+QRect nativePinnedResizeRim(const QRect& geometry) {
+    return snow_shot::presentation::pinnedContentRect(geometry).adjusted(-1, -1, 1, 1);
+}
+
 #endif
 
 void require(bool condition, const char* message) {
@@ -2100,7 +2108,8 @@ void pinnedSelectionRendersCachedOcrInCanvasCoordinates(bool restoreFromStorage 
                     "cached OCR should be available from the pinned context menu");
 #if defined(Q_OS_WIN) || defined(_WIN32)
             if (testInteractions) {
-                const QPoint corner = window->currentNativeGeometry().topLeft();
+                const QPoint corner =
+                    nativePinnedResizeRim(window->currentNativeGeometry()).topLeft();
                 require(
                     SendMessageW(toNativeHwnd(window->winId()), WM_NCHITTEST, 0,
                                  MAKELPARAM(static_cast<WORD>(corner.x()),
@@ -2663,7 +2672,7 @@ void pinnedOriginalImagePreviewFollowsViewAndAuxiliaryLifecycle() {
     require(canvas->internalWinId() == 0 && content->internalWinId() == 0,
             "creating the preview must preserve the pin's shared nonnative recognition canvas");
     int projectionPass = 0;
-    const auto verifyProjection = [&] {
+    const auto verifyProjection = [&](bool preferLeft = false) {
         ++projectionPass;
         refreshPreview();
         const auto source = Access::originalPreviewSource(window);
@@ -2699,7 +2708,7 @@ void pinnedOriginalImagePreviewFollowsViewAndAuxiliaryLifecycle() {
                               QSizeF(contentNative.size()) / contentDpr)
                            .toRect();
         const auto placement = ScreenshotOriginalImagePreviewWindow::placement(
-            result, PreviewAccess::workArea(*preview), PreviewAccess::gap(*preview));
+            result, PreviewAccess::workArea(*preview), PreviewAccess::gap(*preview), preferLeft);
         const QSize expectedSize = placement.geometry.size();
         if (ScreenshotOriginalImagePreviewWindow::nativeClientRect(preview).size() !=
             expectedSize) {
@@ -2843,6 +2852,13 @@ void pinnedOriginalImagePreviewFollowsViewAndAuxiliaryLifecycle() {
     verifyProjection();
     require(session->editing(), "text editing must keep its original-image preview visible");
     session->endTextEditing();
+
+#if SNOW_SHOT_ENABLE_TABLE_RECOGNITION
+    session->activate(ScreenshotRecognitionSessionController::Mode::Table);
+    verifyProjection(true);
+    session->activate(ScreenshotRecognitionSessionController::Mode::Text);
+    verifyProjection();
+#endif
 
     const auto initialSource = Access::originalPreviewSource(window);
     auto clippedSource = initialSource;
@@ -6695,6 +6711,8 @@ void pinnedBorderUsesCeiledWindowDpiPhysicalPixels(SnowCanvasRuntime&) {
         config.imageSource = ScreenshotImageSource::fromImage(background, config.canvasSourceRect);
         config.screen = screen;
         config.enableEditing = false;
+        config.initialBorderVisible = true;
+        config.initialShadowVisible = false;
         require(pinnedWindow->present(config), "pinned window presentation failed");
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         setPinnedWindowActive(*pinnedWindow, false);
@@ -6797,10 +6815,14 @@ void pinnedBorderUsesCeiledWindowDpiPhysicalPixels(SnowCanvasRuntime&) {
                          "the border must cover its DPI-rounded width at the content edge");
         require(store.pixelColor(contentRight - 1, middleY) != borderColor,
                 "the border must leave the last content column untouched");
-        require(store.pixelColor(contentRight + borderWidth, middleY).alpha() == 0,
-                "the reserved shadow margin must begin immediately after the content border");
-        require(store.pixelColor(clientWidth, middleY) != borderColor,
-                "the store overshoot column past the client edge must stay border-free");
+        require(store.pixelColor(contentRight + borderWidth, middleY) == QColor(0, 0, 0, 1),
+                "the one-alpha margin must begin immediately after the content border");
+        const int resizeWidth = std::min(margin, qRound(6 * pinnedWindow->devicePixelRatioF()));
+        require(store.pixelColor(contentRight + resizeWidth - 1, middleY) == QColor(0, 0, 0, 1) &&
+                    store.pixelColor(contentRight + resizeWidth, middleY).alpha() == 0,
+                "the fill must occupy just the DPI-rounded six-DIP outer resize band");
+        require(store.pixelColor(clientWidth, middleY).alpha() == 0,
+                "the margin must stop at the native client edge");
         requireColorNear(store.pixelColor(middleX, contentRight), borderColor, 0,
                          "the bottom border must end at the exact content edge");
         requireColorNear(store.pixelColor(middleX, contentRight + borderWidth - 1), borderColor, 0,
@@ -7008,9 +7030,11 @@ void pinnedLazyMenuHeadersRetranslate() {
         window.findChild<QAction*>(QStringLiteral("screenshotPinnedBatchEnableHideToTopAction"));
     require(hideAll && hideAll->text() == QStringLiteral("Enable hide at top"),
             "the bulk Hide to Top action must use its English source label");
-    const QStringList menuNames{QStringLiteral("screenshotPinnedOpacityMenu"),
+    const QStringList menuNames{QStringLiteral("screenshotPinnedWindowManagementMenu"),
+                                QStringLiteral("screenshotPinnedOpacityMenu"),
                                 QStringLiteral("screenshotPinnedScaleMenu"),
-                                QStringLiteral("screenshotPinnedLoadContentMenu")};
+                                QStringLiteral("screenshotPinnedLoadContentMenu"),
+                                QStringLiteral("screenshotPinnedTransparentLayerMenu")};
     QList<QPointer<QAction>> headers;
     QStringList originalLabels;
     for (const auto& name : menuNames) {
@@ -7019,14 +7043,25 @@ void pinnedLazyMenuHeadersRetranslate() {
         headers.append(menu->menuAction());
         originalLabels.append(menu->menuAction()->text());
     }
+    auto* transparentLayerMenu = headers.constLast()->menu();
+    for (auto* action : transparentLayerMenu->actions()) {
+        headers.append(action);
+        originalLabels.append(action->text());
+    }
+    require(originalLabels.constFirst() == QStringLiteral("Window management"),
+            "the window management submenu must use its English source label");
     class MenuTranslator final : public QTranslator {
       public:
         QString translate(const char* context, const char* source, const char*,
                           int) const override {
             if (QByteArray(context) == "ScreenshotPinnedWindow" &&
-                (QByteArray(source) == "Opacity" || QByteArray(source) == "Scale" ||
-                 QByteArray(source) == "Load new content" ||
-                 QByteArray(source) == "Enable hide at top")) {
+                (QByteArray(source) == "Window management" || QByteArray(source) == "Opacity" ||
+                 QByteArray(source) == "Scale" || QByteArray(source) == "Load new content" ||
+                 QByteArray(source) == "Enable hide at top" ||
+                 QByteArray(source) == "Transparent layer" ||
+                 QByteArray(source) == "Click-through" ||
+                 QByteArray(source) == "Keep transparent" ||
+                 QByteArray(source) == "Checkerboard")) {
                 return QStringLiteral("Translated ") + QString::fromUtf8(source);
             }
             return {};
@@ -7038,9 +7073,14 @@ void pinnedLazyMenuHeadersRetranslate() {
     QCoreApplication::sendEvent(&window, &languageChange);
     require(hideAll->text() == QStringLiteral("Translated Enable hide at top"),
             "an existing bulk Hide to Top action must follow LanguageChange");
-    const QStringList translatedLabels{QStringLiteral("Translated Opacity"),
+    const QStringList translatedLabels{QStringLiteral("Translated Window management"),
+                                       QStringLiteral("Translated Opacity"),
                                        QStringLiteral("Translated Scale"),
-                                       QStringLiteral("Translated Load new content")};
+                                       QStringLiteral("Translated Load new content"),
+                                       QStringLiteral("Translated Transparent layer"),
+                                       QStringLiteral("Translated Click-through"),
+                                       QStringLiteral("Translated Keep transparent"),
+                                       QStringLiteral("Translated Checkerboard")};
     for (int index = 0; index < headers.size(); ++index) {
         require(headers.at(index) && headers.at(index)->text() == translatedLabels.at(index),
                 "an existing lazy submenu header must follow LanguageChange");
@@ -8787,6 +8827,8 @@ void pinnedDoubleClickActions() {
     config.imageSource = ScreenshotImageSource::fromImage(image, config.canvasSourceRect);
     config.screen = screen;
     config.automaticTextRecognition = false;
+    snow_shot::presentation::PinnedWindowSelectionController selection;
+    config.selectionController = &selection;
     auto* window = new ScreenshotPinnedWindow();
     QPointer<ScreenshotPinnedWindow> guarded(window);
     require(window->present(config), "double-click pin presentation failed");
@@ -8807,16 +8849,22 @@ void pinnedDoubleClickActions() {
         send(window, window->rect().center(), button);
         require(!thumbnail->isChecked(), "non-left double-click must not toggle thumbnail mode");
     }
+    selection.toggleSelection(window);
+    require(selection.isSelected(window), "select the regular pin before double-clicking it");
     send(window, window->rect().center());
-    require(thumbnail->isChecked(), "default double-click must enter thumbnail mode exactly once");
+    require(thumbnail->isChecked() && selection.selectedCount() == 0,
+            "default double-click must enter thumbnail mode and clear selection");
     // The second gesture during the transition cannot restart or reverse the animation.
     send(window, window->rect().center());
     require(thumbnail->isChecked(), "animation must block another double-click action");
     waitForUi(300);
+    selection.toggleSelection(window);
+    require(selection.isSelected(window), "select the thumbnail before double-clicking it");
     send(canvas, canvas->rect().center());
     waitForUi(300);
-    require(!thumbnail->isChecked() && window->currentNativeGeometry() == original,
-            "canvas double-click must restore the pre-thumbnail geometry exactly once");
+    require(!thumbnail->isChecked() && window->currentNativeGeometry() == original &&
+                selection.selectedCount() == 0,
+            "canvas double-click must expand the thumbnail and clear selection");
 
     require(settings.setDoubleClickAction(QStringLiteral("none")), "configure None on open pin");
     send(canvas, canvas->rect().center());
@@ -8837,11 +8885,12 @@ void pinnedDoubleClickActions() {
     // Entering drawing mode starts on the Resize window tool, where window
     // gestures stay enabled by design; switch to the Select drawing tool so
     // the canvas owns the input, as a user drawing would.
-    PhysicalKeyEvent selectPress(QEvent::KeyPress, Qt::Key_M, Qt::NoModifier);
-    QCoreApplication::sendEvent(canvas, &selectPress);
-    PhysicalKeyEvent selectRelease(QEvent::KeyRelease, Qt::Key_M, Qt::NoModifier);
-    QCoreApplication::sendEvent(canvas, &selectRelease);
-    waitForUi(50);
+    auto* editor = window->findChild<ScreenshotPinnedEditController*>();
+    require(editor && editor->toolbarWindow() && editor->toolbarWindow()->palette() &&
+                editor->toolbarWindow()->palette()->activateToolShortcut(
+                    ScreenshotToolPalette::Tool::Select) &&
+                !editor->resizeWindowToolActive(),
+            "select the drawing tool before testing canvas double-click input");
     send(canvas, canvas->rect().center());
     require(!thumbnail->isChecked(), "drawing input must not trigger the double-click action");
     drawing->setChecked(false);
@@ -8862,11 +8911,13 @@ void pinnedDoubleClickActions() {
                         !window->isMaximized(),
                     "native caption double-click must dispatch once without maximizing");
         }
+        selection.toggleSelection(window);
         nativeDoubleClick(window->currentNativeGeometry().center(), HTCAPTION);
         waitForUi(300);
-        require(!thumbnail->isChecked() && window->currentNativeGeometry() == original,
-                "native thumbnail double-click must restore original geometry");
-        const QPoint border(original.left(), original.center().y());
+        require(!thumbnail->isChecked() && window->currentNativeGeometry() == original &&
+                    selection.selectedCount() == 0,
+                "native thumbnail double-click must restore original geometry and clear selection");
+        const QPoint border(nativePinnedResizeRim(original).left(), original.center().y());
         require(SendMessageW(hwnd, WM_NCHITTEST, 0,
                              MAKELPARAM(static_cast<WORD>(border.x()),
                                         static_cast<WORD>(border.y()))) == HTLEFT,
@@ -9557,7 +9608,7 @@ void pinnedControlsPresenceFollowsLiveCursor() {
     SendMessageW(hwnd, WM_NCMOUSELEAVE, 0, 0);
     waitForUi(150);
     require(panel->isVisible(), "a late non-client leave must not hide a hovered child");
-    // The permanent transparent margin is outside the image's native input surface.
+    // Use the content-side resize band to exercise the transition from child controls.
     const QPoint resizeCorner =
         snow_shot::presentation::pinnedContentRect(frame).topLeft() + QPoint(1, 1);
     require(SendMessageW(hwnd, WM_NCHITTEST, 0,
@@ -10100,7 +10151,7 @@ void pinnedScalingAndAspectLockedResizing(SnowCanvasRuntime&) {
             MAKELPARAM(static_cast<WORD>(position.x()), static_cast<WORD>(position.y())));
     };
 
-    const QRect hitTestGeometry = pinnedWindow->currentNativeGeometry();
+    const QRect hitTestGeometry = nativePinnedResizeRim(pinnedWindow->currentNativeGeometry());
     const int hitTestRight = hitTestGeometry.left() + hitTestGeometry.width() - 1;
     const int hitTestBottom = hitTestGeometry.top() + hitTestGeometry.height() - 1;
     const QPoint hitTestCenter = hitTestGeometry.center();
@@ -10327,22 +10378,21 @@ void pinnedScalingAndAspectLockedResizing(SnowCanvasRuntime&) {
     require(editToolbar->isVisible() && pinnedWindow->currentNativeGeometry() == editModeGeometry &&
                 editController->resizeWindowToolActive(),
             "a no-motion native interaction must restore the toolbar, geometry, and tool");
-    require(nativeHitTest(QPoint(editModeGeometry.right(), editModeGeometry.center().y())) ==
-                HTRIGHT,
+    const QPoint editModeResizePoint(nativePinnedResizeRim(editModeGeometry).right(),
+                                     editModeGeometry.center().y());
+    require(nativeHitTest(editModeResizePoint) == HTRIGHT,
             "Resize window must preserve the native right-edge hit band");
 
     require(editPalette->activateToolShortcut(ScreenshotToolPalette::Tool::Select) &&
                 editPalette->activeToolForTests() == ScreenshotToolPalette::Tool::Select &&
                 !editController->resizeWindowToolActive() &&
                 nativeHitTest(editModeGeometry.center()) == HTCLIENT &&
-                nativeHitTest(QPoint(editModeGeometry.right(), editModeGeometry.center().y())) ==
-                    HTRIGHT,
+                nativeHitTest(editModeResizePoint) == HTRIGHT,
             "Select must keep the interior client-interactive while preserving edge resizing");
     require(editPalette->activateDrawingShortcut(QStringLiteral("shape")) &&
                 editPalette->activeToolForTests() == ScreenshotToolPalette::Tool::Shape &&
                 nativeHitTest(editModeGeometry.center()) == HTCLIENT &&
-                nativeHitTest(QPoint(editModeGeometry.right(), editModeGeometry.center().y())) ==
-                    HTRIGHT,
+                nativeHitTest(editModeResizePoint) == HTRIGHT,
             "drawing tools must preserve both canvas input and native edge resizing");
 
     QRect drawingProposal = editModeGeometry;
@@ -10353,8 +10403,7 @@ void pinnedScalingAndAspectLockedResizing(SnowCanvasRuntime&) {
                 qRectForNativeRect(drawingNative) != drawingProposal,
             "drawing mode must constrain accepted WM_SIZING proposals to the image ratio");
     ScreenshotPinnedWindowTestAccess::setRecognitionInteraction(*pinnedWindow, true);
-    require(nativeHitTest(QPoint(editModeGeometry.right(), editModeGeometry.center().y())) ==
-                HTRIGHT,
+    require(nativeHitTest(editModeResizePoint) == HTRIGHT,
             "recognition modes must preserve native edge resizing");
     ScreenshotPinnedWindowTestAccess::setRecognitionInteraction(*pinnedWindow, false);
     drawingAction->setChecked(false);
@@ -10555,7 +10604,9 @@ void pinnedResizeWindowNativeInteractions() {
     const QRect geometry = window->currentNativeGeometry();
     require(controller->resizeWindowToolActive() && !canvas->interactionEnabled(),
             "drawing mode must start with Resize window and an inactive canvas");
-    requireAllResizeHits(geometry, "Resize window must expose all four edges and all four corners");
+    const QRect resizeRim = nativePinnedResizeRim(geometry);
+    requireAllResizeHits(resizeRim,
+                         "Resize window must expose all four edges and all four corners");
     require(nativeHitTest(geometry.center()) == HTCAPTION,
             "Resize window must expose eligible interior content as HTCAPTION");
     require(SendMessage(hwnd, WM_SETCURSOR, reinterpret_cast<WPARAM>(hwnd),
@@ -10586,14 +10637,14 @@ void pinnedResizeWindowNativeInteractions() {
                 palette->activeToolForTests() == ScreenshotToolPalette::Tool::Select &&
                 canvas->interactionEnabled(),
             "explicit Select must leave Resize window and enable canvas input");
-    requireAllResizeHits(geometry, "Select must retain every native resize hit zone");
+    requireAllResizeHits(resizeRim, "Select must retain every native resize hit zone");
     require(nativeHitTest(geometry.center()) == HTCLIENT,
             "Select must retain client interaction inside the edge band");
 
     require(palette->activateDrawingShortcut(QStringLiteral("shape")) &&
                 palette->activeToolForTests() == ScreenshotToolPalette::Tool::Shape,
             "native Resize window fixture could not activate Shape");
-    requireAllResizeHits(geometry, "drawing tools must retain every native resize hit zone");
+    requireAllResizeHits(resizeRim, "drawing tools must retain every native resize hit zone");
     require(nativeHitTest(geometry.center()) == HTCLIENT,
             "drawing tools must retain client interaction inside the edge band");
 
@@ -10613,7 +10664,7 @@ void pinnedResizeWindowNativeInteractions() {
             "canceling native edge adjustment must restore the toolbar and exact drawing tool");
 
     ScreenshotPinnedWindowTestAccess::setRecognitionInteraction(*window, true);
-    requireAllResizeHits(geometry, "recognition tools must retain every native resize hit zone");
+    requireAllResizeHits(resizeRim, "recognition tools must retain every native resize hit zone");
     require(nativeHitTest(geometry.center()) == HTCLIENT,
             "recognition content without an eligible background must remain client-interactive");
     ScreenshotPinnedWindowTestAccess::setRecognitionInteraction(*window, false);
@@ -11656,12 +11707,17 @@ void pinnedBatchHideToTop() {
     require(menu && hideAll && shadow && load && !hideAll->isCheckable(),
             "Window Management must expose the non-checkable bulk Hide to Top action");
     auto* batch = window.findChild<QAction*>(QStringLiteral("screenshotPinnedBatchActionsAction"));
+    auto* transparentLayer = window.findChild<adqt::widgets::AdContextMenu*>(
+        QStringLiteral("screenshotPinnedTransparentLayerMenu"));
     const auto actions = menu->actions();
     const auto shadowIndex = actions.indexOf(shadow);
-    require(batch && shadowIndex >= 0 && actions.indexOf(batch) == shadowIndex + 2 &&
-                actions.at(shadowIndex + 1)->isSeparator() &&
+    require(batch && transparentLayer && shadowIndex >= 0 &&
+                actions.indexOf(transparentLayer->menuAction()) == shadowIndex + 1 &&
+                actions.indexOf(batch) == shadowIndex + 3 &&
+                actions.at(shadowIndex + 2)->isSeparator() &&
                 actions.indexOf(load) == actions.indexOf(batch) + 1,
-            "Show shadow is followed by a separator, Batch Actions, then Load content");
+            "Show shadow is followed by Transparent layer, a separator, Batch Actions, and Load "
+            "content");
 
     hideAll->trigger();
     for (auto* pin : {&window, &thumbnail, &locked, &clickThrough}) {
@@ -12696,6 +12752,7 @@ void pinnedLockNative() {
         waitForUi(10);
     Access::setLock(window, true);
     const QRect geometry = window.currentNativeGeometry();
+    const QPoint resizeCorner = nativePinnedResizeRim(geometry).topLeft();
     const HWND hwnd = reinterpret_cast<HWND>(window.winId());
     for (const auto command : {SC_MOVE, SC_SIZE}) {
         require(SendMessageW(hwnd, WM_SYSCOMMAND, command, 0) == 0 &&
@@ -12708,7 +12765,7 @@ void pinnedLockNative() {
                     window.currentNativeGeometry() == geometry,
                 "locked native move and resize presses must not change geometry");
     }
-    require(SendMessageW(hwnd, WM_NCHITTEST, 0, MAKELPARAM(geometry.x() + 1, geometry.y() + 1)) ==
+    require(SendMessageW(hwnd, WM_NCHITTEST, 0, MAKELPARAM(resizeCorner.x(), resizeCorner.y())) ==
                 HTCLIENT,
             "locked edges must use client input routing");
     for (const UINT message : {WM_MOVING, WM_SIZING}) {
@@ -12721,7 +12778,7 @@ void pinnedLockNative() {
                 "native geometry proposals must be constrained while locked");
     }
     Access::setLock(window, false);
-    require(SendMessageW(hwnd, WM_NCHITTEST, 0, MAKELPARAM(geometry.x() + 1, geometry.y() + 1)) ==
+    require(SendMessageW(hwnd, WM_NCHITTEST, 0, MAKELPARAM(resizeCorner.x(), resizeCorner.y())) ==
                 HTTOPLEFT,
             "unlock must restore native resize hit testing");
     window.close();
@@ -13781,6 +13838,330 @@ void pinnedCheckerboardTracksContentSource() {
             "RGB replacement must clear checkerboard");
     replacementWindow.close();
 }
+
+ScreenshotPinnedWindow::Config transparentLayerTestConfig(QScreen& screen) {
+    auto config = clickThroughTestConfig(screen);
+    QImage image = config.imageSource.materializedImage;
+    QPainter painter(&image);
+    painter.setCompositionMode(QPainter::CompositionMode_Source);
+    painter.fillRect(QRect(120, 120, 160, 160), Qt::transparent);
+    painter.end();
+    config.imageSource = ScreenshotImageSource::fromImage(image, config.canvasSourceRect);
+    config.initialBorderVisible = false;
+    config.initialShadowVisible = false;
+    return config;
+}
+
+QList<QAction*> transparentLayerActions(ScreenshotPinnedWindow& window) {
+    materializePinnedMenuTree(window);
+    const auto* menu = window.findChild<adqt::widgets::AdContextMenu*>(
+        QStringLiteral("screenshotPinnedTransparentLayerMenu"));
+    require(menu && menu->menuAction()->text() == QStringLiteral("Transparent layer") &&
+                !menu->menuAction()->icon().pixmap(QSize(16, 16)).isNull() &&
+                menu->actions().size() == 3,
+            "the Transparent layer menu must show its icon and offer three modes");
+    return menu->actions();
+}
+
+void pinnedTransparentLayerOffscreen() {
+    using Access = ScreenshotPinnedWindowTestAccess;
+    using Mode = snow_shot::storage::PinnedTransparentLayerMode;
+    QScreen* screen = QGuiApplication::primaryScreen();
+    require(screen != nullptr, "transparent layer needs a screen");
+    ScreenshotPinnedWindow window;
+    Access::prepareReplacement(window, transparentLayerTestConfig(*screen));
+    window.show();
+    const auto actions = transparentLayerActions(window);
+    auto* clickThrough = actions.at(0);
+    auto* keepTransparent = actions.at(1);
+    auto* checkerboard = actions.at(2);
+    require(clickThrough->text() == QStringLiteral("Click-through") &&
+                keepTransparent->text() == QStringLiteral("Keep transparent") &&
+                checkerboard->text() == QStringLiteral("Checkerboard"),
+            "transparent layer options must appear in the requested order");
+    const auto requireChecked = [&](QAction* selected) {
+        for (const QAction* action : actions) {
+            require(action->isCheckable() && action->isChecked() == (action == selected),
+                    "only the selected Transparent layer option can be checked");
+        }
+    };
+    requireChecked(checkerboard);
+    const auto initialPreview = renderWidget(window);
+    const QColor checkerColor = initialPreview.pixelColor(initialPreview.rect().center());
+    require(checkerColor.alpha() == 255, "the default checkerboard must back the hole");
+
+    for (const auto& [action, mode, expected] :
+         {std::tuple{clickThrough, Mode::ClickThrough, QColor(Qt::transparent)},
+          std::tuple{keepTransparent, Mode::KeepTransparent, QColor(0, 0, 0, 1)},
+          std::tuple{checkerboard, Mode::Checkerboard, checkerColor}}) {
+        action->trigger();
+        requireChecked(action);
+        const auto snapshot = window.persistenceSnapshot();
+        require(
+            snapshot.transparentLayerMode == mode && !snapshot.clickThroughMode &&
+                snapshot.checkerboardEnabled == true,
+            "the menu must set the pin mode independently of its source and whole-window input");
+        const auto preview = renderWidget(window);
+        require(preview.pixelColor(preview.rect().center()) == expected &&
+                    preview.pixelColor(preview.width() / 4, preview.height() / 2) ==
+                        QColor(42, 84, 126) &&
+                    renderWholeWidget(window).pixelColor(0, 0).alpha() == 0,
+                "the mode must back only the transparent content and leave the outer gutter clear");
+
+        QImage exported;
+        bool completed = false;
+        auto artifact = Access::fileSave(window);
+        require(artifact && artifact->requestImage(&window,
+                                                   [&](ScreenshotExportImageResult result) {
+                                                       exported = std::move(result.image);
+                                                       completed = true;
+                                                   }),
+                "transparent pin export must start");
+        translation_tests::waitUntil([&] { return completed; }, "transparent pin export finishes");
+        require(!exported.isNull() && exported.pixelColor(exported.rect().center()).alpha() == 0,
+                "transparent layer modes must preserve export alpha");
+    }
+
+    clickThrough->trigger();
+    Access::thumbnailForHideTest(window, true);
+    const auto thumbnail = renderWidget(window);
+    require(thumbnail.pixelColor(thumbnail.rect().center()).alpha() == 255,
+            "the thumbnail keeps its opaque presentation");
+    Access::thumbnailForHideTest(window, false);
+    const auto expanded = renderWidget(window);
+    require(expanded.pixelColor(expanded.rect().center()).alpha() == 0,
+            "expanding the thumbnail reapplies the selected mode");
+    requireChecked(clickThrough);
+    window.close();
+
+    ScreenshotPinnedWindow legacy;
+    auto legacyConfig = transparentLayerTestConfig(*screen);
+    legacyConfig.checkerboardEnabled = false;
+    Access::prepareReplacement(legacy, legacyConfig);
+    legacy.show();
+    const auto legacyActions = transparentLayerActions(legacy);
+    const auto paintedCenter = [&] {
+        const auto image = renderWidget(legacy);
+        return image.pixelColor(image.rect().center());
+    };
+    require(paintedCenter().alpha() == 0 && !legacy.persistenceSnapshot().transparentLayerMode,
+            "a pin without a saved choice retains its source's transparent background");
+    legacyActions.at(2)->trigger();
+    require(paintedCenter().alpha() == 255 &&
+                legacy.persistenceSnapshot().transparentLayerMode == Mode::Checkerboard,
+            "selecting Checkerboard fills a transparent hole regardless of the source default");
+    legacy.close();
+}
+
+void pinnedTransparentLayerRestores() {
+    using Access = ScreenshotPinnedWindowTestAccess;
+    using Mode = snow_shot::storage::PinnedTransparentLayerMode;
+    IsolatedPinnedStorage storage;
+    QScreen* screen = QGuiApplication::primaryScreen();
+    require(screen != nullptr, "transparent layer restore needs a screen");
+    auto record = savedPinnedRecord(*screen, 1.0, QSize(400, 400), 100.0, QPoint(40, 40));
+    record.image = transparentLayerTestConfig(*screen).imageSource.materializedImage;
+    record.checkerboardEnabled = false;
+    record.transparentLayerMode = Mode::Checkerboard;
+    ScreenshotSelectionExportUiServices services;
+    auto* restored = restoreSeededPinnedWindow(services, record);
+    const auto preview = renderWidget(*restored);
+    const auto actions = transparentLayerActions(*restored);
+    require(actions.at(2)->isChecked() &&
+                preview.pixelColor(preview.rect().center()).alpha() == 255,
+            "a restored pin must apply an explicit Checkerboard over the source default");
+    actions.at(0)->trigger();
+    require(Access::persistencePending(*restored), "changing the layer schedules a state save");
+    Access::persistNow(*restored);
+    const auto updated =
+        snow_shot::storage::ApplicationStorage::instance().pinnedWindows().loadRecord(record.id);
+    require(updated && updated->transparentLayerMode == Mode::ClickThrough,
+            "the menu must save the newly selected mode through the pin state writer");
+    closeRestoredPinnedWindow(restored, record.id);
+}
+
+#ifdef Q_OS_MACOS
+void cocoaPinnedTransparentInputMaskOffscreen() {
+    using snow_shot::presentation::updateCocoaPinnedInputMask;
+    QImage pixels(QSize(12, 6), QImage::Format_ARGB32_Premultiplied);
+    pixels.fill(Qt::transparent);
+    pixels.setPixelColor(1, 1, QColor(0, 0, 0, 1));
+    pixels.setPixelColor(5, 1, Qt::black);
+    const auto initial = updateCocoaPinnedInputMask({}, pixels, QRegion(0, 0, 6, 3), 2);
+    require(initial == QRegion(0, 0, 1, 1) + QRect(2, 0, 1, 1),
+            "any nonzero backing pixel makes its Retina logical cell interactive");
+
+    pixels.fill(Qt::transparent);
+    pixels.setPixelColor(5, 3, Qt::black);
+    pixels.setPixelColor(11, 5, Qt::black);
+    const auto updated = updateCocoaPinnedInputMask(initial, pixels, QRegion(2, 0, 1, 2), 2);
+    require(updated == QRegion(0, 0, 1, 1) + QRect(2, 1, 1, 1),
+            "mask updates replace only the painted region and reuse the surrounding cells");
+}
+#endif
+
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+void pinnedTransparentLayerNativeHitTesting() {
+    using Access = ScreenshotPinnedWindowTestAccess;
+    QScreen* screen = QGuiApplication::primaryScreen();
+    require(screen != nullptr, "native transparency needs a screen");
+    ScreenshotPinnedWindow window;
+    window.setAttribute(Qt::WA_DeleteOnClose, false);
+    auto config = transparentLayerTestConfig(*screen);
+    config.initialBorderVisible = true;
+    require(window.present(config), "show the native transparent pin");
+    translation_tests::waitUntil(
+        [&] { return window.automationState().value(QStringLiteral("ready")).toBool(); },
+        "the native transparent pin must publish its content");
+    QWidget underlay(nullptr, Qt::Window | Qt::FramelessWindowHint);
+    underlay.setGeometry(window.geometry());
+    underlay.show();
+#ifdef Q_OS_MACOS
+    macPlacePinnedTestUnderlay(underlay, window);
+    const qintptr nativeWindowNumber = macPinnedWindowNumber(window);
+#endif
+
+    const QRect content = Access::contentViewport(window).toAlignedRect();
+    const QPoint hole = content.center();
+    const QPoint opaque(content.left() + content.width() / 4, hole.y());
+#ifdef Q_OS_WIN
+    const auto hitsNative = [](QWidget& expected, const QPoint& point) {
+        return WindowFromPoint(POINT{point.x(), point.y()}) == toNativeHwnd(expected.winId());
+    };
+    const auto hits = [&](QWidget& expected, const QPoint& localPoint) {
+        return hitsNative(expected, Access::nativePoint(window, localPoint));
+    };
+    const QRect nativeContent = Access::contentGeometry(window);
+    const int resizeWidth = std::min(snow_shot::presentation::pinnedShadowMargin(),
+                                     qRound(6 * window.devicePixelRatioF()));
+    const QPoint resizeEdge(nativeContent.left() - resizeWidth, nativeContent.center().y());
+    const QPoint outsideResizeEdge = resizeEdge - QPoint(1, 0);
+#else
+    const QPoint gutter(content.left() / 2, hole.y());
+    const auto hits = [&](QWidget& expected, const QPoint& localPoint) {
+        return macPinnedHitTest(expected, window.mapToGlobal(localPoint));
+    };
+#endif
+    const auto actions = transparentLayerActions(window);
+    translation_tests::waitUntil([&] { return hits(window, hole) && hits(window, opaque); },
+                                 "checkerboard and opaque image pixels must hit the pin");
+#ifdef Q_OS_WIN
+    translation_tests::waitUntil([&] { return hitsNative(window, resizeEdge); },
+                                 "the outermost pixel of the resize band must hit the pin");
+    require(!hitsNative(window, outsideResizeEdge),
+            "the very next pixel outside the resize band must pass through");
+    const auto nativeHitTest = [&](const QPoint& point) {
+        return SendMessageW(toNativeHwnd(window.winId()), WM_NCHITTEST, 0,
+                            MAKELPARAM(point.x(), point.y()));
+    };
+    require(nativeHitTest(resizeEdge) == HTLEFT && nativeHitTest(outsideResizeEdge) != HTLEFT,
+            "the resize hit boundary must match the painted boundary");
+#endif
+#ifdef Q_OS_MACOS
+    const QPoint rim(content.left() - 1, hole.y());
+    const QImage withBorder = renderPinnedWithBorder(window);
+    require(withBorder.pixelColor(0, withBorder.height() / 2).alpha() > 0 &&
+                renderWholeWidget(window).pixelColor(gutter).alpha() == 0,
+            "the macOS border-only decoration needs a painted rim and a clear gutter");
+#endif
+    actions.at(0)->trigger();
+    translation_tests::waitUntil([&] { return hits(underlay, hole) && hits(window, opaque); },
+                                 "the transparent hole must hit the underlay");
+#ifdef Q_OS_WIN
+    require(hitsNative(window, resizeEdge),
+            "pixel passthrough must keep the painted resize band interactive");
+    Access::shadowState(window, false, false);
+    translation_tests::waitUntil([&] { return !hitsNative(window, resizeEdge); },
+                                 "hiding the border must clear the band from native input");
+    Access::shadowState(window, true, false);
+    translation_tests::waitUntil([&] { return hitsNative(window, resizeEdge); },
+                                 "showing the border must make the resize band interactive again");
+#endif
+#ifdef Q_OS_MACOS
+    require(hits(window, rim) && hits(underlay, gutter),
+            "masked input must hit the rim and pass through the clear outer gutter");
+    const QRegion initialMask = window.windowHandle()->mask();
+    require(!initialMask.isEmpty() && initialMask.contains(opaque) && !initialMask.contains(hole),
+            "the macOS mask must follow the painted pixels");
+    require(macPinnedWindowNumber(window) == nativeWindowNumber,
+            "applying the mask must preserve the initial native window");
+    {
+        QWidget patch(&window);
+        patch.setAutoFillBackground(true);
+        patch.setGeometry(QRect(hole - QPoint(10, 10), QSize(20, 20)));
+        patch.show();
+        patch.raise();
+        translation_tests::waitUntil(
+            [&] { return hits(window, hole) && hits(window, opaque); },
+            "a newly painted child adds input without dropping the cached opaque pixels");
+        const QPoint movedHole = hole + QPoint(30, 0);
+        patch.move(movedHole - QPoint(10, 10));
+        translation_tests::waitUntil(
+            [&] { return hits(underlay, hole) && hits(window, movedHole) && hits(window, opaque); },
+            "moving an opaque child refreshes the old and new portions of the mask");
+        patch.hide();
+        translation_tests::waitUntil(
+            [&] {
+                return hits(underlay, movedHole) &&
+                       window.windowHandle()->mask().xored(initialMask).isEmpty();
+            },
+            "hiding the child removes its input without changing the rest of the mask");
+    }
+#else
+    require(window.windowHandle()->mask().isEmpty(), "Windows uses the layered window alpha");
+#endif
+    require(Access::setClickThrough(window, true), "enable the separate whole-window mode");
+    translation_tests::waitUntil([&] { return hits(underlay, hole) && hits(underlay, opaque); },
+                                 "whole-window mode must pass through both image points");
+#ifdef Q_OS_WIN
+    require(!hitsNative(window, resizeEdge), "whole-window mode must pass through the resize band");
+#endif
+    require(Access::setClickThrough(window, false), "leave the separate whole-window mode");
+    translation_tests::waitUntil([&] { return hits(underlay, hole) && hits(window, opaque); },
+                                 "leaving whole-window mode restores per-pixel input");
+#ifdef Q_OS_MACOS
+    const qintptr restoredWindowNumber = macPinnedWindowNumber(window);
+#endif
+    actions.at(1)->trigger();
+    translation_tests::waitUntil([&] { return hits(window, hole) && hits(window, opaque); },
+                                 "the nearly transparent fill must hit the pin");
+    require(window.windowHandle()->mask().isEmpty(), "leaving pixel passthrough clears the mask");
+    Access::setGeneralOpacity(window, 25);
+    translation_tests::waitUntil([&] { return hits(window, hole); },
+                                 "the fill must still hit the pin at minimum menu opacity");
+#ifdef Q_OS_WIN
+    translation_tests::waitUntil([&] { return hitsNative(window, resizeEdge); },
+                                 "the resize band must still hit the pin at minimum opacity");
+    require(!hitsNative(window, outsideResizeEdge),
+            "compensating opacity must keep the area beyond the resize band clear");
+#endif
+    Access::setGeneralOpacity(window, 100);
+    actions.at(0)->trigger();
+    ScreenshotClipboardContent replacement;
+    replacement.image = QImage(QSize(400, 400), QImage::Format_ARGB32_Premultiplied);
+    replacement.image.fill(QColor(42, 84, 126));
+    {
+        QPainter painter(&replacement.image);
+        painter.setCompositionMode(QPainter::CompositionMode_Source);
+        painter.fillRect(QRect(40, 120, 120, 160), Qt::transparent);
+    }
+    require(Access::replace(window, std::move(replacement)), "move the pin's transparent hole");
+    translation_tests::waitUntil(
+        [&] {
+            const QRect viewport = Access::contentViewport(window).toAlignedRect();
+            const QPoint center = viewport.center();
+            const QPoint newHole(viewport.left() + viewport.width() / 4, center.y());
+            return hits(window, center) && hits(underlay, newHole);
+        },
+        "native input must follow the newly painted alpha");
+#ifdef Q_OS_MACOS
+    require(window.windowHandle()->mask() != initialMask &&
+                macPinnedWindowNumber(window) == restoredWindowNumber,
+            "redrawing alpha must update the mask on the existing window");
+#endif
+    window.close();
+}
+#endif
 
 void pinnedThumbnailBorderContainsBackgroundOffscreen() {
     using Access = ScreenshotPinnedWindowTestAccess;
@@ -15167,6 +15548,13 @@ void pinnedDrawingShortcutsToggleActiveTool(bool hiddenTools = false) {
         require(canvas->canvasTool() == tool,
                 "the third shortcut press should reactivate the pinned canvas tool");
     }
+    const auto shapeBeforeTab = canvas->canvasStyleToolbarState().shapeStyle.shape;
+    pressKey(Qt::Key_Tab);
+    require(canvas->canvasTool() == SnowCanvasTool::Shape &&
+                canvas->canvasStyleToolbarState().shapeStyle.shape != shapeBeforeTab &&
+                canvas->canvasStyleToolbarState().shapeStyle.shape ==
+                    palette->creationStyleDefaults().rectangle.shape,
+            "Tab advances the active shape on the pinned canvas and its toolbar");
     if (hiddenTools) {
         require(toolbarSettings.layout(kind) == savedLayout && palette->stylePanel()->isVisible(),
                 "hidden pinned tools retain settings without changing the saved layout");
@@ -16187,7 +16575,7 @@ void pinnedHiddenFormattedBackgroundDoubleClickUsesPinAction() {
     }
 }
 
-void pinnedCopyDefaultsCoverHiddenSelectionAndAutomation() {
+void pinnedHiddenTextCopyPreservesSelectionWithOcrDefaults() {
     using Access = ScreenshotPinnedWindowTestAccess;
     const snow_shot::storage::TextRecognitionSettings textSettings;
     const QString priorFormatting = textSettings.defaultFormatting();
@@ -16197,7 +16585,7 @@ void pinnedCopyDefaultsCoverHiddenSelectionAndAutomation() {
     require(textSettings.setDefaultFormatting(QStringLiteral("remove")) &&
                 textSettings.setDefaultPunctuation(QStringLiteral("full")) &&
                 pinSettings.setTextSelectionOnRecognitionResults(QStringLiteral("always")),
-            "enable hidden recognized-text copy defaults");
+            "enable OCR defaults and hidden text selection");
     auto config = cachedOcrPinConfig(nullptr);
     auto presentation = config.recognitionResults.text->presentation;
     presentation->lines[0].text = QStringLiteral("A,");
@@ -16212,13 +16600,12 @@ void pinnedCopyDefaultsCoverHiddenSelectionAndAutomation() {
             "cached OCR installs the hidden selectable text layer");
     Access::selectHiddenText(window);
     Access::copyCurrentViewport(window);
-    const QString expected =
-        QStringLiteral("A") + QChar(0xFF0C) + QStringLiteral("B") + QChar(0xFF01);
+    const QString expected = QStringLiteral("A,\nB!");
     require(QApplication::clipboard()->text() == expected,
-            "pinned image copy transforms the hidden OCR selection");
+            "pinned image copy preserves the hidden OCR selection's line breaks and punctuation");
     const auto automation = Access::automationClipboard(window);
     require(automation != nullptr && automation->text() == expected,
-            "pinned automation copy uses the same transformed selection");
+            "pinned automation copy preserves the same selection");
     require(textSettings.setDefaultFormatting(QStringLiteral("smart")),
             "enable default Smart Typesetting for hidden OCR selection");
     auto smartConfig = cachedOcrPinConfig(nullptr);
@@ -16235,11 +16622,11 @@ void pinnedCopyDefaultsCoverHiddenSelectionAndAutomation() {
     require(Access::hiddenSelection(smartWindow), "Smart fixture installs its hidden text layer");
     Access::selectHiddenText(smartWindow);
     Access::copyCurrentViewport(smartWindow);
-    const QString smartExpected = QStringLiteral("translation") + QChar(0xFF01);
+    const QString smartExpected = QStringLiteral("trans-\nlation!");
     const auto smartAutomation = Access::automationClipboard(smartWindow);
     require(QApplication::clipboard()->text() == smartExpected && smartAutomation != nullptr &&
                 smartAutomation->text() == smartExpected,
-            "hidden OCR selection and automation share default Smart Typesetting copy");
+            "hidden OCR selection copy keeps the original text with Smart Typesetting set");
     require(textSettings.setDefaultFormatting(priorFormatting) &&
                 textSettings.setDefaultPunctuation(priorPunctuation) &&
                 pinSettings.setTextSelectionOnRecognitionResults(priorSelection),
@@ -17987,7 +18374,8 @@ void pinnedCtrlHoverKeepsWindowCursorOffscreen() {
                     canvas->canvasSnapConfig().enabled == snapping &&
                     Access::dragDocument(window) == document,
                 "disabled drawing input must preserve cursor, snapping, and document state");
-        require(hit(QPoint(1, 1), Qt::ControlModifier) == HTTOPLEFT,
+        const QPoint resizeCorner = Access::contentViewport(window).topLeft().toPoint();
+        require(hit(resizeCorner, Qt::ControlModifier) == HTTOPLEFT,
                 "Ctrl must preserve native resize borders");
     }
     window.close();
@@ -18030,8 +18418,9 @@ void pinnedOcrBoxSelectionNativeRouting() {
     require(hit(blank, Qt::ControlModifier) == HTCAPTION &&
                 hit(blank, Qt::ControlModifier | Qt::AltModifier) == HTCAPTION,
             "visible OCR preserves existing Ctrl movement and Ctrl precedence");
-    require(hit(QPoint(1, 1), Qt::NoModifier) == HTTOPLEFT &&
-                hit(QPoint(1, 1), Qt::AltModifier) == HTTOPLEFT,
+    const QPoint resizeCorner = Access::contentViewport(window).topLeft().toPoint();
+    require(hit(resizeCorner, Qt::NoModifier) == HTTOPLEFT &&
+                hit(resizeCorner, Qt::AltModifier) == HTTOPLEFT,
             "OCR box selection and Alt movement preserve native resize handles");
     Access::setLock(window, true);
     require(hit(blank, Qt::NoModifier) == HTCLIENT && hit(blank, Qt::AltModifier) == HTCLIENT &&
@@ -18144,7 +18533,8 @@ void pinnedDragExportNativeHitTest() {
             "native fixture targets the image interior");
     require(hit(imagePoint, false) == HTCAPTION, "ordinary image drag uses native caption");
     require(hit(imagePoint, true) == HTCLIENT, "Ctrl image drag is delivered to Qt");
-    require(hit(QPoint(1, 1), true) == HTTOPLEFT, "Ctrl leaves resize borders native");
+    const QPoint resizeCorner = Access::contentViewport(window).topLeft().toPoint();
+    require(hit(resizeCorner, true) == HTTOPLEFT, "Ctrl leaves resize borders native");
     const snow_shot::storage::PinToScreenSettings settings;
     require(settings.setTextSelectionOnRecognitionResults(QStringLiteral("always")),
             "enable hidden selection for native drag routing");
@@ -18172,9 +18562,9 @@ void pinnedDragExportNativeHitTest() {
     require(hit(text, false) == HTCLIENT, "releasing Alt restores native text-selection routing");
     require(hit(blank, false) == HTCAPTION && hit(blank, true) == HTCLIENT,
             "Ctrl routes hidden selection background to Qt instead of native window movement");
-    require(hit(QPoint(1, 1), true) == HTTOPLEFT,
+    require(hit(resizeCorner, true) == HTTOPLEFT,
             "hidden selection Ctrl dragging preserves native resize borders");
-    require(hit(QPoint(1, 1), false, true) == HTTOPLEFT,
+    require(hit(resizeCorner, false, true) == HTTOPLEFT,
             "Alt text dragging preserves native resize borders");
     window.close();
 }
@@ -18420,8 +18810,9 @@ void pinnedExecutionAutomaticSaveOffscreen() {
     QTemporaryDir directory;
     QTemporaryDir laterDirectory;
     require(directory.isValid() && laterDirectory.isValid(), "pin auto-save directories");
-    require(snow_shot::storage::ScreenshotSettings().setAutoSaveAfterExecutionActions(
-                {QStringLiteral("pin_to_screen")}),
+    require(snow_shot::storage::ScreenshotSettings().setExportTasks(
+                snow_shot::storage::ExportTrigger::ScreenshotPin,
+                snow_shot::storage::ExportTask::AutoSave),
             "enable screenshot pin automatic saving");
     QObject receiver;
     QScreen* screen = QGuiApplication::primaryScreen();
@@ -18472,39 +18863,35 @@ void pinnedExecutionAutomaticSaveOffscreen() {
                     }),
                 ScreenshotCompressionLevel::Medium, std::move(policy));
             const std::weak_ptr<ScreenshotExportArtifact> weakArtifact = artifact;
-            int saveCompletions = 0;
-            std::optional<ScreenshotExportTaskResult> saved;
-            ScreenshotAutomaticSaveRequest automatic;
-            automatic.receiver = &receiver;
-            automatic.configuredSaveDirectory = directory.path();
-            automatic.format = ScreenshotImageFileFormat::Bmp;
-            automatic.filenameFormat =
+            auto tasks =
+                ScreenshotExportTasks::capture(snow_shot::storage::ExportTrigger::ScreenshotPin);
+            if (scenario == Scenario::NoRequest)
+                tasks.selected = {};
+            tasks.directory = directory.path();
+            tasks.options.format = ScreenshotImageFileFormat::Bmp;
+            tasks.options.filenameFormat =
                 scenario == Scenario::SaveFailure
                     ? failingFilenameFormat
                     : QStringLiteral("pin-%1-%2").arg(scrolling).arg(static_cast<int>(scenario));
-            automatic.encoding = {42, ScreenshotCompressionLevel::High};
-            automatic.requestedAt = QDateTime(QDate(2026, 1, 2), QTime(3, 4, 5));
-            automatic.completion = [&](ScreenshotExportTaskResult result) {
-                ++saveCompletions;
-                saved = std::move(result);
-            };
+            tasks.options.encoding = {42, ScreenshotCompressionLevel::High};
+            tasks.requestedAt = QDateTime(QDate(2026, 1, 2), QTime(3, 4, 5));
+            QString error;
+            tasks.reportError = [&](QString message) { error = std::move(message); };
             const QString expectedPath =
-                directory.filePath(automatic.filenameFormat + QStringLiteral(".bmp"));
-            std::optional<ScreenshotAutomaticSaveRequest> request;
-            if (scenario != Scenario::NoRequest) {
-                request = automatic;
-            }
+                directory.filePath(tasks.options.filenameFormat + QStringLiteral(".bmp"));
             int presentationCompletions = 0;
             bool presentedSuccessfully = false;
-            const auto completed = [&](bool success, auto) {
+            const auto completed = [&, tasks](bool success, auto pixels) {
                 ++presentationCompletions;
                 presentedSuccessfully = success;
+                if (success)
+                    tasks.run(&receiver, std::move(pixels));
             };
             require(scrolling
-                        ? services.presentPinnedImageArtifact(artifact, screen,
-                                                              selection.geometry.nativeGeometry,
-                                                              image.size(), completed, request)
-                        : services.presentPinnedArtifact(selection, artifact, completed, request),
+                        ? services.presentPinnedImageArtifact(
+                              artifact, screen, selection.geometry.nativeGeometry, image.size(),
+                              [completed, artifact](bool ok, QImage) { completed(ok, artifact); })
+                        : services.presentPinnedArtifact(selection, artifact, completed),
                     "pin auto-save presentation accepted");
             QPointer<ScreenshotPinnedWindow> window(onlyVisiblePinnedWindow());
             require(window != nullptr, "pin auto-save creates a loading window");
@@ -18515,13 +18902,12 @@ void pinnedExecutionAutomaticSaveOffscreen() {
                 }
             });
             wait([&] { return static_cast<bool>(deliver); }, "pin auto-save image loader starts");
-            require(presentationCompletions == 0 && saveCompletions == 0 &&
+            require(presentationCompletions == 0 && error.isEmpty() &&
                         !QFileInfo::exists(expectedPath),
                     "pin auto-save waits for a successful first frame");
-            automatic.configuredSaveDirectory = laterDirectory.path();
-            automatic.format = ScreenshotImageFileFormat::Png;
-            automatic.filenameFormat = QStringLiteral("later-request");
-            request = automatic;
+            tasks.directory = laterDirectory.path();
+            tasks.options.format = ScreenshotImageFileFormat::Png;
+            tasks.options.filenameFormat = QStringLiteral("later-request");
             if (scenario == Scenario::Cancelled) {
                 window->close();
                 deliver(image);
@@ -18530,20 +18916,20 @@ void pinnedExecutionAutomaticSaveOffscreen() {
             }
             wait([&] { return presentationCompletions == 1; }, "pin first frame completes once");
             if (scenario == Scenario::RenderFailure || scenario == Scenario::Cancelled) {
-                require(!presentedSuccessfully && saveCompletions == 0 &&
+                require(!presentedSuccessfully && error.isEmpty() &&
                             !QFileInfo::exists(expectedPath),
                         "failed or cancelled pin does not auto-save");
                 continue;
             }
             require(presentedSuccessfully, "pin auto-save preserves successful presentation");
             if (scenario == Scenario::NoRequest) {
-                require(saveCompletions == 0 && !QFileInfo::exists(expectedPath),
+                require(error.isEmpty() && !QFileInfo::exists(expectedPath),
                         "history and other pins without an explicit request do not auto-save");
                 continue;
             }
             if (scenario == Scenario::Save) {
                 wait([&] { return encodingStarted.available() > 0; }, "pin file encoding starts");
-                require(saveCompletions == 0,
+                require(!QFileInfo::exists(expectedPath),
                         "pin first frame completes without waiting for automatic saving");
                 artifact.reset();
                 window->close();
@@ -18551,16 +18937,17 @@ void pinnedExecutionAutomaticSaveOffscreen() {
                 require(!weakArtifact.expired(), "automatic save retains its export artifact");
                 encodingRelease.release();
             }
-            wait([&] { return saveCompletions == 1; }, "pin automatic save completes once");
+            wait([&] { return !error.isEmpty() || QFileInfo::exists(expectedPath); },
+                 "pin automatic save completes");
             if (scenario == Scenario::Save) {
                 wait([&] { return weakArtifact.expired(); },
                      "completed automatic save releases its export artifact");
             }
             if (scenario == Scenario::SaveFailure) {
-                require(!saved->succeeded() && window != nullptr && window->isVisible(),
+                require(!error.isEmpty() && window != nullptr && window->isVisible(),
                         "automatic save failure preserves the successful pin");
             } else {
-                require(saved->succeeded() && saved->savedPath == expectedPath &&
+                require(error.isEmpty() &&
                             QImage(expectedPath).convertToFormat(QImage::Format_ARGB32) ==
                                 image.convertToFormat(QImage::Format_ARGB32) &&
                             QDir(laterDirectory.path()).entryList(QDir::Files).isEmpty(),
@@ -18608,17 +18995,22 @@ void pinnedExecutionAutomaticSaveOffscreen() {
         ScreenshotCompressionLevel::Medium,
         ScreenshotExportArtifact::PngCachePolicy{
             1, {}, ScreenshotExportArtifact::PngCachePolicy{}.maximumFileBytes, {}});
-    std::optional<ScreenshotExportTaskResult> rowSaved;
-    ScreenshotAutomaticSaveRequest automatic;
-    automatic.receiver = &receiver;
-    automatic.configuredSaveDirectory = directory.path();
-    automatic.filenameFormat = QStringLiteral("scrolling-rows");
-    automatic.encoding.compressionLevel = ScreenshotCompressionLevel::High;
-    automatic.completion = [&](ScreenshotExportTaskResult result) { rowSaved = std::move(result); };
+    auto tasks = ScreenshotExportTasks::capture(snow_shot::storage::ExportTrigger::ScreenshotPin);
+    tasks.directory = directory.path();
+    tasks.options.filenameFormat = QStringLiteral("scrolling-rows");
+    tasks.options.format = ScreenshotImageFileFormat::Png;
+    tasks.options.encoding.compressionLevel = ScreenshotCompressionLevel::High;
+    QString error;
+    tasks.reportError = [&](QString message) { error = std::move(message); };
+    const auto rowPath = directory.filePath(QStringLiteral("scrolling-rows.png"));
     bool rowPresented = false;
-    require(services.presentPinnedImageArtifact(
-                rowArtifact, screen, selection.geometry.nativeGeometry, image.size(),
-                [&](bool success, QImage) { rowPresented = success; }, automatic),
+    require(services.presentPinnedImageArtifact(rowArtifact, screen,
+                                                selection.geometry.nativeGeometry, image.size(),
+                                                [&](bool success, QImage) {
+                                                    rowPresented = success;
+                                                    if (success)
+                                                        tasks.run(&receiver, rowArtifact);
+                                                }),
             "row-backed scrolling pin is accepted");
     QPointer<ScreenshotPinnedWindow> rowWindow(onlyVisiblePinnedWindow());
     const auto closeRowWindow = qScopeGuard([&] {
@@ -18627,11 +19019,12 @@ void pinnedExecutionAutomaticSaveOffscreen() {
             static_cast<void>(processUntilDeleted(rowWindow, 2000));
         }
     });
-    wait([&] { return rowSaved.has_value(); }, "row-backed scrolling pin auto-save completes");
+    wait([&] { return !error.isEmpty() || QFileInfo::exists(rowPath); },
+         "row-backed scrolling pin auto-save completes");
     require(rowPresented, "row-backed scrolling pin presents successfully");
-    require(rowSaved->succeeded(), qPrintable(rowSaved->error));
+    require(error.isEmpty(), qPrintable(error));
     require(rowReads > 0, "scrolling pin automatic saving streams immutable source rows");
-    const QImage rowOutput = QImage(rowSaved->savedPath).convertToFormat(QImage::Format_ARGB32);
+    const QImage rowOutput = QImage(rowPath).convertToFormat(QImage::Format_ARGB32);
     if (rowOutput != rowImage.convertToFormat(QImage::Format_ARGB32)) {
         std::cerr << "row save pixels " << rowOutput.width() << 'x' << rowOutput.height()
                   << " expected " << image.width() << 'x' << image.height() << " center "
@@ -18653,7 +19046,8 @@ void pinnedLazyCopyOptionsSnapshotOffscreen() {
     const QString configuredDirectory = directory.filePath(QStringLiteral("configured"));
     require(!QFileInfo::exists(configuredDirectory), "lazy copy directory starts unavailable");
     const snow_shot::storage::ScreenshotSettings settings;
-    require(settings.setAutoSaveAfterExecutionActions({QStringLiteral("copy_pinned_image")}) &&
+    require(settings.setExportTasks(snow_shot::storage::ExportTrigger::PinnedCopy,
+                                    snow_shot::storage::ExportTask::AutoSave) &&
                 settings.setImageSaveDirectory(configuredDirectory) &&
                 settings.setImageFormat(QStringLiteral("bmp")) &&
                 settings.setAutoSaveFilenameFormat(QStringLiteral("lazy-snapshot")) &&
@@ -18683,7 +19077,7 @@ void pinnedLazyCopyOptionsSnapshotOffscreen() {
     require(ScreenshotPinnedWindowTestAccess::originalImage(window).isNull(),
             "lazy pinned copy begins before materialization");
     ScreenshotPinnedWindowTestAccess::copyCurrentViewport(window);
-    require(settings.setAutoSaveAfterExecutionActions({QStringLiteral("pin_to_screen")}) &&
+    require(settings.setExportTasks(snow_shot::storage::ExportTrigger::PinnedCopy, {}) &&
                 settings.setImageSaveDirectory(laterDirectory.path()) &&
                 settings.setImageFormat(QStringLiteral("png")) &&
                 settings.setAutoSaveFilenameFormat(QStringLiteral("lazy-later")) &&
@@ -18781,27 +19175,12 @@ void pinnedSharedImageExportOffscreen() {
     require(changed.constBits() != first.constBits() && changed != first,
             "pinned opacity change reused stale export pixels");
     Access::setGeneralOpacity(window, 75);
-    struct AutoSaveCase final {
-        QStringList actions;
-        bool expected = false;
-    };
-    const QList<AutoSaveCase> autoSaveCases = {
-        {{}, false},
-        {{QStringLiteral("copy_screenshot")}, false},
-        {{QStringLiteral("copy_scrolling_screenshot")}, false},
-        {{QStringLiteral("copy_pinned_image")}, true},
-        {{QStringLiteral("capture_focused_window")}, false},
-        {{QStringLiteral("capture_current_monitor")}, false},
-        {{QStringLiteral("pin_to_screen")}, false},
-        {{QStringLiteral("copy_pinned_image"), QStringLiteral("pin_to_screen")}, true},
-        {{QStringLiteral("copy_screenshot"), QStringLiteral("capture_current_monitor")}, false},
-    };
-    for (qsizetype caseIndex = 0; caseIndex < autoSaveCases.size(); ++caseIndex) {
-        const auto& autoSaveCase = autoSaveCases[caseIndex];
-        const bool autoSave = autoSaveCase.expected;
+    for (bool autoSave : {false, true}) {
         for (bool copyFile : {false, true}) {
-            const QString name = QStringLiteral("export-%1-%2").arg(caseIndex).arg(copyFile);
-            require(settings.setAutoSaveAfterExecutionActions(autoSaveCase.actions) &&
+            const QString name = QStringLiteral("export-%1-%2").arg(autoSave).arg(copyFile);
+            require(settings.setExportTasks(snow_shot::storage::ExportTrigger::PinnedCopy,
+                                            autoSave ? snow_shot::storage::ExportTask::AutoSave
+                                                     : snow_shot::storage::ExportTasks{}) &&
                         settings.setCopyImageFileToClipboard(copyFile) &&
                         settings.setAutoSaveFilenameFormat(name),
                     "configure copy option combination");
@@ -18818,18 +19197,23 @@ void pinnedSharedImageExportOffscreen() {
                                                rendered = std::move(result.image);
                                            }),
                     "request rendered copy snapshot");
-            wait([&] { return !Access::exportArtifact(window) && !rendered.isNull(); },
-                 "copy and automatic save both complete",
-                 [&] {
-                     qWarning() << "Pinned copy completion" << "case" << caseIndex << "copyFile"
-                                << copyFile << "autoSave" << autoSave << "pendingArtifact"
-                                << bool(Access::exportArtifact(window)) << "rendered"
-                                << rendered.size() << "savedFileExists"
-                                << QFileInfo::exists(
-                                       directory.filePath(name + QStringLiteral(".png")))
-                                << "pendingJobs"
-                                << ScreenshotExportCoordinator::shared().pendingJobCount();
-                 });
+            wait(
+                [&] {
+                    return !Access::exportArtifact(window) && !rendered.isNull() &&
+                           (!autoSave ||
+                            QFileInfo::exists(directory.filePath(name + QStringLiteral(".png"))));
+                },
+                "copy and automatic save both complete",
+                [&] {
+                    qWarning() << "Pinned copy completion" << "save" << autoSave << "copyFile"
+                               << copyFile << "autoSave" << autoSave << "pendingArtifact"
+                               << bool(Access::exportArtifact(window)) << "rendered"
+                               << rendered.size() << "savedFileExists"
+                               << QFileInfo::exists(
+                                      directory.filePath(name + QStringLiteral(".png")))
+                               << "pendingJobs"
+                               << ScreenshotExportCoordinator::shared().pendingJobCount();
+                });
             const QString path = directory.filePath(name + QStringLiteral(".png"));
             require(QFileInfo::exists(path) == autoSave,
                     "only automatic saving writes to the image export directory");
@@ -18886,7 +19270,8 @@ void pinnedSharedImageExportOffscreen() {
 
     // An empty expanded base name is rejected independently of fallback directories.
     require(settings.setAutoSaveFilenameFormat(emptyExportFilenameFormat()) &&
-                settings.setAutoSaveAfterExecutionActions({QStringLiteral("copy_pinned_image")}),
+                settings.setExportTasks(snow_shot::storage::ExportTrigger::PinnedCopy,
+                                        snow_shot::storage::ExportTask::AutoSave),
             "configure deterministic save failure");
     for (bool copyFile : {false, true}) {
         require(settings.setCopyImageFileToClipboard(copyFile), "configure failing copy mode");
@@ -19299,8 +19684,14 @@ void pinnedSaveDialogRoutingAndCancellation() {
     require(!adqt::widgets::detail::blockingModalWindow(
                 modal->contentWidget()->window()->windowHandle()),
             "pinned save must not block its own visible surface");
-    require(modal->contentWidget()->window()->windowHandle()->transientParent() ==
-                toolbar->windowHandle(),
+    QWindow independent;
+    require(modal->windowModality() == Qt::WindowModal &&
+                adqt::widgets::detail::blockingModalWindow(window->windowHandle()) &&
+                adqt::widgets::detail::blockingModalWindow(toolbar->windowHandle()) &&
+                !adqt::widgets::detail::blockingModalWindow(&independent),
+            "pinned save blocks its pin and toolbar while allowing independent capture");
+    require(toolbar->windowHandle()->isAncestorOf(modal->contentWidget()->window()->windowHandle(),
+                                                  QWindow::IncludeTransients),
             "pinned save must stay above its visible editing toolbar");
     modal->rejectButton()->click();
     waitForUi(30);
@@ -20536,6 +20927,8 @@ void pinnedTransparentPhysicalEdges(bool liveSurface) {
             config.canvasSourceRect);
         config.borderAppearance = screenshotSelectionBorderAppearance(extent, style);
         config.checkerboardEnabled = false;
+        config.initialBorderVisible = false;
+        config.initialShadowVisible = false;
         require(window.present(config), "transparent edge fixture must present");
         waitForUi(30);
         const qreal dpr = window.devicePixelRatioF();
@@ -20581,7 +20974,7 @@ void pinnedTransparentPhysicalEdges(bool liveSurface) {
             verifyCorners(raster.copy(contentRaster), false);
             require(raster.pixelColor(0, 0).alpha() == 0 &&
                         raster.pixelColor(contentRaster.center().x(), margin - 1).alpha() == 0,
-                    "the disabled shadow must leave the reserved margin transparent");
+                    "disabling both decorations must keep the reserved margin transparent");
             require(SetWindowPos(toNativeHwnd(window.winId()), HWND_TOPMOST, 0, 0, 0, 0,
                                  SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE) != FALSE,
                     "transparent fixture must be above its backdrop");
@@ -22982,6 +23375,14 @@ void pinnedPrintingWithoutToolbarAndDelayedCompletion(bool locked) {
             "printing fixture must apply the requested lock state through its shortcut");
     const QRect geometry = window.currentNativeGeometry();
     QApplication::clipboard()->setText(QStringLiteral("print must not publish"));
+    QWidget independent;
+    independent.show();
+    adqt::widgets::AdModal otherConfirmation(&independent);
+    otherConfirmation.setMode(adqt::widgets::AdModal::Mode::Window);
+    otherConfirmation.open();
+    window.activateWindow();
+    canvas->setFocus();
+    waitForUi(20);
     sendShortcut(*canvas, Qt::Key_P, Qt::ControlModifier);
     sendShortcut(*canvas, Qt::Key_P, Qt::ControlModifier);
     QElapsedTimer timer;
@@ -22989,7 +23390,8 @@ void pinnedPrintingWithoutToolbarAndDelayedCompletion(bool locked) {
     while (starts == 0 && timer.elapsed() < 10000)
         waitForUi(5);
     require(starts == 1 && Access::printPending(window) && !hasToolbar(),
-            "Ctrl+P must print directly once without creating the toolbar");
+            "another window's confirmation must allow this pin to print once via Ctrl+P");
+    otherConfirmation.close();
     sendShortcut(*canvas, Qt::Key_L);
     require(window.persistenceSnapshot().lockedMode == locked &&
                 window.currentNativeGeometry() == geometry,
@@ -23434,7 +23836,9 @@ class PinnedSelectionFixture final {
             window->close();
     }
 
-    ScreenshotPinnedWindow& add(QPoint offset, QSize size = QSize(120, 80)) {
+    ScreenshotPinnedWindow&
+    add(QPoint offset, QSize size = QSize(120, 80),
+        const std::function<void(ScreenshotPinnedWindow::Config&)>& configure = {}) {
         require(directory.isValid(), "multi-selection needs isolated writable storage");
         QScreen* screen = QGuiApplication::primaryScreen();
         require(screen != nullptr, "multi-selection needs a screen");
@@ -23464,6 +23868,8 @@ class PinnedSelectionFixture final {
         config.persistenceRemover = [this](const QString& id) {
             persistenceSucceeded &= repository.remove(id).success;
         };
+        if (configure)
+            configure(config);
         auto window = std::make_unique<ScreenshotPinnedWindow>();
         window->setAttribute(Qt::WA_DeleteOnClose, false);
         auto ready = std::make_shared<std::optional<bool>>();
@@ -23747,11 +24153,29 @@ void pinnedMultiSelectionRoutingAndIndicator() {
             "pending content cannot enter selection before a usable first frame");
     Access::selectionFramePublished(first, true);
     fixture.selection.toggleSelection(&first);
+    const auto orderedSelection = fixture.selection.selectedWindows();
     Access::thumbnailForHideTest(first, true);
-    require(!fixture.selection.isSelected(&first) && !fixture.selection.isSelectable(&first),
-            "thumbnail mode leaves selection and retains its existing input behavior");
-    Access::thumbnailForHideTest(first, false);
+    require(fixture.selection.selectedWindows() == orderedSelection &&
+                fixture.selection.isSelectable(&first) && indicator->isVisible() &&
+                first.rect().contains(indicator->geometry()),
+            "thumbnail mode preserves ordered selection and its indicator");
+    pinnedSelectionClick(first, Qt::ControlModifier);
+    require(!indicator->isVisible() && fixture.selection.isSelected(&second),
+            "modifier-click deselects the thumbnail alone");
+    pinnedSelectionClick(first, Qt::ControlModifier);
+    require(indicator->isVisible(), "modifier-click selects the thumbnail again");
+    indicator->click();
+    require(!fixture.selection.isSelected(&first) && fixture.selection.isSelected(&second),
+            "the thumbnail indicator deselects it alone");
+    pinnedSelectionClick(first, Qt::ControlModifier);
+    pinnedSelectionClick(first);
+    require(fixture.selection.selectedCount() == 0,
+            "a plain click on a thumbnail clears selection");
+    fixture.selection.toggleSelection(&second);
     fixture.selection.toggleSelection(&first);
+    Access::thumbnailForHideTest(first, false);
+    require(fixture.selection.selectedWindows() == orderedSelection && indicator->isVisible(),
+            "expanding a thumbnail through the mode command preserves selection");
     require(Access::hideToTop(first).enter(
                 screenshot_pinned_hide_to_top::screenGeometry(first.screen())) &&
                 !fixture.selection.isSelected(&first) && !fixture.selection.isSelectable(&first),
@@ -24230,14 +24654,25 @@ void pinnedImageSplittingSnapshots() {
         window.findChild<QAction*>(QStringLiteral("screenshotPinnedImageEditingAction"));
     auto* reset =
         window.findChild<QAction*>(QStringLiteral("screenshotPinnedResetTransformAction"));
-    require(menu && split && editing && reset && menu->actions().last() == editing &&
-                menu->actions().at(menu->actions().size() - 3)->isSeparator() &&
-                menu->actions().indexOf(reset) == menu->actions().size() - 4 &&
+    auto* compression =
+        window.findChild<QAction*>(QStringLiteral("screenshotPinnedImageCompressionAction"));
+    require(menu && split && editing && reset && compression &&
+                menu->actions().last() == compression &&
+                menu->actions().indexOf(compression) == menu->actions().indexOf(editing) + 1 &&
+                menu->actions().at(menu->actions().size() - 4)->isSeparator() &&
+                menu->actions().indexOf(reset) == menu->actions().size() - 5 &&
                 menu->actions().indexOf(editing) == menu->actions().indexOf(split) + 1 &&
                 editing->isEnabled() && editing->text() == QStringLiteral("Image editing") &&
                 !editing->icon().isNull() && split->isEnabled() &&
                 split->text() == QStringLiteral("Image splitting") && !split->icon().isNull(),
-            "Process image ends with Image Splitting followed by Image Editing");
+            "Process image ends with splitting, editing and compression");
+    bool compressed = false;
+    QObject::connect(&window, &ScreenshotPinnedWindow::imageCompressionRequested, &window,
+                     [&](const ScreenshotPinnedImageSnapshot& snapshot) {
+                         compressed = snapshot.source.isValid();
+                     });
+    compression->trigger();
+    require(compressed, "compression captures an independent full-resolution pin source");
     int editingRequests = 0;
     snow_shot::presentation::ImageEditingWindowCoordinator editors({{}, &fixture.groups, nullptr});
     QObject::connect(&window, &ScreenshotPinnedWindow::imageEditingRequested, &window,
@@ -24508,7 +24943,7 @@ void pinnedMultiSelectionMenuAndLocks() {
         require(first.grab().save(screenshotPath),
                 "save selected pin screenshot for visual inspection");
     require(
-        actions.size() == 13 &&
+        actions.size() == 14 &&
             actions.at(0)->objectName() ==
                 QStringLiteral("screenshotPinnedSelectionImageStitching") &&
             actions.at(0)->text() == QStringLiteral("Image stitching") &&
@@ -24517,24 +24952,29 @@ void pinnedMultiSelectionMenuAndLocks() {
                 QStringLiteral("screenshotPinnedSelectionCopyFilesToClipboard") &&
             actions.at(1)->text() == QStringLiteral("Copy files to clipboard") &&
             !actions.at(1)->icon().isNull() &&
-            actions.at(2)->objectName() == QStringLiteral("screenshotPinnedSelectionSaveAsFile") &&
-            actions.at(2)->text() == QStringLiteral("Save as file") &&
-            !actions.at(2)->icon().isNull() && actions.at(3)->isSeparator() &&
-            actions.at(4)->objectName() == QStringLiteral("screenshotPinnedSelectionCloseOthers") &&
-            actions.at(5)->menu() && actions.at(5)->text() == QStringLiteral("Align position") &&
-            actions.at(6)->menu() && actions.at(6)->text() == QStringLiteral("Group") &&
-            actions.at(7)->objectName() == QStringLiteral("screenshotPinnedSelectionLock") &&
-            actions.at(8)->isSeparator() &&
-            actions.at(9)->objectName() == QStringLiteral("screenshotPinnedSelectionClose") &&
-            actions.at(10)->objectName() == QStringLiteral("screenshotPinnedSelectionDestroy") &&
-            !menu.actionDanger(actions.at(9)) && menu.actionDanger(actions.at(10)) &&
-            actions.at(11)->isSeparator() &&
-            actions.at(12)->objectName() == QStringLiteral("screenshotPinnedSelectionCount") &&
-            !actions.at(12)->isEnabled() && actions.at(12)->text().contains(QStringLiteral("2")),
-        "multi-selection exposes stitching, copy files and save before the separator, with the "
+            actions.at(2)->objectName() ==
+                QStringLiteral("screenshotPinnedSelectionCopyTextToClipboard") &&
+            actions.at(2)->text() == QStringLiteral("Copy text to clipboard") &&
+            !actions.at(2)->isEnabled() &&
+            actions.at(3)->objectName() == QStringLiteral("screenshotPinnedSelectionSaveAsFile") &&
+            actions.at(3)->text() == QStringLiteral("Save as file") &&
+            !actions.at(3)->icon().isNull() && actions.at(4)->isSeparator() &&
+            actions.at(5)->objectName() == QStringLiteral("screenshotPinnedSelectionCloseOthers") &&
+            actions.at(6)->menu() && actions.at(6)->text() == QStringLiteral("Align position") &&
+            actions.at(7)->menu() && actions.at(7)->text() == QStringLiteral("Group") &&
+            actions.at(8)->objectName() == QStringLiteral("screenshotPinnedSelectionLock") &&
+            actions.at(9)->isSeparator() &&
+            actions.at(10)->objectName() == QStringLiteral("screenshotPinnedSelectionClose") &&
+            actions.at(11)->objectName() == QStringLiteral("screenshotPinnedSelectionDestroy") &&
+            !menu.actionDanger(actions.at(10)) && menu.actionDanger(actions.at(11)) &&
+            actions.at(12)->isSeparator() &&
+            actions.at(13)->objectName() == QStringLiteral("screenshotPinnedSelectionCount") &&
+            !actions.at(13)->isEnabled() && actions.at(13)->text().contains(QStringLiteral("2")),
+        "multi-selection exposes stitching, both copy commands and save before the separator, with "
+        "the "
         "disabled selection count at the bottom");
-    auto* alignment = actions.at(5)->menu();
-    auto* groupMenu = qobject_cast<adqt::widgets::AdContextMenu*>(actions.at(6)->menu());
+    auto* alignment = actions.at(6)->menu();
+    auto* groupMenu = qobject_cast<adqt::widgets::AdContextMenu*>(actions.at(7)->menu());
     require(groupMenu != nullptr, "multi-selection owns a group context submenu");
     auto& defaultGroup =
         pinnedSelectionAction(*groupMenu, QStringLiteral("screenshotPinnedSelectionGroup-default"));
@@ -24559,7 +24999,7 @@ void pinnedMultiSelectionMenuAndLocks() {
     }
     fixture.selection.toggleSelection(&third);
     auto& threeMenu = fixture.menu(first);
-    auto* threeAlign = threeMenu.actions().at(5)->menu();
+    auto* threeAlign = threeMenu.actions().at(6)->menu();
     require(pinnedSelectionAction(*threeAlign, operationName(Alignment::DistributeHorizontally))
                     .isEnabled() &&
                 pinnedSelectionAction(*threeAlign, operationName(Alignment::DistributeVertically))
@@ -24569,7 +25009,7 @@ void pinnedMultiSelectionMenuAndLocks() {
     auto& mixedMenu = fixture.menu(first);
     auto& mixedLock =
         pinnedSelectionAction(mixedMenu, QStringLiteral("screenshotPinnedSelectionLock"));
-    require(!mixedLock.isChecked() && !mixedMenu.actions().at(5)->isEnabled(),
+    require(!mixedLock.isChecked() && !mixedMenu.actions().at(6)->isEnabled(),
             "mixed lock states keep a uniform lock action and disable alignment");
     mixedLock.trigger();
     require(
@@ -24728,7 +25168,9 @@ void pinnedMultiSelectionCloseAndGroups() {
         fixture.selection.toggleSelection(&first);
         fixture.selection.toggleSelection(&second);
         auto& menu = fixture.menu(first);
-        auto* group = menu.actions().at(6)->menu();
+        auto* group = menu.findChild<adqt::widgets::AdContextMenu*>(
+            QStringLiteral("screenshotPinnedSelectionGroupMenu"));
+        require(group != nullptr, "the multi-selection menu includes the group submenu");
         pinnedSelectionAction(*group,
                               QStringLiteral("screenshotPinnedSelectionGroup-%1").arg(*destination))
             .trigger();
@@ -24750,12 +25192,17 @@ void pinnedMultiSelectionCloseAndGroups() {
         fixture.selection.toggleSelection(&first);
         fixture.selection.toggleSelection(&second);
         auto& menu = fixture.menu(first);
-        auto* group = menu.actions().at(6)->menu();
+        auto* group = menu.findChild<adqt::widgets::AdContextMenu*>(
+            QStringLiteral("screenshotPinnedSelectionGroupMenu"));
+        require(group != nullptr, "the multi-selection menu includes the group submenu");
         pinnedSelectionAction(*group, QStringLiteral("screenshotPinnedSelectionNewGroup"))
             .trigger();
         auto* modal = first.findChild<adqt::widgets::AdModal*>(
             QStringLiteral("pinnedWindowGroupCreateModal"));
-        require(modal && modal->isOpen(), "batch New Group opens the existing group-name form");
+        require(modal && modal->isOpen() && modal->windowModality() == Qt::WindowModal &&
+                    adqt::widgets::detail::blockingModalWindow(first.windowHandle()) &&
+                    !adqt::widgets::detail::blockingModalWindow(second.windowHandle()),
+                "New Group blocks its source pin while other windows remain usable");
         auto* input = modal->contentWidget()->findChild<adqt::widgets::AdLineEdit*>(
             QStringLiteral("pinnedWindowGroupNameInput"));
         require(input != nullptr, "batch New Group preserves the existing group-name editor");
@@ -24848,55 +25295,74 @@ void pinnedMultiSelectionDestroyConfirmation() {
     auto& first = fixture.add({40, 60});
     auto& second = fixture.add({230, 160});
     auto& other = fixture.add({420, 260});
+    auto& fourth = fixture.add({610, 360});
     fixture.selection.toggleSelection(&first);
     fixture.selection.toggleSelection(&second);
-    const auto openConfirmation = [&]() {
-        auto& menu = fixture.menu(first);
+    const auto confirmationName = QStringLiteral("screenshotPinnedSelectionDestroyConfirmation");
+    const auto openConfirmation = [&](ScreenshotPinnedWindow& owner) {
+        auto& menu = fixture.menu(owner);
         auto& action =
             pinnedSelectionAction(menu, QStringLiteral("screenshotPinnedSelectionDestroy"));
         action.trigger();
-        auto* modal = first.findChild<adqt::widgets::AdModal*>(
-            QStringLiteral("screenshotPinnedSelectionDestroyConfirmation"));
-        require(modal && modal->isOpen() && modal->windowModality() == Qt::ApplicationModal &&
+        auto* modal = owner.findChild<adqt::widgets::AdModal*>(confirmationName);
+        require(modal && modal->isOpen() && modal->windowModality() == Qt::WindowModal &&
                     modal->property("pinnedSelectionCount").toInt() == 2,
-                "Destroy opens one count-aware application-modal confirmation");
+                "Destroy opens one count-aware confirmation on the source pin");
         action.trigger();
-        require(first.findChildren<adqt::widgets::AdModal*>(
-                         QStringLiteral("screenshotPinnedSelectionDestroyConfirmation"))
-                        .size() == 1,
+        require(owner.findChildren<adqt::widgets::AdModal*>(confirmationName).size() == 1,
                 "repeated Destroy requests reuse the batch confirmation");
         return modal;
     };
-    auto* modal = openConfirmation();
+    auto* modal = openConfirmation(first);
     modal->reject();
     waitForUi(5);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     require(fixture.destroyAttempts == 0 && fixture.selection.selectedCount() == 2 &&
                 first.sourcePinAvailable() && second.sourcePinAvailable() &&
-                fixture.repository.summaries().size() == 3,
+                fixture.repository.summaries().size() == 4,
             "canceling batch Destroy preserves records and selection");
     fixture.rejectDestroy = true;
-    modal = openConfirmation();
+    modal = openConfirmation(first);
     modal->accept();
     waitForUi(5);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     require(fixture.destroyAttempts == 1 && fixture.selection.selectedCount() == 2 &&
                 first.sourcePinAvailable() && second.sourcePinAvailable() &&
-                fixture.repository.summaries().size() == 3,
+                fixture.repository.summaries().size() == 4,
             "failed destruction preflight leaves all selected windows and records untouched");
     fixture.rejectDestroy = false;
-    modal = openConfirmation();
+    QPointer<adqt::widgets::AdModal> previous = openConfirmation(first);
+    fixture.selection.destroyWindows(&other, {&first, &second, &other, &fourth});
+    auto* displayed = other.findChild<adqt::widgets::AdModal*>(confirmationName);
+    require((!previous || !previous->isOpen()) && displayed && displayed->isOpen() &&
+                displayed->property("pinnedDisplayedBatch").toBool() &&
+                displayed->property("pinnedSelectionCount").toInt() == 4,
+            "Destroy displayed windows replaces the earlier selected-window request");
+    displayed->reject();
+    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+
+    previous = openConfirmation(first);
+    fixture.selection.selectAll({&other, &fourth});
+    require(!previous || !previous->isOpen(),
+            "changing the selection invalidates an outstanding batch Destroy");
+    if (previous)
+        previous->accept();
+    require(fixture.destroyAttempts == 1 && fixture.repository.summaries().size() == 4,
+            "a superseded confirmation cannot delete the previous selection");
+    modal = openConfirmation(other);
     modal->accept();
     waitForUi(5);
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     require(fixture.destroyAttempts == 2 && fixture.lastDestroyedIds.size() == 2 &&
-                fixture.lastDestroyedIds.contains(first.persistenceId()) &&
-                fixture.lastDestroyedIds.contains(second.persistenceId()) &&
+                fixture.lastDestroyedIds.contains(other.persistenceId()) &&
+                fixture.lastDestroyedIds.contains(fourth.persistenceId()) &&
                 fixture.selection.selectedCount() == 0 &&
-                !fixture.repository.loadRecord(first.persistenceId()) &&
-                !fixture.repository.loadRecord(second.persistenceId()) &&
-                fixture.repository.loadRecord(other.persistenceId()) && other.sourcePinAvailable(),
-            "confirmed Destroy removes only the frozen selection with one backend batch");
+                !fixture.repository.loadRecord(other.persistenceId()) &&
+                !fixture.repository.loadRecord(fourth.persistenceId()) &&
+                fixture.repository.loadRecord(first.persistenceId()) &&
+                fixture.repository.loadRecord(second.persistenceId()) &&
+                first.sourcePinAvailable() && second.sourcePinAvailable(),
+            "confirmed Destroy removes only the updated selection with one backend batch");
 }
 
 void pinnedMultiSelectionDestroyWithoutConfirmation() {
@@ -25107,6 +25573,9 @@ void pinnedMultiSelectionLiveLanguageAndTheme() {
             pinnedSelectionAction(menu,
                                   QStringLiteral("screenshotPinnedSelectionCopyFilesToClipboard"))
                     .text() == QStringLiteral("Translated Copy files to clipboard") &&
+            pinnedSelectionAction(menu,
+                                  QStringLiteral("screenshotPinnedSelectionCopyTextToClipboard"))
+                    .text() == QStringLiteral("Translated Copy text to clipboard") &&
             pinnedSelectionAction(menu, QStringLiteral("screenshotPinnedSelectionSaveAsFile"))
                     .text() == QStringLiteral("Translated Save as file") &&
             modal->windowTitle() == QStringLiteral("Translated Destroy selected windows") &&
@@ -25236,6 +25705,85 @@ void pinnedMultiSelectionSharedGeometry() {
                 second.currentNativeGeometry() == peerGeometry &&
                 Access::originalImage(second) == peerImage,
             "content replacement remains a single-window operation during multi-selection");
+}
+
+void pinnedMultiSelectionThumbnailGeometry() {
+    using Access = ScreenshotPinnedWindowTestAccess;
+    using Alignment = SnowCanvasSelectionAlignment;
+    PinnedSelectionFixture fixture;
+    auto& first = fixture.add({60, 60});
+    auto& thumbnail = fixture.add({235, 170}, {180, 100});
+    auto& last = fixture.add({530, 280});
+    const QRect expanded = thumbnail.currentNativeGeometry();
+    Access::setPhysicalCursor(thumbnail, {true, [expanded] { return expanded.center(); }, {}});
+    Access::thumbnailForHideTest(thumbnail, true);
+    for (const auto& pin : fixture.windows)
+        fixture.selection.toggleSelection(pin.get());
+
+    const auto firstOrigin = first.persistenceSnapshot().placement.position;
+    const auto thumbnailOrigin = thumbnail.persistenceSnapshot().placement.position;
+    const auto lastOrigin = last.persistenceSnapshot().placement.position;
+    const QPointF press = thumbnail.mapToGlobal(thumbnail.rect().center());
+    const QPointF delta(28, 21);
+    pinnedSelectionDesktopMouse(thumbnail, QEvent::MouseButtonPress, press, Qt::NoModifier,
+                                Qt::LeftButton);
+    pinnedSelectionDesktopMouse(thumbnail, QEvent::MouseMove, press + delta, Qt::NoModifier,
+                                Qt::LeftButton);
+    require(fixture.selection.geometryActive(), "a selected thumbnail starts a shared drag");
+    pinnedSelectionDesktopMouse(thumbnail, QEvent::MouseButtonRelease, press + delta);
+    require(first.persistenceSnapshot().placement.position == firstOrigin + delta &&
+                thumbnail.persistenceSnapshot().placement.position == thumbnailOrigin + delta &&
+                last.persistenceSnapshot().placement.position == lastOrigin + delta,
+            "dragging a selected thumbnail moves the full selection by the same delta");
+
+    const QSize compactSize = thumbnail.currentNativeGeometry().size();
+    require(fixture.selection.alignSelection(Alignment::AlignTop) &&
+                thumbnail.currentNativeGeometry().top() == first.currentNativeGeometry().top() &&
+                thumbnail.currentNativeGeometry().top() == last.currentNativeGeometry().top(),
+            "alignment includes the thumbnail's visible edge");
+    require(fixture.selection.alignSelection(Alignment::DistributeHorizontally),
+            "a thumbnail counts as a third distribution target");
+    const QRect compact = thumbnail.currentNativeGeometry();
+    const int leadingGap = compact.left() - first.currentNativeGeometry().right();
+    const int trailingGap = last.currentNativeGeometry().left() - compact.right();
+    require(compact.size() == compactSize && leadingGap > 0 &&
+                std::abs(leadingGap - trailingGap) <= 1,
+            "distribution uses the compact width to produce equal gaps");
+
+    require(fixture.selection.scaleBy(&first, 125) && qAbs(Access::scale(first) - 125.) < .01 &&
+                qAbs(Access::scale(last) - 125.) < .01 &&
+                thumbnail.currentNativeGeometry() == compact,
+            "group scaling changes regular pins and leaves the compact rectangle in place");
+    fixture.selection.deselectWindow(&last);
+    const QPointF resizePress = first.mapToGlobal(first.rect().bottomRight());
+    constexpr int handle = int(screenshot_pinned_resize_geometry::DragHandle::BottomRight);
+    require(fixture.selection.beginGeometry(&first, resizePress, handle),
+            "a regular pin can start a resize with thumbnails as its only selected peers");
+    fixture.selection.updateGeometry(resizePress + QPointF(30, 24));
+    fixture.selection.endGeometry(false);
+    const QRect resized = first.currentNativeGeometry();
+    require(Access::scale(first) > 125 && thumbnail.currentNativeGeometry() == compact,
+            "group resize handles affect only the regular member");
+
+    const QPointF local = thumbnail.rect().center();
+    const QPointF desktop = thumbnail.mapToGlobal(local.toPoint());
+    QWheelEvent wheel(local, desktop, {}, QPoint(0, 120), Qt::NoButton, Qt::NoModifier,
+                      Qt::NoScrollPhase, false);
+    QNativeGestureEvent pinch(Qt::ZoomNativeGesture, QPointingDevice::primaryPointingDevice(), 2,
+                              local, local, desktop, .5, QPointF());
+    require(Access::wheel(thumbnail, &wheel) && Access::gesture(thumbnail, &pinch) &&
+                thumbnail.currentNativeGeometry() == compact &&
+                first.currentNativeGeometry() == resized &&
+                thumbnail.persistenceSnapshot().thumbnailMode,
+            "wheel and pinch over a selected thumbnail preserve the mixed group's geometry");
+
+    require(fixture.selection.beginGeometry(&first, resizePress), "start another shared move");
+    fixture.selection.updateGeometry(resizePress + delta);
+    Access::thumbnailForHideTest(thumbnail, false);
+    require(!fixture.selection.geometryActive() && first.currentNativeGeometry() == resized &&
+                thumbnail.currentNativeGeometry() == expanded &&
+                fixture.selection.selectedCount() == 2,
+            "expanding a thumbnail rolls back the move and restores its saved expanded rectangle");
 }
 
 void pinnedMultiSelectionResizeHandlesAndLimits() {
@@ -26077,10 +26625,27 @@ void pinnedCloudUploadHiddenToolbar() {
     profile.publicBaseUrl = QStringLiteral("https://cdn.test/");
     require(cloudSettings.setSettings({{profile}, profile.id}), "configure pinned cloud upload");
     const snow_shot::storage::ScreenshotSettings exportSettings;
+    using snow_shot::storage::ExportTask;
+    using snow_shot::storage::ExportTrigger;
     const auto previousFormat = exportSettings.imageFormat();
-    const auto restoreFormat =
-        qScopeGuard([&] { static_cast<void>(exportSettings.setImageFormat(previousFormat)); });
-    require(exportSettings.setImageFormat(QStringLiteral("png")), "upload pin as PNG");
+    const auto previousDirectory = exportSettings.imageSaveDirectory();
+    const auto previousName = exportSettings.autoSaveFilenameFormat();
+    const auto previousUpload = exportSettings.exportTasks(ExportTrigger::PinnedUpload);
+    const auto previousCopy = exportSettings.exportTasks(ExportTrigger::PinnedCopy);
+    const auto restoreFormat = qScopeGuard([&] {
+        exportSettings.setImageFormat(previousFormat);
+        exportSettings.setImageSaveDirectory(previousDirectory);
+        exportSettings.setAutoSaveFilenameFormat(previousName);
+        exportSettings.setExportTasks(ExportTrigger::PinnedUpload, previousUpload);
+        exportSettings.setExportTasks(ExportTrigger::PinnedCopy, previousCopy);
+    });
+    QTemporaryDir saved;
+    require(saved.isValid() && exportSettings.setImageFormat(QStringLiteral("png")) &&
+                exportSettings.setImageSaveDirectory(saved.path()) &&
+                exportSettings.setAutoSaveFilenameFormat(QStringLiteral("pin")) &&
+                exportSettings.setExportTasks(ExportTrigger::PinnedUpload, ExportTask::AutoSave) &&
+                exportSettings.setExportTasks(ExportTrigger::PinnedCopy, ExportTask::Upload),
+            "configure follow-ups for pinned uploads and viewport copies");
     ScreenshotPinnedWindow window;
     auto config = cachedOcrPinConfig(nullptr);
     config.recognitionResults = {};
@@ -26130,6 +26695,11 @@ void pinnedCloudUploadHiddenToolbar() {
                 QStringLiteral("https://cdn.test/"));
         },
         "successful pin upload copies permanent link");
+    QFile exact(saved.filePath(QStringLiteral("pin.png")));
+    translation_tests::waitUntil([&] { return exact.exists(); },
+                                 "auto-save follows a confirmed pinned upload");
+    require(exact.open(QIODevice::ReadOnly) && exact.readAll() == server.body,
+            "pinned auto-save preserves uploaded bytes");
     require(window.isVisible(), "cloud upload keeps pinned window open");
     require(cloudSettings.setSettings({}), "clear cloud destination");
     sendShortcut(window, Qt::Key_U, Qt::ControlModifier);
@@ -26152,46 +26722,24 @@ void pinnedCloudUploadHiddenToolbar() {
                                  "replacement cancels and cleans upload");
     require(QApplication::clipboard()->text() == QStringLiteral("cancelled-upload"),
             "replacement suppresses stale clipboard publication");
-    sendShortcut(window, Qt::Key_U, Qt::ControlModifier);
+    ScreenshotPinnedWindowTestAccess::copyOriginalContent(window);
+    translation_tests::waitUntil([&] { return !exportedClipboardImage().isNull(); },
+                                 "original content copies its image directly");
+    require(!window.findChild<ScreenshotCloudUploadJob*>() && server.count == 2,
+            "copy original content skips configured viewport-copy tasks");
+    ScreenshotPinnedWindowTestAccess::copyCurrentViewport(window);
     translation_tests::waitUntil([&] { return server.count == 3; },
-                                 "start upload before closing pin");
+                                 "viewport copy starts a background upload");
     pending = window.findChild<ScreenshotCloudUploadJob*>();
-    require(pending, "closing pin has pending upload");
+    require(pending, "closing pin owns its follow-up upload");
     const auto closingPath = pending->preparedPath();
+    const auto copied = exportedClipboardImage();
     window.close();
     translation_tests::waitUntil([&] { return !QFileInfo::exists(closingPath); },
-                                 "closing source cleans upload");
-    require(QApplication::clipboard()->text() == QStringLiteral("cancelled-upload"),
-            "closed source cannot copy stale link");
-
-    // Clipboard observers can synchronously destroy the source during success publication.
-    auto clipboardClosingWindow = std::make_unique<ScreenshotPinnedWindow>();
-    ScreenshotPinnedWindowTestAccess::prepareReplacement(*clipboardClosingWindow, config);
-    clipboardClosingWindow->show();
-    clipboardClosingWindow->activateWindow();
-    clipboardClosingWindow->setFocus();
-    waitForUi(30);
-    sendShortcut(*clipboardClosingWindow, Qt::Key_U, Qt::ControlModifier);
-    translation_tests::waitUntil([&] { return server.count == 4; },
-                                 "prepare clipboard-close upload before server response");
-    auto* finalJob = clipboardClosingWindow->findChild<ScreenshotCloudUploadJob*>();
-    require(finalJob, "clipboard-close fixture starts upload");
-    const auto finalPath = finalJob->preparedPath();
-    const auto clipboardConnection =
-        QObject::connect(QApplication::clipboard(), &QClipboard::dataChanged,
-                         QApplication::instance(), [&] { clipboardClosingWindow.reset(); });
-    const auto disconnectClipboard = qScopeGuard([&] { QObject::disconnect(clipboardConnection); });
-    for (auto* socket : server.server.findChildren<QTcpSocket*>()) {
-        if (socket->state() != QAbstractSocket::ConnectedState)
-            continue;
-        socket->write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n");
-        socket->disconnectFromHost();
-    }
-    translation_tests::waitUntil([&] { return !clipboardClosingWindow; },
-                                 "clipboard observer may destroy source after successful upload");
-    require(!finalPath.isEmpty(), "clipboard-close upload retains its prepared image");
-    translation_tests::waitUntil([&] { return !QFileInfo::exists(finalPath); },
-                                 "clipboard observer destruction cleans uploaded file");
+                                 "closing pin cancels its background upload");
+    require(!copied.isNull() && exportedClipboardImage() == copied &&
+                QDir(saved.path()).entryList(QDir::Files).size() == 1,
+            "background upload does not publish a link or trigger post-upload tasks");
 }
 
 void pinnedToolbarAnchorsToContentOffscreen() {
@@ -26801,23 +27349,88 @@ void pinnedShadowStateAndMarginsOffscreen() {
                 window.currentNativeGeometry() == outer &&
                 Access::contentGeometry(window) == content,
             "Y must enable the shadow before opening the menu and preserve border and geometry");
+    const QRect viewport = Access::contentViewport(window).toRect();
+    const QRect client = window.rect();
+    const auto requireAllResizeHandles = [&](const QRect& bounds) {
+        const std::array<std::pair<QPoint, int>, 8> handles = {
+            std::pair{bounds.topLeft(), 0},
+            std::pair{QPoint(viewport.center().x(), bounds.top()), 1},
+            std::pair{bounds.topRight(), 2},
+            std::pair{QPoint(bounds.right(), viewport.center().y()), 3},
+            std::pair{bounds.bottomRight(), 4},
+            std::pair{QPoint(viewport.center().x(), bounds.bottom()), 5},
+            std::pair{bounds.bottomLeft(), 6},
+            std::pair{QPoint(bounds.left(), viewport.center().y()), 7}};
+        for (const auto& [point, expected] : handles)
+            require(Access::decorationResizeHandle(window, point) == expected,
+                    "all four edges and four corners must reach the resize bounds");
+    };
+    requireAllResizeHandles(client);
     sendShortcut(window, Qt::Key_Y);
     require(!window.persistenceSnapshot().showShadow && window.persistenceSnapshot().showBorder,
             "Y must toggle the shadow off independently of the border");
-    const QRect viewport = Access::contentViewport(window).toRect();
-    const QRect client = window.rect();
-    const std::array<std::pair<QPoint, int>, 8> handles = {
-        std::pair{client.topLeft(), 0},
-        std::pair{QPoint(viewport.center().x(), client.top()), 1},
-        std::pair{client.topRight(), 2},
-        std::pair{QPoint(client.right(), viewport.center().y()), 3},
-        std::pair{client.bottomRight(), 4},
-        std::pair{QPoint(viewport.center().x(), client.bottom()), 5},
-        std::pair{client.bottomLeft(), 6},
-        std::pair{QPoint(client.left(), viewport.center().y()), 7}};
-    for (const auto& [point, expected] : handles)
-        require(Access::decorationResizeHandle(window, point) == expected,
-                "shadow margin shares all eight resize handles with content edges");
+#ifdef Q_OS_WIN
+    constexpr int borderOnlyMarginAlpha = 1;
+    const QRect resizeBounds = viewport.adjusted(-6, -6, 6, 6);
+    requireAllResizeHandles(resizeBounds);
+    const QPoint resizePoint(resizeBounds.left(), viewport.center().y());
+    const QPoint outsidePoint = resizePoint - QPoint(1, 0);
+    const QImage borderOnly = renderWholeWidget(window);
+    const std::pair<QPoint, QPoint> edges[] = {
+        {resizePoint, QPoint(-1, 0)},
+        {QPoint(resizeBounds.right(), resizePoint.y()), QPoint(1, 0)},
+        {QPoint(viewport.center().x(), resizeBounds.top()), QPoint(0, -1)},
+        {QPoint(viewport.center().x(), resizeBounds.bottom()), QPoint(0, 1)},
+        {resizeBounds.topLeft(), QPoint(-1, -1)},
+        {resizeBounds.bottomRight(), QPoint(1, 1)},
+    };
+    for (const auto& [edge, outward] : edges) {
+        require(borderOnly.pixelColor(edge) == QColor(0, 0, 0, 1) &&
+                    borderOnly.pixelColor(edge + outward).alpha() == 0 &&
+                    !Access::decorationResizeHandle(window, edge + outward),
+                "the six-DIP paint and resize boundaries must match");
+    }
+    Access::setGeneralOpacity(window, 25);
+    const QImage dimmed = renderWholeWidget(window);
+    require(dimmed.pixelColor(resizePoint) == QColor(0, 0, 0, 2) &&
+                dimmed.pixelColor(outsidePoint).alpha() == 0,
+            "minimum opacity must compensate alpha only in the resize band");
+    Access::setGeneralOpacity(window, 100);
+    require(renderWholeWidget(window).pixelColor(resizePoint) == QColor(0, 0, 0, 1),
+            "restoring full opacity must restore the one-alpha fill");
+
+    const auto requireResizeMarginAlpha = [&](int expected, const char* message) {
+        waitForUi(5);
+        const QRect currentViewport = Access::contentViewport(window).toRect();
+        const QPoint point(currentViewport.left() - 3, currentViewport.center().y());
+        if (auto* store = window.backingStore();
+            store && store->paintDevice() && store->paintDevice()->devType() == QInternal::Image) {
+            const auto& raster = *static_cast<const QImage*>(store->paintDevice());
+            const QPoint physicalPoint = QPointF(point * window.devicePixelRatioF()).toPoint();
+            require(raster.pixelColor(physicalPoint).alpha() == expected, message);
+        }
+        require(renderWholeWidget(window).pixelColor(point).alpha() == expected, message);
+    };
+    Access::setLock(window, true);
+    require(window.persistenceSnapshot().lockedMode, "lock the border-only pin");
+    requireResizeMarginAlpha(0, "locking must clear the extra resize fill");
+    Access::setLock(window, false);
+    requireResizeMarginAlpha(borderOnlyMarginAlpha, "unlocking must restore the resize fill");
+
+    Access::thumbnailForAnimationTest(window, true, false);
+    require(window.persistenceSnapshot().thumbnailMode,
+            "enter thumbnail mode on the border-only pin");
+    requireResizeMarginAlpha(0, "thumbnail mode must clear the extra resize fill");
+    Access::thumbnailForAnimationTest(window, false, false);
+    require(window.currentNativeGeometry() == outer, "leaving thumbnail mode restores geometry");
+    requireResizeMarginAlpha(borderOnlyMarginAlpha, "expanding must restore the resize fill");
+#else
+    constexpr int borderOnlyMarginAlpha = 0;
+    const QPoint dragPoint(viewport.left() / 2, viewport.center().y());
+    require(renderWholeWidget(window).pixelColor(dragPoint).alpha() == borderOnlyMarginAlpha &&
+                Access::decorationResizeHandle(window, dragPoint) == 7,
+            "the clear margin must retain the decoration resize geometry");
+#endif
     const QPoint marginSample(viewport.left() - 2, viewport.center().y());
     const auto sample = [&] { return renderWholeWidget(window).pixelColor(marginSample); };
     const auto requireShadowRgb = [&](const QColor& actual, QColor expected, const char* message) {
@@ -26848,8 +27461,9 @@ void pinnedShadowStateAndMarginsOffscreen() {
             require(window.currentNativeGeometry() == outer &&
                         Access::contentGeometry(window) == content,
                     "independent effect toggles preserve outer and content geometry");
-            require(shadow ? pixel.alpha() > 0 && pixel.alpha() <= 58 : pixel.alpha() == 0,
-                    "shadow uses configured translucent alpha and disabled margin is erased");
+            require(shadow ? pixel.alpha() > 0 && pixel.alpha() <= 58
+                           : pixel.alpha() == (border ? borderOnlyMarginAlpha : 0),
+                    "the margin must show the shadow, one-alpha fill, or clear pixels");
             if (shadow)
                 requireShadowRgb(pixel, QColor(200, 30, 70, 160),
                                  "normal shadow follows live RGBA color");
@@ -26860,9 +27474,9 @@ void pinnedShadowStateAndMarginsOffscreen() {
                 const auto& raster = *static_cast<const QImage*>(store->paintDevice());
                 const QPoint physicalSample =
                     QPointF(marginSample * window.devicePixelRatioF()).toPoint();
-                require(shadow ? raster.pixelColor(physicalSample).alpha() > 0
-                               : raster.pixelColor(physicalSample).alpha() == 0,
-                        "published backing store clears stale shadow pixels on every toggle");
+                const int alpha = raster.pixelColor(physicalSample).alpha();
+                require(shadow ? alpha > 0 : alpha == (border ? borderOnlyMarginAlpha : 0),
+                        "published backing store updates margin alpha on every toggle");
             }
             requireColorNear(renderWidget(window).pixelColor(40, 40), source.pixelColor(40, 40), 0,
                              "decoration never changes interior image pixels");
@@ -26950,8 +27564,9 @@ void pinnedShadowStateAndMarginsOffscreen() {
             "restored visibility overrides explicit creation appearance without double expansion");
     Access::prepareReplacement(window, config);
     require(!window.automationState().value(QStringLiteral("show_shadow")).toBool() &&
-                sample().alpha() == 0 && window.currentNativeGeometry() == outer,
-            "pooled-window reuse resets shadow and clears stale decoration pixels");
+                sample().alpha() == borderOnlyMarginAlpha &&
+                window.currentNativeGeometry() == outer,
+            "pooled-window reuse resets the margin to the border-only state");
     require(settings.setShowBorderByDefault(false) && settings.setShowShadowByDefault(true),
             "change defaults for future pins");
     require(!window.automationState().value(QStringLiteral("show_shadow")).toBool(),
@@ -28073,6 +28688,11 @@ int main(int argc, char* argv[]) {
             live_pinned_tests::statusLayoutFollowsContent();
             return 0;
         }
+        if (app.arguments().contains(QStringLiteral("--live-window-export-tasks-only"))) {
+            IsolatedPinnedStorage storage;
+            live_pinned_tests::deferredCopyRetainsItsActionTimeFrame();
+            return 0;
+        }
         if (app.arguments().contains(QStringLiteral("--live-window-pin-only"))) {
             pinnedLiveWindowTests();
             return 0;
@@ -28282,6 +28902,7 @@ int main(int argc, char* argv[]) {
             pinnedMultiSelectionGroupModalManagerTeardown();
             pinnedMultiSelectionLiveLanguageAndTheme();
             pinnedMultiSelectionSharedGeometry();
+            pinnedMultiSelectionThumbnailGeometry();
             pinnedMultiSelectionResizeHandlesAndLimits();
             pinnedMultiSelectionGesturesAndRollback();
             pinnedMultiSelectionActivationPreservesGeometry();
@@ -28792,6 +29413,20 @@ int main(int argc, char* argv[]) {
             pinnedCheckerboardTracksContentSource();
             return 0;
         }
+        if (app.arguments().contains(QStringLiteral("--transparent-layer-only"))) {
+            pinnedTransparentLayerOffscreen();
+            pinnedTransparentLayerRestores();
+#ifdef Q_OS_MACOS
+            cocoaPinnedTransparentInputMaskOffscreen();
+#endif
+            return 0;
+        }
+#if defined(Q_OS_WIN) || defined(Q_OS_MACOS)
+        if (app.arguments().contains(QStringLiteral("--transparent-layer-native-only"))) {
+            pinnedTransparentLayerNativeHitTesting();
+            return 0;
+        }
+#endif
         if (app.arguments().contains(QStringLiteral("--selection-annotations-only"))) {
             pinnedDocumentSelectionUsesLocalCaptureGeometry();
             pinnedAnnotationsIgnoreSelectionShape();
@@ -28877,7 +29512,7 @@ int main(int argc, char* argv[]) {
             pinnedHiddenFormattedSelectionFollowsImageCoordinates();
             pinnedHiddenTextSelectionOffscreen();
             pinnedHiddenFormattedTextSelectionOffscreen();
-            pinnedCopyDefaultsCoverHiddenSelectionAndAutomation();
+            pinnedHiddenTextCopyPreservesSelectionWithOcrDefaults();
             return 0;
         }
         if (app.arguments().contains(QStringLiteral("--recognition-save-only"))) {

@@ -11,10 +11,15 @@ import fnmatch
 import json
 import re
 import subprocess
+import tomllib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / ".github" / "upstream-protection.json"
+COMMUNITY_UPDATE_KEYS = ROOT / "snow_shot" / "resources" / "update-trusted-keys.json"
+CONFIGURATION_SCHEMA = ROOT / "snow_shot" / "src" / "storage" / "configurationschema.cpp"
+WORKFLOW_ROOT = ROOT / ".github" / "workflows"
+ACTION_USE = re.compile(r"uses:\s+([^@\s]+)@([^\s#]+)")
 COMMERCIAL_PATH = re.compile(
     r"(?:^|[/_-])(account|membership|membercenter|billing|payment|purchase|topup|"
     r"recharge|credits?|points?|paywall|subscription|login|signin|signup|register|checkout)(?:[/_.-]|$)", re.I
@@ -24,6 +29,46 @@ COMMERCIAL_CONTENT = re.compile(
     r"insufficient_credits|account_required|purchase.credits|"
     r"membership.payment|top.up|recharge|sign.in|sign.up|register|checkout|会员|充值|支付|积分", re.I
 )
+
+# Current-tree safety policy. These are runtime/product identifiers, not the upstream
+# metadata in .github/upstream-protection.json that tells the sync tool where to fetch from.
+FORBIDDEN_COMMUNITY_CONTENT = re.compile(
+    r"AccountSessionService|AccountPageWidget|AccountSecretStore|"
+    r"accountAccessToken|setAccountAccessToken|accountIdentityChanged|officialCallSettled|"
+    r"account_required|invalid_session|insufficient_credits|outstanding_balance|"
+    r"funds_temporarily_reserved|purchase\.credits|membership\.payment|"
+    r"account-session|Snow Shot account|Purchase credits|available credits|"
+    r"official account authorization|"
+    r"\btelemetry\b|\b(?:sentry|posthog|mixpanel|firebase_analytics)\b|segment\.io|"
+    r"\bmg-chao/(?:snow-shot|snow-apps)\b|\bmg-chao\.snow-shot\b|"
+    r"\bsnowshot\.top\b|\b120\.79\.232\.67\b",
+    re.I,
+)
+COMMUNITY_SCAN_ROOTS = (
+    ".github/workflows",
+    "cmake",
+    "scripts",
+    "snow-crates",
+    "snow-draw-engine-gpui",
+    "snow-image-rs",
+    "snow_draw_engine_qt",
+    "snow_image",
+    "snow_image_viewer",
+    "snow_memory",
+    "snow_rust_ffi",
+    "snow_shot/include",
+    "snow_shot/src",
+    "snow_shot/rust",
+    "snow_shot/tests",
+)
+COMMUNITY_SCAN_SUFFIXES = {
+    ".c", ".cc", ".cpp", ".h", ".hpp", ".mm", ".m",
+    ".py", ".js", ".ts", ".rs", ".cmake", ".txt", ".json", ".yml", ".yaml", ".sh", ".ps1",
+}
+COMMUNITY_SCAN_EXCLUSIONS = {
+    "scripts/upstream_sync.py",
+    "scripts/test-upstream-sync.py",
+}
 
 
 def git(*args: str) -> bytes:
@@ -112,6 +157,177 @@ def classify(upstream: str, output: Path | None = None) -> dict:
     return result
 
 
+def assert_forbidden_runtime_content_absent() -> None:
+    violations: list[str] = []
+    for root_name in COMMUNITY_SCAN_ROOTS:
+        root = ROOT / root_name
+        if not root.exists():
+            continue
+        for path in root.rglob("*"):
+            if not path.is_file() or path.suffix.lower() not in COMMUNITY_SCAN_SUFFIXES:
+                continue
+            relative = path.relative_to(ROOT).as_posix()
+            if relative in COMMUNITY_SCAN_EXCLUSIONS:
+                continue
+            try:
+                content = path.read_text(encoding="utf-8")
+            except UnicodeDecodeError:
+                continue
+            match = FORBIDDEN_COMMUNITY_CONTENT.search(content)
+            if match:
+                line = content.count("\n", 0, match.start()) + 1
+                violations.append(f"{relative}:{line}: {match.group(0)}")
+    if violations:
+        raise SystemExit(
+            "Forbidden account/telemetry/upstream runtime content found:\n" +
+            "\n".join(violations[:50])
+        )
+
+
+def assert_community_update_signers_disabled() -> None:
+    try:
+        document = json.loads(COMMUNITY_UPDATE_KEYS.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise SystemExit(f"Community update trust store is invalid: {error}") from error
+    if not isinstance(document, dict) or set(document) != {"keys"} or document["keys"] != []:
+        raise SystemExit(
+            "Community updater must not embed remote release signing keys; "
+            "publishers are disabled until the community establishes its own signer."
+        )
+
+
+def assert_sensitive_local_control_defaults_disabled() -> None:
+    try:
+        schema = CONFIGURATION_SCHEMA.read_text(encoding="utf-8")
+    except OSError as error:
+        raise SystemExit(f"Community configuration schema is unavailable: {error}") from error
+    required = (
+        '{u"system/launch_as_administrator", booleanDefault(false), ConfigurationValueKind::Boolean}',
+        '{u"mcp/enabled", booleanDefault(false), ConfigurationValueKind::Boolean}',
+    )
+    missing = [entry for entry in required if entry not in schema]
+    if missing:
+        raise SystemExit(
+            "Sensitive local-control defaults must remain fail-closed in Community: " +
+            ", ".join(missing)
+        )
+
+
+def assert_privacy_persistence_defaults_disabled() -> None:
+    try:
+        schema = CONFIGURATION_SCHEMA.read_text(encoding="utf-8")
+    except OSError as error:
+        raise SystemExit(f"Community configuration schema is unavailable: {error}") from error
+    required = (
+        '{u"system/auto_start_at_boot", booleanDefault(false), ConfigurationValueKind::Boolean}',
+        '{u"capture_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean}',
+        '{u"pinned_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean}',
+    )
+    missing = [entry for entry in required if entry not in schema]
+    if missing:
+        raise SystemExit(
+            "Community persistence defaults must remain opt-in: " + ", ".join(missing)
+        )
+
+
+
+def immutable_git_dependency(specification: dict) -> bool:
+    revision = specification.get("rev")
+    return (
+        isinstance(specification.get("git"), str)
+        and isinstance(revision, str)
+        and re.fullmatch(r"[0-9a-fA-F]{40}", revision) is not None
+        and "branch" not in specification
+        and "tag" not in specification
+    )
+
+
+def _git_dependency_specs(value, location: str = ""):
+    if isinstance(value, dict):
+        if "git" in value:
+            yield location or "<root>", value
+        for key, child in value.items():
+            child_location = f"{location}.{key}" if location else str(key)
+            yield from _git_dependency_specs(child, child_location)
+    elif isinstance(value, list):
+        for index, child in enumerate(value):
+            yield from _git_dependency_specs(child, f"{location}[{index}]")
+
+
+def assert_external_source_pins() -> None:
+    violations: list[str] = []
+    gitmodules = ROOT / ".gitmodules"
+    if gitmodules.exists():
+        content = gitmodules.read_text(encoding="utf-8")
+        if re.search(r"(?m)^\s*branch\s*=", content):
+            violations.append(".gitmodules: submodules must follow the recorded gitlink, not a branch")
+        for match in re.finditer(r"(?m)^\s*path\s*=\s*(.+?)\s*$", content):
+            submodule_path = match.group(1)
+            candidate = Path(submodule_path)
+            if candidate.is_absolute() or ".." in candidate.parts:
+                violations.append(f".gitmodules: unsafe submodule path: {submodule_path}")
+                continue
+            staged = subprocess.run(
+                ["git", "ls-files", "--stage", "--", submodule_path],
+                cwd=ROOT, capture_output=True, text=True
+            )
+            fields = staged.stdout.strip().split(maxsplit=3)
+            if (
+                staged.returncode != 0
+                or len(fields) < 4
+                or fields[0] != "160000"
+                or re.fullmatch(r"[0-9a-fA-F]{40}", fields[1]) is None
+            ):
+                violations.append(
+                    f"{submodule_path}: submodule must be a tracked 160000 gitlink at a full commit"
+                )
+
+    tracked = git("ls-files", "-z").split(b"\x00")
+    manifests = sorted(
+        path.decode("utf-8", errors="replace")
+        for path in tracked
+        if path and (
+            path == b"Cargo.toml" or path.endswith(b"/Cargo.toml")
+        )
+    )
+    for relative in manifests:
+        path = ROOT / relative
+        try:
+            document = tomllib.loads(path.read_text(encoding="utf-8"))
+        except (OSError, tomllib.TOMLDecodeError) as error:
+            violations.append(f"{relative}: cannot inspect Cargo source pins: {error}")
+            continue
+        for location, specification in _git_dependency_specs(document):
+            if not immutable_git_dependency(specification):
+                violations.append(
+                    f"{relative}:{location}: git dependency requires an exact 40-character rev "
+                    "and must not use branch/tag"
+                )
+    if violations:
+        raise SystemExit(
+            "External source dependencies must be immutable:\n" + "\n".join(violations)
+        )
+
+
+
+def assert_workflow_actions_pinned() -> None:
+    violations: list[str] = []
+    for path in sorted(WORKFLOW_ROOT.glob("*.y*ml")):
+        content = path.read_text(encoding="utf-8")
+        for match in ACTION_USE.finditer(content):
+            action, reference = match.groups()
+            if action.startswith("./"):
+                continue
+            if re.fullmatch(r"[0-9a-fA-F]{40}", reference) is None:
+                line = content.count("\n", 0, match.start()) + 1
+                violations.append(f"{path.relative_to(ROOT).as_posix()}:{line}: {action}@{reference}")
+    if violations:
+        raise SystemExit(
+            "External GitHub Actions must be pinned to immutable 40-character commit SHAs:\n" +
+            "\n".join(violations)
+        )
+
+
 def assert_deleted_files_absent() -> None:
     policy = json.loads(POLICY.read_text(encoding="utf-8"))
     for path in policy["deleted_files"]:
@@ -120,6 +336,12 @@ def assert_deleted_files_absent() -> None:
             cwd=ROOT, capture_output=True
         ).returncode == 0:
             raise SystemExit(f"Previously removed commercial file was restored: {path}")
+    assert_forbidden_runtime_content_absent()
+    assert_community_update_signers_disabled()
+    assert_sensitive_local_control_defaults_disabled()
+    assert_privacy_persistence_defaults_disabled()
+    assert_workflow_actions_pinned()
+    assert_external_source_pins()
 
 
 def main() -> None:

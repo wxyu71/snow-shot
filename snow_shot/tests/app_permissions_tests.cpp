@@ -293,9 +293,10 @@ void routingPolicy() {
     for (auto action :
          {A::OpenScreenRecordingFolder, A::OpenCaptureHistory, A::OpenPinToScreenManagement,
           A::GlobalCanvas, A::StitchSelectedImages, A::SplitSelectedImages, A::EditSelectedImages,
-          A::OpenSettings, A::PinClipboardContent, A::PinSelectedFiles, A::HideShowAllWindows,
-          A::RestoreLastClosedWindows, A::SwitchWindowGroup, A::ToggleGlobalShortcuts,
-          A::ToggleDisableOnFocusedFullscreenWindow, A::ToggleWindowUnderCursorAlwaysOnTop})
+          A::CompressSelectedImages, A::OpenSettings, A::PinClipboardContent, A::PinSelectedFiles,
+          A::HideShowAllWindows, A::RestoreLastClosedWindows, A::SwitchWindowGroup,
+          A::ToggleGlobalShortcuts, A::ToggleGlobalMouse, A::ToggleDisableOnFocusedFullscreenWindow,
+          A::ToggleWindowUnderCursorAlwaysOnTop})
         require(requiredPermissions(action, true).isEmpty(),
                 "permission-free actions must remain usable");
     using M = settings::SettingsGlobalMouseAction;

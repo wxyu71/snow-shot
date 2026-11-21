@@ -7,12 +7,13 @@
 
 namespace snow_shot::app {
 [[nodiscard]] inline bool editionActionToolAvailable(const QString& id) {
-    // The Community screenshot action bar has one cloud action: Markdown.
+    // The Community screenshot action bar has one configurable Online OCR action.
     // QR scanning remains in the selection toolbar and Ctrl+D/local OCR is
     // independent of this configurable action list.
     if (id == QStringLiteral("barcode-recognition") ||
         id == QStringLiteral("table-recognition") ||
         id == QStringLiteral("latex-recognition") ||
+        id == QStringLiteral("document-recognition") ||
         id == QStringLiteral("convert-to-html")) {
         return false;
     }
@@ -30,13 +31,9 @@ namespace snow_shot::app {
         return false;
 #endif
     }
-    if (id == QStringLiteral("barcode-recognition"))
-        return edition::qrRecognition;
-    if (id == QStringLiteral("table-recognition"))
-        return edition::tableRecognition;
-    if (id == QStringLiteral("latex-recognition"))
-        return edition::latexRecognition;
-    if (id == QStringLiteral("convert-to-markdown") || id == QStringLiteral("convert-to-html"))
+    // Only Markdown is the configurable online OCR toolbar action. The
+    // unsupported IDs above are intentionally blocked before this point.
+    if (id == QStringLiteral("convert-to-markdown"))
         return edition::imageConversion;
     if (id == QStringLiteral("text-translation"))
         return edition::textTranslation;
@@ -56,6 +53,8 @@ namespace snow_shot::app {
         return edition::imageConversion;
     case 5:
         return edition::latexRecognition;
+    case 6:
+        return edition::documentRecognition;
     default:
         return false;
     }

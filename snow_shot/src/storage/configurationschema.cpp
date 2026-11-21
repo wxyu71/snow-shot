@@ -1,5 +1,6 @@
 #include "snow_shot/globalmouseactivationkeys.h"
 #include "snow_shot/storage/configurationschema.h"
+#include "snow_shot/storage/exporttasks.h"
 #include "snow_shot/ocrtextoptions.h"
 #include "snow_shot/proxyconfiguration.h"
 #include "snow_shot/selectiontransitionanimation.h"
@@ -263,6 +264,7 @@ const QStringList kSkinPositions = schemaStrings(kSkinPositionsData);
 
 constexpr SchemaString kActionToolbarItemIdsData[] = {u"barcode-recognition",
                                                       u"table-recognition",
+                                                      u"document-recognition",
                                                       u"convert-to-markdown",
                                                       u"latex-recognition",
                                                       u"convert-to-html",
@@ -337,8 +339,8 @@ QVector<QStringList> defaultDrawingToolbarPositions() {
 }
 
 constexpr SchemaString defaultActionToolbarPositionsGroup0[] = {
-    u"convert-to-html", u"convert-to-markdown", u"latex-recognition", u"barcode-recognition",
-    u"table-recognition"};
+    u"convert-to-html",     u"convert-to-markdown",  u"latex-recognition",
+    u"barcode-recognition", u"document-recognition", u"table-recognition"};
 constexpr SchemaString defaultActionToolbarPositionsGroup1[] = {u"record-screen"};
 constexpr SchemaString defaultActionToolbarPositionsGroup2[] = {u"pin-window-to-screen",
                                                                 u"pin-to-screen"};
@@ -368,6 +370,7 @@ QVector<QStringList> defaultActionToolbarPositions() {
 
 constexpr SchemaString kPinnedActionToolbarItemIdsData[] = {u"barcode-recognition",
                                                             u"table-recognition",
+                                                            u"document-recognition",
                                                             u"convert-to-markdown",
                                                             u"latex-recognition",
                                                             u"convert-to-html",
@@ -386,8 +389,8 @@ const QStringList kPinnedActionToolbarItemIds =
     editionActionIds(schemaStrings(kPinnedActionToolbarItemIdsData));
 
 constexpr SchemaString defaultPinnedActionToolbarPositionsGroup0[] = {
-    u"convert-to-html", u"convert-to-markdown", u"latex-recognition", u"barcode-recognition",
-    u"table-recognition"};
+    u"convert-to-html",     u"convert-to-markdown",  u"latex-recognition",
+    u"barcode-recognition", u"document-recognition", u"table-recognition"};
 constexpr SchemaString defaultPinnedActionToolbarPositionsGroup1[] = {u"text-recognition"};
 constexpr SchemaString defaultPinnedActionToolbarPositionsGroup2[] = {u"text-translation"};
 constexpr SchemaString defaultPinnedActionToolbarPositionsGroup3[] = {u"separator"};
@@ -459,7 +462,13 @@ constexpr SchemaString kSchemaStrings2[] = {u"Ctrl+U"};
 constexpr ConfigurationIntegerRange kSchemaRange0{10, 100, 1};
 constexpr SchemaString kSchemaStrings3[] = {u"icon", u"toolbar"};
 constexpr SchemaAllowedValues kSchemaAllowed0 = {kSchemaStrings3, std::size(kSchemaStrings3)};
-constexpr ConfigurationIntegerRange kSchemaRange1{5, 5, 1};
+constexpr SchemaString kFloatingToolbarDropBehaviors[] = {u"pin_to_screen", u"image_stitching",
+                                                          u"image_splitting", u"image_editing"};
+constexpr SchemaAllowedValues kFloatingToolbarDropBehaviorValues = {
+    kFloatingToolbarDropBehaviors, std::size(kFloatingToolbarDropBehaviors)};
+constexpr int kConfigurationSchemaVersion = 8;
+constexpr ConfigurationIntegerRange kSchemaRange1{kConfigurationSchemaVersion,
+                                                  kConfigurationSchemaVersion, 1};
 constexpr SchemaString kSchemaStrings4[] = {u"system", u"light", u"dark"};
 constexpr SchemaAllowedValues kSchemaAllowed1 = {kSchemaStrings4, std::size(kSchemaStrings4)};
 constexpr ConfigurationIntegerRange kSchemaRange2{12, 32, 1};
@@ -472,11 +481,14 @@ constexpr SchemaAllowedValues kSchemaAllowed4 = {kSchemaStrings6, std::size(kSch
 constexpr SchemaString kSchemaStrings7[] = {u"user_interactive", u"user_initiated", u"default",
                                             u"utility", u"background"};
 constexpr SchemaAllowedValues kSchemaAllowed5 = {kSchemaStrings7, std::size(kSchemaStrings7)};
+constexpr SchemaString kPowerQoSValues[] = {u"performance", u"normal", u"power_saving"};
+constexpr SchemaAllowedValues kPowerQoSAllowedValues = {kPowerQoSValues,
+                                                        std::size(kPowerQoSValues)};
 constexpr SchemaString kSchemaStrings8[] = {u"smart_control", u"disabled"};
 constexpr SchemaAllowedValues kSchemaAllowed6 = {kSchemaStrings8, std::size(kSchemaStrings8)};
 constexpr SchemaString kSchemaStrings9[] = {u"images_only", u"image_files", u"disabled"};
 constexpr SchemaAllowedValues kSchemaAllowed7 = {kSchemaStrings9, std::size(kSchemaStrings9)};
-constexpr SchemaString kSchemaStrings10[] = {u"manual", u"check"};
+constexpr SchemaString kSchemaStrings10[] = {u"manual", u"check", u"next_launch"};
 constexpr SchemaAllowedValues kSchemaAllowed8 = {kSchemaStrings10, std::size(kSchemaStrings10)};
 constexpr SchemaString kSchemaStrings11[] = {u"manual", u"check", u"download", u"next_launch"};
 [[maybe_unused]] constexpr SchemaAllowedValues kSchemaAllowed9 = {kSchemaStrings11,
@@ -513,6 +525,10 @@ constexpr SchemaString kSchemaStrings21[] = {u"Ctrl+F1"};
 constexpr SchemaString kSchemaStrings22[] = {u"F3"};
 constexpr SchemaString kSchemaStrings23[] = {u"Ctrl+F3"};
 constexpr SchemaString kSchemaStrings24[] = {u"all_windows", u"game_windows"};
+constexpr SchemaString kDefaultFullscreenDisableScope[] = {u"global_shortcuts"};
+constexpr SchemaString kFullscreenDisableScopeValues[] = {u"global_shortcuts", u"global_mouse"};
+constexpr SchemaAllowedValues kFullscreenDisableScopeAllowed = {
+    kFullscreenDisableScopeValues, std::size(kFullscreenDisableScopeValues)};
 constexpr SchemaAllowedValues kSchemaAllowed20 = {kSchemaStrings24, std::size(kSchemaStrings24)};
 [[maybe_unused]] constexpr SchemaProperty kSchemaProperties0[] = {{u"activation_key", u"windows"},
                                                                   {u"mouse_button", u"left_drag"}};
@@ -678,6 +694,9 @@ constexpr SchemaString kSchemaStrings117[] = {u"none",
                                               u"show_main_window",
                                               u"screenshot_copy",
                                               u"screenshot_fixed",
+                                              u"pin_clipboard_content",
+                                              u"restore_last_closed_windows",
+                                              u"hide_show_all_windows",
                                               u"open_capture_history",
                                               u"open_pin_to_screen_management",
                                               u"open_function_settings"};
@@ -706,6 +725,7 @@ constexpr SchemaString kSchemaStrings119[] = {u"quick.screenshot",
                                               u"quick.screenshot-quick-save",
                                               u"quick.screenshot-full-screen",
                                               u"quick.screenshot-focused-window",
+                                              u"quick.open-capture-history",
                                               u"quick.pin-clipboard-content",
                                               u"quick.pin-selected-files",
                                               u"quick.restore-last-closed-windows",
@@ -714,14 +734,15 @@ constexpr SchemaString kSchemaStrings119[] = {u"quick.screenshot",
                                               u"quick.screen-record",
                                               u"quick.screen-record-copy",
                                               u"quick.open-screen-recording-folder",
-                                              u"quick.open-capture-history",
                                               u"quick.global-canvas",
                                               u"quick.stitch-selected-images",
                                               u"quick.split-selected-images",
                                               u"quick.edit-selected-images",
+                                              u"quick.compress-selected-images",
                                               u"quick.translate-selected-text",
                                               u"quick.toggle-window-under-cursor-always-on-top",
                                               u"quick.toggle-global-hotkeys",
+                                              u"quick.toggle-global-mouse",
                                               u"quick.toggle-disable-on-focused-fullscreen-window",
                                               u"tray.window-grouping",
                                               u"tray.show-main-window",
@@ -741,6 +762,7 @@ constexpr SchemaString kSchemaStrings120[] = {u"quick.screenshot",
                                               u"quick.screenshot-quick-save",
                                               u"quick.screenshot-full-screen",
                                               u"quick.screenshot-focused-window",
+                                              u"quick.open-capture-history",
                                               u"quick.pin-clipboard-content",
                                               u"quick.pin-selected-files",
                                               u"quick.restore-last-closed-windows",
@@ -749,13 +771,14 @@ constexpr SchemaString kSchemaStrings120[] = {u"quick.screenshot",
                                               u"quick.screen-record",
                                               u"quick.screen-record-copy",
                                               u"quick.open-screen-recording-folder",
-                                              u"quick.open-capture-history",
                                               u"quick.global-canvas",
                                               u"quick.stitch-selected-images",
                                               u"quick.split-selected-images",
                                               u"quick.edit-selected-images",
+                                              u"quick.compress-selected-images",
                                               u"quick.translate-selected-text",
                                               u"quick.toggle-global-hotkeys",
+                                              u"quick.toggle-global-mouse",
                                               u"quick.toggle-disable-on-focused-fullscreen-window",
                                               u"tray.window-grouping",
                                               u"tray.show-main-window",
@@ -795,10 +818,6 @@ constexpr SchemaAllowedValues kHiDpiImageScalingAllowed = {kHiDpiImageScalingVal
 
 constexpr SchemaString kSchemaStrings127[] = {u"follow_mouse_movement", u"follow_mouse_position"};
 constexpr SchemaAllowedValues kSchemaAllowed58 = {kSchemaStrings127, std::size(kSchemaStrings127)};
-constexpr SchemaString kSchemaStrings128[] = {
-    u"copy_screenshot",        u"copy_scrolling_screenshot", u"copy_pinned_image",
-    u"capture_focused_window", u"capture_current_monitor",   u"pin_to_screen"};
-constexpr SchemaAllowedValues kSchemaAllowed59 = {kSchemaStrings128, std::size(kSchemaStrings128)};
 constexpr SchemaString kSchemaStrings129[] = {u"png", u"jpeg", u"bmp",  u"webp",
                                               u"jxl", u"avif", u"tiff", u"pdf"};
 constexpr SchemaAllowedValues kSchemaAllowed60 = {kSchemaStrings129, std::size(kSchemaStrings129)};
@@ -852,6 +871,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"pin_to_screen_shortcuts/upload_to_cloud", stringsDefault(kSchemaStrings2),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"floating_toolbar/enabled", booleanDefault(false), ConfigurationValueKind::Boolean},
+    {u"floating_toolbar/drop_behavior", stringDefault(u"pin_to_screen"),
+     ConfigurationValueKind::String, nullptr, &kFloatingToolbarDropBehaviorValues},
     {u"floating_toolbar/opacity", integerDefault(50), ConfigurationValueKind::Integer,
      &kSchemaRange0},
     {u"floating_toolbar/hide_in_fullscreen", booleanDefault(true), ConfigurationValueKind::Boolean},
@@ -872,7 +893,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
 #if SNOW_SHOT_ENABLE_API_CONFIGURATION
     {u"api_configuration/custom_models", emptyArrayDefault(), ConfigurationValueKind::Structured},
 #endif
-    {u"storage/schema_version", integerDefault(5), ConfigurationValueKind::Integer, &kSchemaRange1},
+    {u"storage/schema_version", integerDefault(kConfigurationSchemaVersion),
+     ConfigurationValueKind::Integer, &kSchemaRange1},
     {u"interface/theme_mode", stringDefault(u"system"), ConfigurationValueKind::String, nullptr,
      &kSchemaAllowed1},
     {u"interface/theme_primary_color", stringDefault(u"#1677FFFF"), ConfigurationValueKind::String},
@@ -901,9 +923,11 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      nullptr, &kSchemaAllowed4},
     {u"system/application_qos", stringDefault(u"user_interactive"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed5},
+    {u"system/power_qos", stringDefault(u"performance"), ConfigurationValueKind::String, nullptr,
+     &kPowerQoSAllowedValues},
     {u"system/memory_optimization_policy", stringDefault(u"smart_control"),
      ConfigurationValueKind::String, nullptr, &kSchemaAllowed6},
-    {u"system/auto_start_at_boot", booleanDefault(true), ConfigurationValueKind::Boolean},
+    {u"system/auto_start_at_boot", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"system/context_menu_mode", stringDefault(u"image_files"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed7},
     {u"system/annotation_mode_when_opening_for_editing", booleanDefault(true),
@@ -911,10 +935,10 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"system/launch_as_administrator", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"mcp/enabled", booleanDefault(false), ConfigurationValueKind::Boolean},
 #ifdef Q_OS_MACOS
-    {u"updates/mode", stringDefault(u"check"), ConfigurationValueKind::String, nullptr,
+    {u"updates/mode", stringDefault(u"next_launch"), ConfigurationValueKind::String, nullptr,
      &kSchemaAllowed8},
 #else
-    {u"updates/mode", stringDefault(u"download"), ConfigurationValueKind::String, nullptr,
+    {u"updates/mode", stringDefault(u"next_launch"), ConfigurationValueKind::String, nullptr,
      &kSchemaAllowed9},
 #endif
     {u"network/proxy", stringDefault(u"none"), ConfigurationValueKind::String, nullptr,
@@ -951,10 +975,10 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"screenshot_conversion/vision_model", stringDefault({}), ConfigurationValueKind::String},
 #endif
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION
-    {u"screenshot_table/model", stringDefault(u"dedicated"), ConfigurationValueKind::String},
+    {u"screenshot_table/model", stringDefault(u"snow-shot:vision"), ConfigurationValueKind::String},
 #endif
 #if SNOW_SHOT_ENABLE_LATEX_RECOGNITION
-    {u"screenshot_latex/model", stringDefault(u"dedicated"), ConfigurationValueKind::String},
+    {u"screenshot_latex/model", stringDefault(u"snow-shot:vision"), ConfigurationValueKind::String},
 #endif
 #if SNOW_SHOT_ENABLE_EXTENDED_FEATURES
     {u"extended_features/standalone_translation_window", booleanDefault(false),
@@ -1048,6 +1072,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"global_shortcuts/edit_selected_images", emptyArrayDefault(),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
+    {u"global_shortcuts/compress_selected_images", emptyArrayDefault(),
+     ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"global_shortcuts/open_settings", emptyArrayDefault(), ConfigurationValueKind::StringList,
      nullptr, nullptr, 2},
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION
@@ -1068,12 +1094,16 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"global_shortcuts/toggle_global_hotkeys", emptyArrayDefault(),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
+    {u"global_shortcuts/toggle_global_mouse", emptyArrayDefault(),
+     ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"global_shortcuts/toggle_disable_on_focused_fullscreen_window", emptyArrayDefault(),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"global_shortcuts/disable_on_focused_fullscreen_window", booleanDefault(false),
      ConfigurationValueKind::Boolean},
     {u"global_shortcuts/fullscreen_window_filter", stringDefault(u"game_windows"),
      ConfigurationValueKind::String, nullptr, &kSchemaAllowed20},
+    {u"global_shortcuts/fullscreen_disable_scope", stringsDefault(kDefaultFullscreenDisableScope),
+     ConfigurationValueKind::StringList, nullptr, &kFullscreenDisableScopeAllowed},
 
 #ifdef Q_OS_MACOS
     {u"global_mouse/screenshot_copy", emptyObjectDefault(), ConfigurationValueKind::Structured},
@@ -1281,6 +1311,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"drawing_shortcuts/reset_canvas", stringsDefault(kSchemaStrings46),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"drawing_shortcuts/watermark", stringsDefault(kSchemaStrings47),
+     ConfigurationValueKind::StringList, nullptr, nullptr, 2},
+    {u"drawing_shortcuts/cycle_annotation_tool_options", stringsDefault(kSchemaStrings56),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
     {u"screenshot_shortcuts/move_tool", stringsDefault(kSchemaStrings48),
      ConfigurationValueKind::StringList, nullptr, nullptr, 2},
@@ -1510,6 +1542,7 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      ConfigurationValueKind::Boolean},
     {u"screenshot_ui/show_guides_by_default", booleanDefault(false),
      ConfigurationValueKind::Boolean},
+    {u"screenshot_ui/adaptive_guide_colors", booleanDefault(true), ConfigurationValueKind::Boolean},
     {u"screenshot_ui/cursor_guide_line_color", stringDefault(u"#000000FF"),
      ConfigurationValueKind::String},
     {u"screenshot_ui/selection_center_guide_line_color", stringDefault(u"#4096FFFF"),
@@ -1649,11 +1682,7 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      nullptr, &kHiDpiImageScalingAllowed},
     {u"screenshot/selection_resize_mode", stringDefault(u"follow_mouse_movement"),
      ConfigurationValueKind::String, nullptr, &kSchemaAllowed58},
-    {u"screenshot/auto_save_after_execution_actions", emptyArrayDefault(),
-     ConfigurationValueKind::StringList, nullptr, &kSchemaAllowed59},
     {u"screenshot/copy_image_file_to_clipboard", booleanDefault(false),
-     ConfigurationValueKind::Boolean},
-    {u"screenshot/copy_after_pinning_to_screen", booleanDefault(false),
      ConfigurationValueKind::Boolean},
     {u"screenshot/keep_annotations_editable_after_pinning_to_screen", booleanDefault(false),
      ConfigurationValueKind::Boolean},
@@ -1716,7 +1745,7 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      ConfigurationValueKind::String},
     {u"screenshot_selection/selection_rect_presets", emptyArrayDefault(),
      ConfigurationValueKind::Structured},
-    {u"capture_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean},
+    {u"capture_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"capture_history/keep_permanently", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"capture_history/compression_level", stringDefault(u"medium"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed69},
@@ -1726,7 +1755,7 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      &kSchemaRange25},
     {u"capture_history/max_disk_mib", integerDefault(1024), ConfigurationValueKind::Integer,
      &kSchemaRange26},
-    {u"pinned_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean},
+    {u"pinned_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"pinned_history/keep_permanently", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"pinned_history/compression_level", stringDefault(u"medium"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed69},
@@ -1830,6 +1859,8 @@ Q_NEVER_INLINE ConfigurationSchemaEntry materializeEntry(const SchemaEntryDescri
 }
 
 bool shortcutConfigurationKey(const QString& key) {
+    if (key == QStringLiteral("global_shortcuts/fullscreen_disable_scope"))
+        return false;
     return key.startsWith(QStringLiteral("global_shortcuts/")) ||
            key.startsWith(QStringLiteral("drawing_shortcuts/")) ||
            key.startsWith(QStringLiteral("screenshot_shortcuts/")) ||
@@ -1857,9 +1888,12 @@ QJsonArray macGlobalShortcutDefault(const QString& portableText, quint32 virtual
 
 QVector<ConfigurationSchemaEntry> buildEntries() {
     QVector<ConfigurationSchemaEntry> result;
-    result.reserve(static_cast<qsizetype>(std::size(kEntryDescriptors)));
+    result.reserve(static_cast<qsizetype>(std::size(kEntryDescriptors) + exportTaskRows.size()));
     for (const SchemaEntryDescriptor& descriptor : kEntryDescriptors)
         result.push_back(materializeEntry(descriptor));
+    for (const auto& row : exportTaskRows)
+        result.push_back({row.key.toString(), QJsonArray{}, ConfigurationValueKind::StringList,
+                          std::nullopt, exportTaskIds(row.allowed)});
     for (ConfigurationSchemaEntry& entry : result) {
         if (!shortcutConfigurationKey(entry.key) ||
             entry.valueKind != ConfigurationValueKind::StringList) {
@@ -2540,6 +2574,23 @@ normalizeToolbarLayout(const QJsonValue& value, const QStringList& itemIds,
             hiddenSet.insert(QStringLiteral("latex-recognition"));
         }
     }
+    if (known.contains(QStringLiteral("document-recognition")) &&
+        !positioned.contains(QStringLiteral("document-recognition")) &&
+        !hiddenSet.contains(QStringLiteral("document-recognition"))) {
+        for (QStringList& position : positions) {
+            const auto table = position.indexOf(QStringLiteral("table-recognition"));
+            if (table >= 0) {
+                position.insert(table, QStringLiteral("document-recognition"));
+                positioned.insert(QStringLiteral("document-recognition"));
+                break;
+            }
+        }
+        if (!positioned.contains(QStringLiteral("document-recognition")) &&
+            hiddenSet.contains(QStringLiteral("table-recognition"))) {
+            hidden.push_back(QStringLiteral("document-recognition"));
+            hiddenSet.insert(QStringLiteral("document-recognition"));
+        }
+    }
     // Preserve the former fixed prefix when upgrading saved annotation layouts.
     for (const QString& id : {QStringLiteral("select-separator"), QStringLiteral("select")}) {
         if (known.contains(id) && !positioned.contains(id) && !hiddenSet.contains(id)) {
@@ -2760,8 +2811,7 @@ ConfigurationNormalization ConfigurationSchema::normalize(const QString& key,
         return {value, true, false};
     }
 #ifdef Q_OS_MACOS
-    if (key == u"updates/mode" &&
-        (value.toString() == u"download" || value.toString() == u"next_launch")) {
+    if (key == u"updates/mode" && value.toString() == u"download") {
         return {QStringLiteral("check"), true, true};
     }
 #endif
@@ -3051,6 +3101,35 @@ ConfigurationSchema::migrateLegacyValues(QMap<QString, QJsonValue> values) {
                 QStringLiteral("capture_current_monitor")};
         }
         values.insert(actionsKey, actions);
+    }
+    const auto oldActions = values.take(actionsKey);
+    const auto pinCopy = values.take(QStringLiteral("screenshot/copy_after_pinning_to_screen"));
+    QSet<QString> actions;
+    for (const auto& value : oldActions.toArray())
+        actions.insert(value.toString().trimmed().toLower());
+    const auto migrate = [&](ExportTrigger trigger, ExportTasks tasks) {
+        const auto key = exportTaskRow(trigger).key.toString();
+        if (!values.contains(key))
+            values.insert(key, QJsonArray::fromStringList(exportTaskIds(tasks)));
+    };
+    if (!oldActions.isUndefined() && !oldActions.isNull()) {
+        const bool screenshotCopy = actions.contains(QStringLiteral("copy_screenshot")) ||
+                                    actions.contains(QStringLiteral("copy_scrolling_screenshot")) ||
+                                    actions.contains(QStringLiteral("capture_current_monitor")) ||
+                                    actions.contains(QStringLiteral("capture_focused_window"));
+        migrate(ExportTrigger::ScreenshotCopy,
+                screenshotCopy ? ExportTask::AutoSave : ExportTasks{});
+        migrate(ExportTrigger::PinnedCopy, actions.contains(QStringLiteral("copy_pinned_image"))
+                                               ? ExportTask::AutoSave
+                                               : ExportTasks{});
+    }
+    if (!oldActions.isNull() || !pinCopy.isNull()) {
+        ExportTasks pin;
+        if (actions.contains(QStringLiteral("pin_to_screen")))
+            pin |= ExportTask::AutoSave;
+        if (pinCopy.toBool())
+            pin |= ExportTask::CopyImage;
+        migrate(ExportTrigger::ScreenshotPin, pin);
     }
     return values;
 }
