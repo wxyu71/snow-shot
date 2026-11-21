@@ -97,7 +97,9 @@ class ScreenshotOcrController final : public QObject {
     [[nodiscard]] bool tableModeActive() const;
     [[nodiscard]] bool qrModeActive() const;
     [[nodiscard]] bool latexModeActive() const;
-    [[nodiscard]] bool copyRecognitionToClipboard(bool endCapture = true);
+    [[nodiscard]] bool copyRecognitionToClipboard(bool endCapture = true,
+                                                  bool copyFullTextResult = false,
+                                                  std::function<void(QImage)> copyImage = {});
     void scheduleCopyRecognitionAndEndCapture();
     void mergeTableSelection();
     void splitTableSelection();

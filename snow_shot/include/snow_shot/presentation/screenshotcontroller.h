@@ -20,6 +20,7 @@ struct SelectedFileTarget;
 namespace snow_shot::presentation {
 class PinnedWindowGroupManager;
 enum class GlobalShortcutAction;
+struct AppPermissionSnapshot;
 } // namespace snow_shot::presentation
 class ScreenshotOcrRecognitionService;
 class ScreenshotQrRecognitionPort;
@@ -93,6 +94,10 @@ class ScreenshotController : public QObject {
     void setPrintService(ScreenshotPrintService* service);
     void setAirDropService(ScreenshotAirDropService* service);
     void setRecordingPermissionCheck(std::function<bool(bool, bool, bool)> check);
+#ifdef Q_OS_MACOS
+    void setRecordingPreviewPermissionSnapshot(
+        const snow_shot::presentation::AppPermissionSnapshot& snapshot);
+#endif
     void prepareForSessionEnd(int timeoutMs);
     void offerRecordingRecovery();
 
@@ -139,6 +144,7 @@ class ScreenshotController : public QObject {
     void startOrStopScreenRecordingAndCopy();
     void openScreenRecordingFolder();
     void editHistoryRecord(const QString& recordId);
+    void pinDirectCapture(const QImage& image, const QRect& logicalBounds);
     void pinHistoryRecord(const QString& recordId);
     void pinClipboardContentToScreen();
     void pinSelectedFilesToScreen();
@@ -154,9 +160,11 @@ class ScreenshotController : public QObject {
     void imageStitchingRequested(const QVector<ScreenshotPinnedImageSnapshot>& snapshots);
     void imageSplittingRequested(const snow_shot::presentation::ImageSplitSource& source);
     void scrollingImageEditingRequested(const ScreenshotExportSource& source);
+    void imageCompressionRequested(const ScreenshotPinnedImageSnapshot& snapshot);
     void pinnedImageEditingRequested(const QString& recordId);
     void recordingExportNotificationRequested(const QString& path);
     void markdownCopied();
+    void exportTaskFailed(const QString& message);
     void captureActivityChanged(const QString& source, bool active);
     void selectedFilePinFailed(const QString& message);
     void showMainWindowRequested();
@@ -173,6 +181,10 @@ class ScreenshotController : public QObject {
     struct Impl;
 
     std::unique_ptr<Impl> m_impl;
+
+    [[nodiscard]] bool
+    handleActiveScreenshotShortcut(snow_shot::presentation::GlobalShortcutAction action,
+                                   bool requireActivation);
 };
 
 #endif // SNOW_SHOT_PRESENTATION_SCREENSHOTCONTROLLER_H
