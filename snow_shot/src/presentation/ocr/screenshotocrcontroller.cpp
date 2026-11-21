@@ -2,6 +2,7 @@
 #include "snow_shot/network/communitycloudocrsettings.h"
 #include "snow_shot/storage/settingsadapters.h"
 #include "snow_shot/presentation/screenshotclipboardcontent.h"
+#include "snow_shot/presentation/screenshotclipboardservice.h"
 #include "snow_shot/presentation/screenshotdocumentformatting.h"
 #include <QTextDocument>
 #include <QCryptographicHash>
@@ -333,6 +334,8 @@ ScreenshotOcrController::ScreenshotOcrController(ScreenshotOcrControllerContext 
                 return !m_copyAndEndCapture && (!m_context.shouldRenderTextBackground ||
                                                 m_context.shouldRenderTextBackground());
             },
+            {},
+            Qt::ApplicationModal,
         },
         this);
     connect(m_session.get(), &ScreenshotRecognitionSessionController::textEditingChanged, this,
@@ -591,14 +594,37 @@ void ScreenshotOcrController::scheduleCopyRecognitionAndEndCapture() {
     QTimer::singleShot(0, this, [this, activation = m_activationId] {
         if (activation == m_activationId && m_active && m_mode == Mode::Text && !translating() &&
             hasTextResult())
-            static_cast<void>(copyRecognitionToClipboard(true));
+            static_cast<void>(copyRecognitionToClipboard(true, /*copyFullTextResult=*/true));
     });
 }
 
-bool ScreenshotOcrController::copyRecognitionToClipboard(bool endCapture) {
+bool ScreenshotOcrController::copyRecognitionToClipboard(bool endCapture, bool copyFullTextResult,
+                                                         std::function<void(QImage)> copyImage) {
     if (!m_active || QApplication::clipboard() == nullptr) {
         return false;
     }
+    const auto smartPublication = ScreenshotClipboardService::reservePublication();
+    const QPointer<ScreenshotOcrController> smartGuard(this);
+    const auto smartActivation = m_activationId;
+    if (m_session->prepareSmartClipboard(
+            m_presentation.get(), copyFullTextResult,
+            [smartGuard, smartActivation, smartPublication, endCapture](auto mime) {
+                if (!smartGuard || !smartGuard->m_active ||
+                    smartActivation != smartGuard->m_activationId)
+                    return;
+                static_cast<void>(ScreenshotClipboardService::commitMimeData(
+                    QApplication::clipboard(), smartGuard, mime.release(), smartPublication,
+                    [smartGuard, smartActivation, endCapture](const auto& result) {
+                        if (!smartGuard || !smartGuard->m_active ||
+                            smartActivation != smartGuard->m_activationId)
+                            return;
+                        if (!result.succeeded())
+                            smartGuard->showStatus(result.errorString(), true);
+                        else if (endCapture && !result.superseded)
+                            smartGuard->m_context.cancelCapture();
+                    }));
+            }))
+        return true;
 #if SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION
     if (m_session->mode() == ScreenshotRecognitionSessionController::Mode::Document) {
         const auto request = m_session->documentCopyRequest();
@@ -639,17 +665,23 @@ bool ScreenshotOcrController::copyRecognitionToClipboard(bool endCapture) {
         }
     }
     // Conversion toolbar Copy exports source; selection Copy is handled inside the preview.
-    bool copied = !m_session->conversionModeActive() && m_recognitionWindow != nullptr &&
-                  m_recognitionWindow->copyVisibleContentToClipboard();
+    const bool resolveTranslation = copyImage && m_session->translating();
+    const bool copied = !resolveTranslation && !copyFullTextResult &&
+                        !m_session->conversionModeActive() && m_recognitionWindow != nullptr &&
+                        m_recognitionWindow->copyVisibleContentToClipboard();
     if (!copied) {
         std::unique_ptr<QMimeData> mimeData =
-            m_session->recognitionClipboardMimeData(m_presentation.get());
+            m_session->recognitionClipboardMimeData(m_presentation.get(), copyFullTextResult);
         if (mimeData == nullptr) {
             if (m_session->translating())
                 showStatus(QCoreApplication::translate("ScreenshotRecognitionSessionController",
                                                        "Unable to copy translation results"),
                            true);
             return false;
+        }
+        if (copyImage && mimeData->hasImage()) {
+            copyImage(qvariant_cast<QImage>(mimeData->imageData()));
+            return true;
         }
         QApplication::clipboard()->setMimeData(mimeData.release(), QClipboard::Clipboard);
     }
