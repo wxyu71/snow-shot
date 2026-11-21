@@ -783,6 +783,14 @@
     },
     {
       "variant": "outlined",
+      "symbol": "ImageCompression",
+      "name": "image-compression",
+      "source": "../src/presentation/components/icons/resources/image-compression.svg",
+      "colorModel": "monochrome",
+      "fit": "contain"
+    },
+    {
+      "variant": "outlined",
       "symbol": "ImageEditing",
       "name": "image-editing",
       "source": "../src/presentation/components/icons/resources/image-editing.svg",
@@ -1690,6 +1698,14 @@
       "symbol": "ToolWavyUnderline",
       "name": "tool-wavy-underline",
       "source": "../src/presentation/components/icons/resources/tool-wavy-underline.svg",
+      "colorModel": "monochrome",
+      "fit": "contain"
+    },
+    {
+      "variant": "outlined",
+      "symbol": "TransparentLayer",
+      "name": "transparent-layer",
+      "source": "../src/presentation/components/icons/resources/transparent-layer.svg",
       "colorModel": "monochrome",
       "fit": "contain"
     },
