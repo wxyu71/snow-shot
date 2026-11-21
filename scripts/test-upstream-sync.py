@@ -476,6 +476,31 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertTrue((source_root / "src/storage/configurationsecretprotection_p.h").is_file())
         self.assertTrue((source_root / "tests/screenshot_document_recognition_tests.cpp").is_file())
         self.assertIn("screenshot_document_recognition_tests.cpp", cmake)
+        # Optional newer official sources must be registered when selectively
+        # adopted. Never copy a feature .cpp without its target/test wiring.
+        incoming_sources = (
+            "src/presentation/services/imageexporteditor.cpp",
+            "src/presentation/services/imagecompressionwindow.cpp",
+            "src/presentation/services/screenshotexporttasks.cpp",
+            "src/platform/windows/processpowerqos.cpp",
+        )
+        for source in incoming_sources:
+            if (source_root / source).is_file():
+                self.assertIn(source, cmake,
+                              f"Partial upstream import without CMake registration: {source}")
+        if (source_root / "src/presentation/services/imageexporteditor.cpp").is_file():
+            self.assertTrue(
+                (source_root / "src/presentation/services/imageexporteditor_p.h").is_file(),
+                "ImageExportEditor implementation and private UI header must remain together",
+            )
+        for test_name in (
+            "imagecompression_tests.cpp",
+            "power_qos_settings_tests.cpp",
+            "macos_pinned_transparent_layer_tests.mm",
+        ):
+            if (source_root / "tests" / test_name).is_file():
+                self.assertIn(test_name, cmake,
+                              f"Upstream test fixture exists but has no CMake target: {test_name}")
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
