@@ -96,6 +96,13 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertIn("No changes were merged into main.", workflow)
         self.assertIn("exit 1", workflow)  # Unexpected PR failures remain fatal.
 
+        # Shared Community policy is authoritative; no moving Action tags or
+        # official repository identity hardcoded into a distributable workflow.
+        self.assertRegex(workflow, r"uses:\s+actions/checkout@[0-9a-f]{40}\\b")
+        self.assertNotIn("mg-chao/snow-shot", workflow)
+        self.assertIn('upstream_repo="$(python3 -c', workflow)
+        self.assertIn('git remote add upstream "https://github.com/${upstream_repo}.git"', workflow)
+
         self.assertIn('git switch -C "$branch" upstream/main', workflow)
         self.assertIn('git diff --name-only --diff-filter=U', workflow)
         self.assertIn('git push origin "HEAD:refs/heads/$branch"', workflow)
