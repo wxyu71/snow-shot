@@ -49,6 +49,10 @@ A confirmed Community code-quality inconsistency was fixed: `editionActionToolAv
 
 New upstream screenshot follow-up/export task configuration, translation layout, pinned-history operations, and compression/clipboard behavior are product changes, not merely maintenance. Check their default settings and interactions with Community offline OCR, direct Cloud OCR, history, permissions and update behavior. PR #2 already introduces an optional user-supplied Vision engine beyond the initial PaddleOCR-only scope; explicitly approve it or separate it. PR #2 changes `capture_history/enabled` and `pinned_history/enabled` defaults to `false`; confirm new-install and migrated-profile expectations.
 
+### Integration dependency example — do not cherry-pick an isolated bug fix
+
+Official commit `1030325d` fixes duplicate image-compression/edit actions in `screenshothistorypagewidget.cpp` and strengthens `screenshot_history_page_tests.cpp`. That patch references `m_imageCompressionRequested`, which **does not yet exist** in PR #2's version of the history widget. Therefore even this apparently small, well-intentioned two-file fix is **not independently applicable**; it must be considered alongside the upstream image-compression feature and its UI/test/CMake registrations. The commit is deferred rather than partially transplanted into the beta candidate.
+
 ### High — GitHub workflows, source boundaries and deletion protection
 
 The original PR #2 and PR #3 had conflicting sync workflow versions and tests. The reconciled candidate must preserve PR #3's real Git conflict candidates, immutable review branches, token-permission fallback and upstream-ancestry test **and** PR #2's pinned Actions, upstream identity loaded from policy, deleted-file and forbidden-runtime scans. The removed Homebrew workflow is explicitly denied by `.github/upstream-protection.json`. Validate the actual **combined** tree, not prior independent green runs.
