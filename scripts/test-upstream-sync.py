@@ -378,7 +378,7 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         sources = [ROOT / "README.md", ROOT / "README.zh-CN.md", *community]
         for source in sources:
             content = source.read_text(encoding="utf-8")
-            for match in re.finditer(r"(?<!!)\\[[^\\]\\n]*\\]\\(([^)]+)\\)", content):
+            for match in re.finditer(r"(?<!!)\[[^\]\n]*\]\(([^)]+)\)", content):
                 url = match.group(1).split(" ", 1)[0]
                 if not url or url.startswith(("http:", "https:", "mailto:", "#", "data:")):
                     continue
