@@ -53,6 +53,12 @@ class UpstreamSyncGuardTests(unittest.TestCase):
             "review"
         )
 
+    def test_removed_homebrew_workflow_cannot_reappear(self):
+        path = ".github/workflows/snow-shot-homebrew-checks.yml"
+        self.assertIn(path, self.policy["deleted_files"])
+        self.assertFalse((ROOT / path).exists())
+        self.assertEqual(self.decision([path])["mode"], "review")
+
     def test_protected_cloud_ocr_file_requires_review(self):
         self.assertEqual(
             self.decision(["snow_shot/src/network/baidupaddleocrclient.cpp"])["mode"],
