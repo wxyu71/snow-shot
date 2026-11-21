@@ -20,6 +20,7 @@ set(_snow_x264_patches
 )
 
 if(VCPKG_TARGET_IS_WINDOWS AND "$ENV{SNOW_X264_USE_GIT_MIRROR}" STREQUAL "1")
+    message(STATUS "x264: using Git mirror at pinned commit ${ref}")
     # The CI runner could not retrieve VideoLAN's GitLab archive (curl 56).
     # The GitHub mirror exposes the SAME pinned Git commit, checked by
     # vcpkg_from_git before a local archive is generated. Do not use an
