@@ -80,12 +80,28 @@ jobs:
     if: needs.preflight.outputs.native == 'true'
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
+    env:
+      # Known available on the 2026-11-21 runner. A missing pin fails before
+      # NSIS, cache restoration, or dependency compilation.
+      SNOW_MSVC_TOOLSET_VERSION: "14.52.37025"
+      SNOW_X264_USE_GIT_MIRROR: "1"
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/.tools/vcpkg-downloads
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
+
+      - name: Select pinned MSVC toolset and SDK
+        id: toolchain
+        shell: pwsh
+        run: |
+          . ./scripts/snow-build-environment.ps1
+          Add-SnowMsvcToolsToPath -Architecture x64 | Out-Null
+          "version=$env:VCToolsVersion" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          "sdk=$($env:WindowsSDKVersion.TrimEnd('\', '/'))" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host "Pinned MSVC $env:VCToolsVersion; Windows SDK $env:WindowsSDKVersion"
 
       - name: Bootstrap NSIS and smoke-test CPack
         if: github.event_name == 'workflow_dispatch' || (github.event_name == 'pull_request' && github.event.pull_request.number == 2)
@@ -97,7 +113,15 @@ jobs:
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: community-vcpkg-x64-static-msvc-${{ steps.toolchain.outputs.version }}-sdk-${{ steps.toolchain.outputs.sdk }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+      - name: Restore vcpkg source downloads
+        id: vcpkg-sources
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .tools/vcpkg-downloads
+          key: community-vcpkg-sources-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/x264/portfile.cmake') }}
+          restore-keys: |
+            community-vcpkg-sources-v1-
       - name: Enable vcpkg binary cache
         shell: pwsh
         run: |
@@ -118,13 +142,21 @@ jobs:
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
 
+      - name: Save vcpkg source downloads
+        if: (success() || failure()) && steps.vcpkg-sources.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: .tools/vcpkg-downloads
+          key: community-vcpkg-sources-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/x264/portfile.cmake') }}
+
       - name: Save vcpkg binary cache
-        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
+        if: (success() || failure()) && steps.vcpkg-cache.outputs.cache-hit != 'true'
         continue-on-error: true
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: community-vcpkg-x64-static-msvc-${{ steps.toolchain.outputs.version }}-sdk-${{ steps.toolchain.outputs.sdk }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
 
       - name: Restore static Qt
         id: qt-cache

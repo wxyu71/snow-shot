@@ -69,6 +69,21 @@ test outputs, not as private or approved release binaries. Releases contain only
 the x64 Full online/offline NSIS installers, checksums and manifests, never
 Mini, ARM64, macOS or portable builds.
 
+For reproducible Windows CI, the workflow pins MSVC to the exact installed
+`14.52.37025` toolset and checks it **before** installing dependencies. If
+that toolset disappears from the hosted runner, the job stops immediately
+instead of silently switching compilers. Local builds may still select the
+newest supported toolset unless `SNOW_MSVC_TOOLSET_VERSION` is set explicitly.
+The vcpkg **binary** cache is keyed by the selected MSVC and Windows SDK
+versions as well as dependency inputs. A separate `VCPKG_DOWNLOADS` cache
+preserves source archives and downloads even if dependency bootstrap fails.
+The Windows CI x264 overlay uses `mirror/x264` with the exact pinned
+Git commit to bypass unreliable VideoLAN GitLab downloads; the regular
+VideoLAN archive source and its SHA-512 check remain intact outside CI.
+Git's pinned commit verifies the mirror checkout; it is not a claim that
+GitHub's differently generated archive matches the VideoLAN SHA-512.
+Updating the MSVC pin or x264 source is a reviewed dependency change.
+
 ### Simple GitHub Releases updates
 
 Community Windows releases use one public download page:
