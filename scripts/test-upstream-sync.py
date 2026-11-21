@@ -114,6 +114,33 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_workflow_actions_are_pinned_to_commit_shas(self):
         upstream_sync.assert_workflow_actions_pinned()
 
+    def test_ci_actions_use_audited_node24_versions(self):
+        # Official action.yml files for these exact commits all declare node24.
+        # Review any new action or revised pin before it enters the Beta CI.
+        expected = {
+            "actions/checkout": "3d3c42e5aac5ba805825da76410c181273ba90b1",
+            "actions/setup-python": "6d4fd22b20465ccc0f7354476588e8df7c9ca0e0",
+            "actions/cache/restore": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+            "actions/cache/save": "55cc8345863c7cc4c66a329aec7e433d2d1c52a9",
+            "actions/upload-artifact": "cf430e030ddbb5b0abf93d22962f4752f3646cd9",
+            "actions/download-artifact": "9000827ccba6bdab643e8b6fd33ac0654aef8333",
+        }
+        paths = sorted((ROOT / ".github/workflows").glob("*.y*ml"))
+        self.assertTrue(paths)
+        found = set()
+        for path in paths:
+            content = path.read_text(encoding="utf-8")
+            for action, revision in upstream_sync.ACTION_USE.findall(content):
+                if action.startswith("./"):
+                    continue
+                self.assertIn(action, expected, f"Audit Node.js runtime: {path}: {action}")
+                self.assertEqual(
+                    revision, expected[action],
+                    f"Deprecated or unreviewed Action revision: {path}: {action}",
+                )
+                found.add(action)
+        self.assertEqual(found, set(expected))
+
     def test_external_source_dependency_parser_rejects_mutable_refs(self):
         pinned = {
             "git": "https://example.invalid/dependency.git",
