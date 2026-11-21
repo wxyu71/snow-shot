@@ -98,7 +98,7 @@ class UpstreamSyncGuardTests(unittest.TestCase):
 
         # Shared Community policy is authoritative; no moving Action tags or
         # official repository identity hardcoded into a distributable workflow.
-        self.assertRegex(workflow, r"uses:\s+actions/checkout@[0-9a-f]{40}\\b")
+        self.assertRegex(workflow, r"uses:\s+actions/checkout@[0-9a-f]{40}\b")
         self.assertNotIn("mg-chao/snow-shot", workflow)
         self.assertIn('upstream_repo="$(python3 -c', workflow)
         self.assertIn('git remote add upstream "https://github.com/${upstream_repo}.git"', workflow)
