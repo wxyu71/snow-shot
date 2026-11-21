@@ -660,6 +660,22 @@ void tablePreparationPreservesSessionAndSiblingPopovers() {
 // steered by the test, mirroring ScreenshotOcrAssets status reporting.
 class ControllableOcrRecognition final : public ScreenshotOcrRecognitionPort {
   public:
+    RequestToken paragraphRequests = 0;
+    ParagraphCompletion pendingParagraph;
+    ScreenshotOcrParagraphResult paragraphResult{{{2}, {1, 0}}, {}};
+    bool holdParagraphs = false;
+    RequestToken groupParagraphs(ScreenshotOcrParagraphRequest, QObject* receiver,
+                                 ParagraphCompletion completion) override {
+        ++paragraphRequests;
+        if (holdParagraphs)
+            pendingParagraph = std::move(completion);
+        else
+            QTimer::singleShot(0, receiver, [this, completion = std::move(completion)] {
+                completion(paragraphResult);
+            });
+        return 100 + paragraphRequests;
+    }
+
     RequestToken recognize(ScreenshotOcrRequest, QObject*, Completion completion) override {
         ++requests;
         m_completion = std::move(completion);
@@ -705,6 +721,7 @@ class ControllableOcrRecognition final : public ScreenshotOcrRecognitionPort {
 };
 
 struct PromptRecorder {
+    QStringList statuses;
     int modelDownloadShows = 0;
     int modelDownloadHides = 0;
     int recognitionShows = 0;
@@ -712,6 +729,7 @@ struct PromptRecorder {
 
     ScreenshotRecognitionSessionActions actions() {
         ScreenshotRecognitionSessionActions result;
+        result.showStatus = [this](const QString& text, bool) { statuses.push_back(text); };
         result.ensureContent = []() -> ScreenshotRecognitionWindow* { return nullptr; };
         result.showModelDownload = [this](const QString& message) {
             ++modelDownloadShows;
@@ -724,9 +742,13 @@ struct PromptRecorder {
 };
 
 std::unique_ptr<ScreenshotRecognitionSessionController>
-makeTextSession(ControllableOcrRecognition& recognition, PromptRecorder& recorder) {
+makeTextSession(ControllableOcrRecognition& recognition, PromptRecorder& recorder,
+                ScreenshotRecognitionWindow* window = nullptr) {
+    auto actions = recorder.actions();
+    if (window)
+        actions.ensureContent = [window] { return window; };
     auto controller = std::make_unique<ScreenshotRecognitionSessionController>(
-        &recognition, nullptr, nullptr, recorder.actions());
+        &recognition, nullptr, nullptr, std::move(actions));
     ScreenshotRecognitionTarget target;
     target.key = QStringLiteral("session");
     target.image = QImage(64, 64, QImage::Format_ARGB32_Premultiplied);
@@ -754,6 +776,7 @@ void smartTypesettingUsesRecognizedLayout() {
     controller->activate(ScreenshotRecognitionSessionController::Mode::Text);
     const QString original = controller->originalText();
     controller->applyTextFormatting(QStringLiteral("smart"));
+    QCoreApplication::processEvents();
     const QString expected = QStringLiteral("This is translation continued!\nSeparate paragraph.");
     require(controller->editing() && controller->textDraft() == expected,
             "Smart Typesetting enters editing and uses OCR geometry to merge paragraphs");
@@ -778,25 +801,45 @@ void smartTypesettingUsesRecognizedLayout() {
     require(settings.setDefaultFormatting(QStringLiteral("smart")) &&
                 settings.setDefaultPunctuation(QStringLiteral("full")),
             "Smart Typesetting is a supported OCR default");
-    auto defaultController = makeTextSession(recognition, recorder);
+    ScreenshotRecognitionWindow window({});
+    auto defaultController = makeTextSession(recognition, recorder, &window);
     defaultController->seedRecognitionResults(cached);
     defaultController->activate(ScreenshotRecognitionSessionController::Mode::Text);
+    require(recognition.paragraphRequests == 1, "recognition activation never groups paragraphs");
+    QString copied;
+    require(defaultController->prepareSmartClipboard(nullptr, true,
+                                                     [&](auto mime) { copied = mime->text(); }),
+            "smart copy is explicitly prepared");
+    require(copied.isEmpty(), "smart copy waits for grouping");
+    QCoreApplication::processEvents();
     const QString expectedDefault = snow_shot::presentation::convertOcrPunctuation(expected, true);
     require(defaultController->recognitionClipboardMimeData()->text() == expectedDefault,
             "default Smart Typesetting copy uses the same paragraphs as the toolbar");
-    ScreenshotRecognitionWindow window({});
+    require(copied == expectedDefault && recognition.paragraphRequests == 2,
+            "one on-demand request per source");
     window.setOcrPresentation(presentation);
-    require(window.copyVisibleContentToClipboard() &&
-                QApplication::clipboard()->text() == expectedDefault,
-            "recognition window copy applies default Smart Typesetting and punctuation");
+    require(window.copyVisibleContentToClipboard(), "recognition window accepts smart copy");
+    translation_tests::waitUntil(
+        [&] { return QApplication::clipboard()->text() == expectedDefault; },
+        "recognition window copy applies default Smart Typesetting and punctuation");
     presentation->beginTextSelection(ScreenshotOcrTextPosition{0, 8});
     presentation->updateTextSelection(ScreenshotOcrTextPosition{1, 6});
     presentation->finishTextSelection();
+    const QString selection = QStringLiteral("trans-\nlation");
     require(window.copyVisibleContentToClipboard() &&
-                QApplication::clipboard()->text() == QStringLiteral("translation") &&
+                QApplication::clipboard()->text() == selection &&
                 defaultController->recognitionClipboardMimeData(presentation.get())->text() ==
-                    QStringLiteral("translation"),
-            "default Smart Typesetting copies only selected characters across OCR lines");
+                    selection &&
+                defaultController->recognitionClipboardMimeData()->text() == selection,
+            "copying an OCR selection keeps its line breaks and hyphen with Smart Typesetting set");
+    const auto automaticCopy = defaultController->recognitionClipboardMimeData(
+        presentation.get(), /*copyFullTextResult=*/true);
+    require(automaticCopy && automaticCopy->text() == expectedDefault &&
+                presentation->selectedText() == selection,
+            "automatic copy uses both defaults on the complete result with a selection present");
+    presentation->selectAll();
+    require(window.copyVisibleContentToClipboard() && QApplication::clipboard()->text() == original,
+            "selecting all and copying keeps the original OCR text");
     presentation->clearTextSelection();
     defaultController->beginTextEditing();
     require(defaultController->textDraft() == expectedDefault,
@@ -810,6 +853,46 @@ void smartTypesettingUsesRecognizedLayout() {
     require(settings.setDefaultFormatting(priorFormatting) &&
                 settings.setDefaultPunctuation(priorPunctuation),
             "restore OCR defaults after Smart Typesetting coverage");
+}
+
+void paragraphFailuresAndStaleEdits() {
+    ControllableOcrRecognition recognition;
+    recognition.holdParagraphs = true;
+    PromptRecorder recorder;
+    auto controller = makeTextSession(recognition, recorder);
+    auto presentation = std::make_shared<ScreenshotOcrPresentation>();
+    presentation->selection = QRect(0, 0, 64, 64);
+    presentation->lines = {{QStringLiteral("first"), 1, {{0, 0}, {40, 0}, {40, 10}, {0, 10}}},
+                           {QStringLiteral("second"), 1, {{0, 15}, {40, 15}, {40, 25}, {0, 25}}}};
+    presentation->prepareForRendering();
+    ScreenshotRecognitionResults cached;
+    cached.key = QStringLiteral("session");
+    cached.text = ScreenshotOcrRecognitionResult{presentation};
+    controller->seedRecognitionResults(cached);
+    controller->activate(ScreenshotRecognitionSessionController::Mode::Text);
+    require(recognition.paragraphRequests == 0, "ordinary recognition has no grouping side effect");
+    controller->applyTextFormatting(QStringLiteral("smart"));
+    controller->applyTextFormatting(QStringLiteral("smart"));
+    require(recognition.paragraphRequests == 1, "pending grouping is shared");
+    controller->setTextDraft(QStringLiteral("new edit"));
+    recognition.pendingParagraph({{{1, 0}}, {}});
+    require(controller->textDraft() == QStringLiteral("new edit"),
+            "late grouping cannot overwrite edits");
+    controller->invalidate();
+    controller = makeTextSession(recognition, recorder);
+    controller->seedRecognitionResults(cached);
+    controller->activate(ScreenshotRecognitionSessionController::Mode::Text);
+    controller->applyTextFormatting(QStringLiteral("smart"));
+    recognition.pendingParagraph({{}, QStringLiteral("download failed")});
+    require(recorder.statuses.size() == 1 &&
+                recorder.statuses.front().contains(QStringLiteral("original OCR lines")),
+            "failed paragraph request reports one actionless status Message");
+    require(controller->textDraft() == QStringLiteral("first\nsecond"),
+            "failed grouping preserves every unmerged source line");
+    controller->applyTextFormatting(QStringLiteral("smart"));
+    recognition.pendingParagraph({{{0, 0}}, {}});
+    require(controller->textDraft() == QStringLiteral("first\nsecond"),
+            "invalid grouping never invokes heuristic merging");
 }
 
 void recognizedTextDefaultsApplyOnFirstEditAndOriginalCopy() {
@@ -861,11 +944,11 @@ void recognizedTextDefaultsApplyOnFirstEditAndOriginalCopy() {
     presentation->updateTextSelection(ScreenshotOcrTextPosition{1, 1});
     presentation->finishTextSelection();
     require(window.copyVisibleContentToClipboard() &&
-                QApplication::clipboard()->text() == QString(QChar(0xFF0C)) + QStringLiteral("B"),
-            "original-image window selection copy applies defaults");
+                QApplication::clipboard()->text() == QStringLiteral(",\nB"),
+            "original-image window selection copy preserves punctuation and line breaks");
     require(session.recognitionClipboardMimeData(presentation.get())->text() ==
-                QString(QChar(0xFF0C)) + QStringLiteral("B"),
-            "selected original-image copy uses the same defaults");
+                QStringLiteral(",\nB"),
+            "session selection copy preserves punctuation and line breaks");
     presentation->clearTextSelection();
     session.beginTextEditing();
     require(session.textDraft() ==
@@ -1666,7 +1749,8 @@ void translationLanguageSelectsUseCodePrefixGroups() {
     controller->openTranslationSettings();
     auto* modal = controller->findChild<adqt::widgets::AdModal*>(
         QStringLiteral("screenshotTranslationSettingsModal"));
-    require(modal != nullptr, "translation settings should create its modal");
+    require(modal && modal->ownerWindow() == &owner && modal->windowModality() == Qt::WindowModal,
+            "translation settings are modal to their source window");
     QWidget* content = modal->contentWidget();
     auto* source = content == nullptr ? nullptr
                                       : content->findChild<adqt::widgets::AdSelect*>(
@@ -1731,13 +1815,39 @@ void translationLanguageSelectsUseCodePrefixGroups() {
     service->setCurrentValue(model.selectionId());
     source->setCurrentValue(QStringLiteral("en"));
     target->setCurrentValue(QStringLiteral("zh-Hans"));
+
+    QWidget otherOwner;
+    otherOwner.show();
+    ScreenshotRecognitionSessionActions otherActions;
+    otherActions.translationSettingsOwner = [&otherOwner] { return &otherOwner; };
+    ScreenshotRecognitionSessionController otherController(nullptr, nullptr, &apiClient,
+                                                           std::move(otherActions));
+    otherController.openTranslationSettings();
+    auto* otherModal = otherController.findChild<adqt::widgets::AdModal*>(
+        QStringLiteral("screenshotTranslationSettingsModal"));
+    require(otherModal && otherModal->isOpen() && otherModal->ownerWindow() == &otherOwner,
+            "another owner can open its own translation settings");
+    auto* otherContents = otherModal->contentWidget();
+    auto* otherImage = otherContents->findChild<adqt::widgets::AdSwitch*>(
+        QStringLiteral("screenshotTranslationOriginalImage"));
+    auto* otherTarget = otherContents->findChild<adqt::widgets::AdSelect*>(
+        QStringLiteral("screenshotTranslationTargetLanguage"));
+    require(otherImage && otherImage->isChecked() == previousOriginalImage && otherTarget,
+            "the second dialog loads the persisted setting while the first has a draft");
+
     modal->closeRequested(adqt::widgets::AdModal::CloseReason::OkAction);
     require(settings.layoutProcessing() == QStringLiteral("original") &&
                 settings.configuration().modelId == model.selectionId(),
             "accepting translation languages preserves the separate layout processing choice");
-    require(settings.setConfiguration(previousConfiguration), "restore translation configuration");
     require(settings.originalImageTranslationEnabled() == !previousOriginalImage,
             "OK should persist the original image translation toggle");
+    otherTarget->setCurrentValue(QStringLiteral("de"));
+    otherModal->closeRequested(adqt::widgets::AdModal::CloseReason::OkAction);
+    require(!otherModal->isOpen() &&
+                settings.configuration().targetLanguage == QStringLiteral("de") &&
+                settings.originalImageTranslationEnabled() == !previousOriginalImage,
+            "saving a language from the second window preserves the saved original image setting");
+    require(settings.setConfiguration(previousConfiguration), "restore translation configuration");
     QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
     controller->openTranslationSettings();
     modal = controller->findChild<adqt::widgets::AdModal*>(
@@ -1769,9 +1879,8 @@ void documentSessionCancelsPendingRequestOnProviderChange() {
     using Mode = ScreenshotRecognitionSessionController::Mode;
     QTcpServer server;
     require(server.listen(QHostAddress::LocalHost), "document test server listens");
-    auto client =
-        std::make_unique<SnowShotApiClient>(QStringLiteral("http://127.0.0.1:%1")
-                                                .arg(server.serverPort()));
+    auto client = std::make_unique<SnowShotApiClient>(
+        QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort()));
     ScreenshotRecognitionSessionController session(nullptr, nullptr, client.get(), {});
     QImage original(64, 48, QImage::Format_ARGB32);
     original.fill(Qt::white);
@@ -2026,6 +2135,7 @@ int main(int argc, char** argv) {
     }
     if (application.arguments().contains(QStringLiteral("--ocr-defaults-only"))) {
         smartTypesettingUsesRecognizedLayout();
+        paragraphFailuresAndStaleEdits();
         recognizedTextDefaultsApplyOnFirstEditAndOriginalCopy();
         snow_shot::storage::ApplicationStorage::instance().shutdown();
         return 0;
