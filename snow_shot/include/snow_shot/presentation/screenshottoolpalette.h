@@ -31,6 +31,7 @@
 #include <initializer_list>
 #include <optional>
 
+class QAbstractButton;
 class QFrame;
 class QEvent;
 class QHideEvent;
@@ -271,6 +272,7 @@ class ScreenshotToolPalette final : public QWidget,
         bool showScreenRecordButton = false;
         bool showRecordingControls = false;
         bool recordingDrawingMode = false;
+        Qt::WindowModality dialogModality = Qt::WindowModal;
         bool showTrailingDragHandle = false;
         bool enableStyleToolbar = true;
         bool separatorAfterSelect = false;
@@ -783,6 +785,8 @@ class ScreenshotToolPalette final : public QWidget,
     void ensureLayoutApplied() const;
     void markLayoutDirty(bool rowOrderChanged = false);
     void updateToolbarRowGeometry(bool styleToolbarVisible);
+    [[nodiscard]] bool annotationOptionsActive() const;
+    [[nodiscard]] QAbstractButton* nextAnnotationOptionButton() const;
     void setActiveToolButton(adqt::widgets::AdButton* activeButton);
     bool clearActiveToolState();
     bool setStyleControlsActive(Tool tool);

@@ -30,18 +30,6 @@ class QTextDocument;
 struct ScreenshotPinnedRecognitionProviders;
 struct ScreenshotHistoryEntry;
 
-struct ScreenshotAutomaticSaveRequest final {
-    QPointer<QObject> receiver;
-    QString configuredSaveDirectory;
-    ScreenshotImageFileFormat format = ScreenshotImageFileFormat::Png;
-    QString filenameFormat;
-    ScreenshotImageEncodingOptions encoding;
-    ScreenshotPdfOptions pdf;
-    QDateTime requestedAt;
-    ScreenshotExportCoordinator::Completion completion;
-    snow_shot::storage::ScreenshotWindowNames windowNames{};
-};
-
 namespace snow_shot::presentation {
 class LiveWindowSource;
 class PinnedWindowGroupManager;
@@ -118,16 +106,13 @@ class ScreenshotSelectionExportUiServices final : public ScreenshotSelectionExpo
                                              PinnedCompletion completion);
     using PinnedArtifactCompletion =
         std::function<void(bool, std::shared_ptr<ScreenshotExportArtifact>)>;
-    [[nodiscard]] bool
-    presentPinnedArtifact(const ScreenshotPinnedSelectionRequest& request,
-                          std::shared_ptr<ScreenshotExportArtifact> artifact,
-                          PinnedArtifactCompletion completion = {},
-                          std::optional<ScreenshotAutomaticSaveRequest> automaticSave = {});
+    [[nodiscard]] bool presentPinnedArtifact(const ScreenshotPinnedSelectionRequest& request,
+                                             std::shared_ptr<ScreenshotExportArtifact> artifact,
+                                             PinnedArtifactCompletion completion = {});
     [[nodiscard]] bool
     presentPinnedImageArtifact(std::shared_ptr<ScreenshotExportArtifact> artifact, QScreen* screen,
                                const QRect& nativeGeometry, const QSize& initialWindowSize,
-                               PinnedCompletion completion = {},
-                               std::optional<ScreenshotAutomaticSaveRequest> automaticSave = {});
+                               PinnedCompletion completion = {});
     void restorePersistedWindows();
     // Accepted restoration owns its load and native presentation until settlement. A pause
     // admission check must observe it even after the worker has posted its GUI completion.
@@ -155,6 +140,10 @@ class ScreenshotSelectionExportUiServices final : public ScreenshotSelectionExpo
 
     void setRestoreFailureHandler(std::function<void()> handler) {
         m_restoreFailure = std::move(handler);
+    }
+    void
+    setImageCompressionHandler(std::function<void(const ScreenshotPinnedImageSnapshot&)> handler) {
+        m_imageCompressionRequested = std::move(handler);
     }
     void setLiveImageEditingHandler(std::function<void(const ScreenshotExportSource&)> handler) {
         m_liveImageEditingRequested = std::move(handler);
@@ -224,6 +213,7 @@ class ScreenshotSelectionExportUiServices final : public ScreenshotSelectionExpo
     SnowShotApiClient* m_tableRecognition = nullptr;
     std::function<void()> m_showMainWindowRequested;
     std::function<void(const ScreenshotPinnedImageSnapshot&)> m_imageSplittingRequested;
+    std::function<void(const ScreenshotPinnedImageSnapshot&)> m_imageCompressionRequested;
     std::function<void(const QString&)> m_imageEditingRequested;
     std::function<void()> m_automaticRestoreRequested;
     std::function<void(const ScreenshotExportSource&)> m_liveImageEditingRequested;

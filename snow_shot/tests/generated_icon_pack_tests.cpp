@@ -98,8 +98,8 @@ void everySnowShotEntryRenders() {
     const auto registered = icons::registerWith(renderer);
     require(registered.ok(), "Snow Shot pack registration should succeed");
     const adqt::icons::IconPack* staticPack = icons::pack().staticPack();
-    require(staticPack != nullptr && staticPack->entryCount == 222,
-            "Snow Shot pack should contain all 222 project-owned assets");
+    require(staticPack != nullptr && staticPack->entryCount == 224,
+            "Snow Shot pack should contain all 224 project-owned assets");
     require(adqt::icons::describeIcon(icons::outlined::CreditsCoin()).key.name ==
                 QStringLiteral("credits-coin"),
             "account credits should resolve to their project-owned coin icon");
@@ -365,6 +365,20 @@ void projectIconColorsAndModelsArePreserved() {
                 mouseMetadata.key.name == QStringLiteral("mouse") &&
                 containsOpaqueColor(render(mouseRef, QSize(32, 32)).toImage(), primary),
             "mouse should expose a tintable project-owned icon factory");
+
+    for (const QColor& foreground : {QColor("#262626"), QColor("#f5f5f5")}) {
+        const auto ref =
+            icons::outlined::TransparentLayer(adqt::icons::IconColors::primary(foreground));
+        for (int dpr : {1, 2}) {
+            const QImage image = render(ref, QSize(16, 16), dpr).toImage();
+            require(image.size() == QSize(16, 16) * dpr &&
+                        image.pixelColor(5 * dpr, 7 * dpr) == foreground &&
+                        image.pixelColor(8 * dpr, 10 * dpr) == foreground &&
+                        image.pixelColor(8 * dpr, 7 * dpr).alpha() == 0 &&
+                        image.pixelColor(5 * dpr, 10 * dpr).alpha() == 0,
+                    "the two themed checkerboard cells stay distinct at menu size");
+        }
+    }
 
     const QImage screenshot = snow_shot::presentation::icons::renderTintedIconPixmap(
                                   icons::twotone::ScreenshotFeature(), QSize(32, 32), 1.0, primary)
@@ -657,6 +671,25 @@ void imageStitchingIconFollowsAntDesign() {
     painter.end();
     if (const auto path = qEnvironmentVariable("SNOW_STITCHING_ICON_PREVIEW"); !path.isEmpty())
         require(preview.save(path), "save stitching icon light/dark inspection sheet");
+}
+
+void imageCompressionArrowsStaySeparatedAtMenuSize() {
+    namespace icons = snow_shot::presentation::icons::custom;
+    for (const QColor& color : {QColor("#262626"), QColor("#f0f0f0")}) {
+        const auto icon =
+            icons::outlined::ImageCompression(adqt::icons::IconColors::primary(color));
+        for (qreal dpr : {1.0, 1.25, 2.0}) {
+            const QImage image = render(icon, QSize(16, 16), dpr).toImage();
+            require(containsOpaqueColor(image, color), "compression icon uses the menu text color");
+            const int side = image.width();
+            const QRect upperArrow(side * 3 / 4, side / 4, side / 4, side / 4);
+            const QRect gap(upperArrow.left(), side / 2, upperArrow.width(), 1);
+            require(opaquePixelCount(image, upperArrow) > 0 &&
+                        opaquePixelCount(image, upperArrow.translated(0, side / 4)) > 0 &&
+                        opaquePixelCount(image, gap) == 0,
+                    "opposing compression arrows remain visible with a clear gap");
+        }
+    }
 }
 
 void spreadsheetIconFollowsAntDesign() {
@@ -1243,6 +1276,7 @@ int main(int argc, char** argv) {
             everySnowShotEntryRenders();
             return 0;
         }
+        imageCompressionArrowsStaySeparatedAtMenuSize();
         imageStitchingIconFollowsAntDesign();
         if (application.arguments().contains(QStringLiteral("--image-stitching-only"))) {
             everySnowShotEntryRenders();

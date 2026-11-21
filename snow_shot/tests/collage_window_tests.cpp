@@ -898,7 +898,7 @@ void independentWindowsAndClosePolicy() {
                 firstSurface->findChild<QToolButton*>(QStringLiteral("ad-modal-maximize")),
             "collage windows expose native window-management capabilities and an icon");
     mainWindow.hide();
-    require(first.modal()->isOpen() && second.modal()->isOpen() && closeCaptureInputBlockers(),
+    require(first.modal()->isOpen() && second.modal()->isOpen() && prepareCaptureInput(),
             "main-window hiding and capture modal cleanup preserve independent collages");
     require(QApplication::activeModalWidget() == nullptr,
             "collages do not block the main application or screenshot overlays");
@@ -980,10 +980,15 @@ void outputDescriptionsInFooter() {
                     total->width() >= total->sizeHint().width(),
                 "footer shows unclipped size then count on the left, aligned with its actions");
         const auto theme = adqt::theme::ThemeManager::instance().resolveTheme(window.editor());
-        require(dimensions->font().pixelSize() == total->font().pixelSize() &&
-                    dimensions->palette().color(QPalette::WindowText) == theme.colorTextSecondary &&
-                    total->palette().color(QPalette::WindowText) == theme.colorTextSecondary,
-                "both footer descriptions share the secondary text styling");
+        for (const auto* label : {dimensions, total}) {
+            const int lineHeight = label->fontMetrics().height();
+            require(label->font().pixelSize() == qMax(10, qRound(theme.fontSizeSM)) &&
+                        label->font().weight() == QFont::Normal &&
+                        label->minimumHeight() == lineHeight &&
+                        label->maximumHeight() == lineHeight &&
+                        label->palette().color(QPalette::WindowText) == theme.colorTextSecondary,
+                    "collage footer uses the save dialog's small secondary text style");
+        }
     };
     auto& themeManager = styles::ThemeManager::instance();
     const auto previousMode = themeManager.themeMode();
@@ -993,6 +998,12 @@ void outputDescriptionsInFooter() {
         checkLayout();
     }
     themeManager.setThemeMode(previousMode);
+    auto& controlThemes = adqt::theme::ThemeManager::instance();
+    adqt::theme::ThemeOverride overrideValue;
+    overrideValue.fontSize = 19.0;
+    controlThemes.setScopeOverride(window.editor(), overrideValue);
+    checkLayout();
+    controlThemes.clearScopeOverride(window.editor());
     auto& languages = LanguageManager::instance();
     for (const auto* locale : {"zh_CN", "zh_TW"}) {
         require(languages.setLanguage(QString::fromLatin1(locale)),
@@ -2262,10 +2273,12 @@ void exportCompletionFailureCancellationAndHistoryIsolation(const QString& direc
     const QString automaticDirectory = QDir(directory).filePath(QStringLiteral("automatic"));
     require(QDir().mkpath(automaticDirectory), "create isolated automatic-save destination");
     const storage::ScreenshotSettings settings;
-    require(settings.setAutoSaveAfterExecutionActions({QStringLiteral("copy_screenshot")}) &&
+    require(settings.setExportTasks(snow_shot::storage::ExportTrigger::ScreenshotCopy,
+                                    snow_shot::storage::ExportTask::AutoSave) &&
                 settings.setCopyImageFileToClipboard(false) &&
                 settings.setImageSaveDirectory(automaticDirectory) &&
-                settings.autoSaveAfterExecution(QStringLiteral("copy_screenshot")),
+                settings.exportTasks(storage::ExportTrigger::ScreenshotCopy)
+                    .testFlag(storage::ExportTask::AutoSave),
             "enable the existing screenshot auto-save setting in isolated real configuration");
     Ports ports;
     auto services = ports.services();
@@ -2333,7 +2346,8 @@ void exportCompletionFailureCancellationAndHistoryIsolation(const QString& direc
                 repository.recordsSnapshot().records == before.records &&
                 QDir(automaticDirectory).entryList(QDir::Files).isEmpty() &&
                 ports.saves.size() == 2 &&
-                settings.autoSaveAfterExecution(QStringLiteral("copy_screenshot")),
+                settings.exportTasks(storage::ExportTrigger::ScreenshotCopy)
+                    .testFlag(storage::ExportTask::AutoSave),
             "collage exports never add history or trigger screenshot automatic saving");
 }
 

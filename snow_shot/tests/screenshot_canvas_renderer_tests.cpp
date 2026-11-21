@@ -2139,7 +2139,8 @@ void shortcutHintStagesUseTheExactRequiredLines() {
     QStringList selectionLines = cursorLines;
     selectionLines.append({
         keyLine(QStringLiteral("Move entire selection"), {QStringLiteral("Space")}),
-        keyLine(QStringLiteral("Maintain selection aspect ratio"), {QStringLiteral("Shift")}),
+        keyLine(QStringLiteral("Keep selection width and height consistent"),
+                {QStringLiteral("Shift")}),
         QStringLiteral("Selection aspect ratio snap: Q"),
     });
     selectionLines.append(commonLines);
@@ -5318,8 +5319,8 @@ void ocrGlyphDeviceCachesMatchDirectPaintingAndInvalidate() {
         QVector<QVector<int>> sourceIndices;
         for (int index = 0; index < sourceLines.size(); ++index)
             sourceIndices.push_back({index});
-        setScreenshotOcrTranslationFontCaps(presentation->lines, sourceLines, sourceIndices,
-                                            QApplication::font());
+        prepareScreenshotOcrTranslationLayout(presentation->lines, sourceLines, sourceIndices,
+                                              QApplication::font());
         presentation->setLineText(0, QStringLiteral("M"));
         layer.updateLineText(0);
         compareWithDirect(1.5);
