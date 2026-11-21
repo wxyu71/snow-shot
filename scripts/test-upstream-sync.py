@@ -141,6 +141,21 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                 found.add(action)
         self.assertEqual(found, set(expected))
 
+    def test_opencv_eigen_overlay_uses_pinned_local_patch(self):
+        # Avoid GitHub commit .patch HTTP 503 in the Windows dependency bootstrap.
+        port = (ROOT / "cmake/vcpkg-overlay-ports/opencv4/portfile.cmake").read_text(
+            encoding="utf-8"
+        )
+        patch_path = ROOT / "cmake/vcpkg-overlay-ports/opencv4/0026-fix-eigen3-config-version.patch"
+        patch = patch_path.read_text(encoding="utf-8")
+        self.assertIn("0026-fix-eigen3-config-version.patch", port)
+        self.assertNotIn("468de9b36740b3355f0d5cd8be2ce28b340df120.patch?", port)
+        self.assertNotIn("PATCH1_FILE", port)
+        self.assertIn("opencv/opencv@468de9b36740b3355f0d5cd8be2ce28b340df120", port)
+        self.assertIn("-      else()  # Eigen config file", patch)
+        self.assertIn("+      elseif(DEFINED Eigen3_VERSION_MAJOR)", patch)
+        self.assertIn("+      else()  # Deprecated package config variables", patch)
+
     def test_community_ci_runs_full_build_on_completed_in_repo_goals(self):
         # Intermediate PR commits stay cheap, but each complete goal must
         # compile and package on Windows. PR heads from forks cannot opt in.
