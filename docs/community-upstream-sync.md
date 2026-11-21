@@ -1,30 +1,103 @@
 # Community fork: upstream synchronization
 
-The official upstream is `mg-chao/snow-shot` (`main`).
-`.github/workflows/upstream-sync.yml` checks upstream daily or on demand.
+The official upstream is `mg-chao/snow-shot:main`. The scheduled and manually
+dispatched workflow is `.github/workflows/upstream-sync.yml`. The policy is
+`.github/upstream-protection.json` and `scripts/upstream_sync.py`.
 
-A change is auto-merged **only** when the incoming paths do not overlap the
-fork's changes since the shared merge base, do not touch protected or deleted
-files, and do not contain newly added known commercial account/payment code.
-The available sync runner currently runs the policy and source-contract tests,
-not the full Qt/Windows test suite. Therefore, it **auto-merges documentation-only
-changes** when those checks pass; executable code, workflows, resource manifests,
-build files, and installers are always routed to a draft review PR until native
-regression tests can run as a mandatory gate. This conservative restriction
-prevents silently merging untested binaries or reintroducing commercial code.
-After a clean documentation merge, the deletion guard and policy tests run again.
-Any conflict or failed guard aborts the merge.
+## Safety invariants
 
-Protected changes produce a **draft review PR containing a pending report**,
-not a speculative merge that may overwrite community-specific functionality.
-Maintainers must review and manually apply the relevant upstream changes.
-The workflow never uses `--force` to push to `main`.
+1. **Community `main` is never force-pushed.** Only documentation-only changes
+   that pass the fail-closed policy and deletion guard can be auto-merged.
+   All executable code, release/build metadata and workflow changes need review.
+2. **An upstream review PR is a real code review, not a report-only PR.**
+   With a clean Git merge, its branch contains a two-parent merge commit.
+   With merge conflicts, the workflow first tries to push the actual upstream
+   commit so GitHub detects the conflict against Community `main`.
+   If GitHub rejects a push of incoming `.github/workflows/` changes due to
+   the built-in token's missing workflow-write scope, it instead opens a Draft
+   tracking PR with an explicit pending marker; the PR's ancestry gate fails
+   until a maintainer actually integrates upstream.
+3. **Human work wins.** If an upstream review PR is already open, scheduled
+   syncs only write a warning and job summary with the latest upstream SHA.
+   They never mutate its head or create duplicate review PRs.
+4. **No force-pushes on review branches.** New branch names contain the upstream
+   SHA and the target `main` SHA. A retry reuses an existing branch unchanged.
+   A Git problem, denied push or unexpected API error still fails the job.
+5. **Review is not a broken build.** Pending manual resolution is reported
+   as a warning and in the job summary. Genuine failures remain red.
 
-The protected file and deletion policy lives in `.github/upstream-protection.json`.
-When removing new commercial modules, add each path to `deleted_files`.
-Do not weaken protection to make an upstream sync pass.
+## Workflow states
 
-## Local checks
+| Condition | Behavior | Outcome |
+| --- | --- | --- |
+| No incoming changes | Exit without pushing | Success, no PR |
+| Only policy-allowed documentation, clean merge | Run guards, merge and push to `main` | Success |
+| Changes requiring review, an upstream PR is already open | Preserve its branch; summarize upstream SHA and PR link | Success with warning |
+| Review required, merge is clean, no prior PR | Push a real merge commit to a new immutable review branch | Draft PR |
+| Review required, merge conflicts, no prior PR | Try pushing the real upstream head | Draft PR showing real conflicts |
+| Workflow-file push rejected by built-in token | Push pending marker based on Community `main`; do not disguise the missing integration | Draft PR blocked by ancestry gate |
+| Previously pushed review branch, PR creation interrupted | Reuse branch, retry opening the PR | Draft PR, no force push |
+| Unexpected push, Git or API problem | Do not bypass the error | Failed |
+
+**Important:** A conflict PR based on upstream is *not* safe to merge until
+its conflicts are resolved and protected Community behavior is verified.
+Do not interpret a green sync workflow as an approval of the pending PR.
+
+## Resolve a conflicting upstream PR
+
+The draft PR tells you the upstream SHA, fork baseline SHA, policy reasons and
+detected conflicted files. You may use GitHub's Resolve conflicts UI for
+small conflicts; for complex code, resolve locally:
+
+```sh
+gh pr checkout <PR_NUMBER>
+git fetch origin main
+if test -f .github/upstream-review-pending.md; then
+  git remote add upstream https://github.com/mg-chao/snow-shot.git
+  git fetch upstream main
+  git merge --no-ff upstream/main
+  # Resolve conflicts, retaining Community policies.
+  rm .github/upstream-review-pending.md
+else
+  git merge origin/main
+  # Resolve conflicts, retaining Community policies.
+fi
+git add -A
+git commit
+python3 scripts/test-upstream-sync.py
+python3 scripts/upstream_sync.py verify-deletions
+git push
+```
+
+An upstream review PR is checked for the target upstream commit's ancestry
+(`GITHUB_HEAD_REF` encodes the upstream SHA). Merely deleting a pending marker
+without performing a real Git merge does **not** pass the preflight check.
+To enforce that gate at merge time, the repo's branch protection/ruleset must
+require CI status checks.
+
+For a clean review candidate, `git merge origin/main` may report "Already up to
+date"; that is expected. The policy and normal Community PR CI must still pass,
+and a maintainer must review executable changes before merging.
+
+The fork intentionally removed commercial account, membership and payment
+code. If upstream adds additional commercial modules, update `deleted_files`.
+Do not weaken the protection configuration merely to make synchronization pass.
+
+## Authentication and CI caveat
+
+Repository **Settings → Actions → General → Workflow permissions** must allow
+GitHub Actions to create and approve pull requests; the workflow additionally
+uses `contents: write` and `pull-requests: write`. GitHub's default
+`GITHUB_TOKEN` can create a PR with this setting, but according to GitHub's
+current documentation, `pull_request` CI created by that token can require a
+maintainer to explicitly approve the run. If fully unattended PR CI is needed,
+prefer a narrowly scoped GitHub App installation token (and protect its keys);
+avoid granting a broad personal token by default.
+
+A branch protection rule may still deny an automated push. The sync workflow
+must not bypass it.
+
+## Local policy and regression tests
 
 ```sh
 python3 scripts/test-upstream-sync.py
@@ -34,7 +107,16 @@ git fetch upstream main
 python3 scripts/upstream_sync.py classify --upstream upstream/main
 ```
 
-Required repository settings: allow GitHub Actions to create PRs and write
-contents, and permit the workflow's non-force merge push if auto-sync is desired.
-A protected branch that blocks the action's push will cause the job to fail,
-rather than bypass protection.
+The regression suite builds local Git fixtures for clean merges, true conflicts,
+and workflow-token write denial. It checks upstream ancestry, explicit pending
+markers and reusing already-open PRs without overwriting their branches.
+The scheduled workflow runs from **main**, not from an unmerged workflow PR.
+
+## Structure and release review
+
+The current PR branch contains an ongoing upstream architecture/source review in
+[Community upstream architecture review](community-upstream-architecture-review.md).
+The raw upstream Git head is in Draft PR #5 targeting the PR #2 integration
+branch; it is a **comparison input only**, not an automatically approved merge.
+Do not replace Community-specific docs, feature flags, release identity, OCR
+runtime or code paths without resolving the documented gates.
