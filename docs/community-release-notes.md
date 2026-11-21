@@ -1,7 +1,7 @@
 # Snow Shot Community — Windows x64 Beta
 
 **Independent, unofficial fork** of [mg-chao/snow-shot](https://github.com/mg-chao/snow-shot).
-Release version: **@VERSION@**, following official **1.5.7**.
+Release version: **@VERSION@**. This independently versioned Community beta retains upgrade compatibility with the official **1.5.7** installer and incorporates source changes through official upstream commit **7f34f246** (official 1.6.1 line), subject to beta acceptance testing.
 
 This prerelease contains **only the full Snow Shot Windows Intel/AMD x64 installer**.
 Choose the offline installer for bundled local PP-OCRv6 OCR resources, or the online installer for the smaller download. No Snow Shot Mini, macOS or ARM64 release is supplied.
