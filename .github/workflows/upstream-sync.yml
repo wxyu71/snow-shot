@@ -17,7 +17,7 @@ jobs:
   sync:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
         with:
           fetch-depth: 0
       - name: Fetch and classify official upstream
@@ -27,7 +27,8 @@ jobs:
           set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add upstream https://github.com/mg-chao/snow-shot.git
+          upstream_repo="$(python3 -c 'import json; print(json.load(open(".github/upstream-protection.json", encoding="utf-8"))["upstream"])')"
+          git remote add upstream "https://github.com/${upstream_repo}.git"
           git fetch --no-tags upstream main
           python3 scripts/test-upstream-sync.py
           python3 scripts/upstream_sync.py verify-deletions
@@ -142,7 +143,7 @@ jobs:
             fi
           fi
 
-          body="$(printf '## Upstream integration (manual review required)\n\nUpstream: mg-chao/snow-shot@%s\nFork main at detection: %s\nReview branch: %s\n\n%s\n\n### Policy reasons\n%s\n\n### Conflicted files (if detected this run)\n%s\n\n### Resolve locally\n\n1. Fetch the review branch and main from this fork, and upstream/main.\n2. Check out the review branch, then run git merge origin/main if it is based on upstream; resolve any conflicts carefully and commit.\n3. Run Community policy checks and native CI, then push to the SAME review branch.\n4. Merge only after reviewing protected Community OCR, account-removal, updater, version, and packaging behavior.\n\n**Never merge the initial conflict branch without resolving it. No changes were merged to main by this workflow.**\n' \
+          body="$(printf '## Upstream integration (manual review required)\n\nUpstream commit: %s\nFork main at detection: %s\nReview branch: %s\n\n%s\n\n### Policy reasons\n%s\n\n### Conflicted files (if detected this run)\n%s\n\n### Resolve locally\n\n1. Fetch the review branch and main from this fork, and upstream/main.\n2. Check out the review branch, then run git merge origin/main if it is based on upstream; resolve any conflicts carefully and commit.\n3. Run Community policy checks and native CI, then push to the SAME review branch.\n4. Merge only after reviewing protected Community OCR, account-removal, updater, version, and packaging behavior.\n\n**Never merge the initial conflict branch without resolving it. No changes were merged to main by this workflow.**\n' \
             "$upstream_sha" "$base_sha" "$branch" "$candidate" "$reasons" "$conflict_files")"
 
           if ! create_output="$(gh pr create --draft --repo "$GITHUB_REPOSITORY" \
