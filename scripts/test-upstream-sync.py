@@ -369,6 +369,66 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         )
 
 
+    def test_offline_ocr_runtime_protocol_and_asset_versions_are_atomic(self):
+        # The C++ host, Rust worker and bundled offline binary are one wire
+        # protocol. A partial upstream cherry-pick must be rejected at preflight.
+        cpp = (ROOT / "snow_shot/src/presentation/ocr/screenshotocrprotocol.h").read_text(
+            encoding="utf-8"
+        )
+        rust = (ROOT / "snow-crates/crates/snow-ocr-process/src/protocol.rs").read_text(
+            encoding="utf-8"
+        )
+        spec = (ROOT / "snow-crates/crates/snow-ocr-process/PROTOCOL.md").read_text(
+            encoding="utf-8"
+        )
+        cpp_protocol = re.search(r"kProtocolVersion\s*=\s*(\d+)", cpp)
+        cpp_runtime = re.search(r'kRuntimeVersion\s*=\s*"([^"]+)"', cpp)
+        rust_protocol = re.search(r"pub const VERSION:\s*u16\s*=\s*(\d+)", rust)
+        documented_protocol = re.search(r"^# OCR protocol (\d+)", spec, re.M)
+        documented_runtime = re.search(r"^Runtime ([0-9.]+)", spec, re.M)
+        for label, match in (
+            ("C++ protocol", cpp_protocol), ("C++ runtime", cpp_runtime),
+            ("Rust protocol", rust_protocol), ("protocol docs", documented_protocol),
+            ("runtime docs", documented_runtime),
+        ):
+            self.assertIsNotNone(match, f"Missing {label} release contract")
+        self.assertEqual(cpp_protocol.group(1), rust_protocol.group(1))
+        self.assertEqual(cpp_protocol.group(1), documented_protocol.group(1))
+        self.assertEqual(cpp_runtime.group(1), documented_runtime.group(1))
+        for arch in ("x64", "arm64"):
+            suffix = "" if arch == "x64" else "-arm64"
+            manifest_path = ROOT / (
+                f"snow_shot/packaging/snow-shot-ocr-asset-manifest{suffix}.json"
+            )
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            self.assertEqual(manifest["runtime"]["version"], cpp_runtime.group(1))
+            self.assertEqual(manifest["runtime"]["platform"], f"windows-{arch}")
+            self.assertEqual(manifest["schema"], 2)
+            self.assertEqual(manifest["default_model"], "small")
+            self.assertEqual(len(manifest["models"]), 3)
+
+            def verify_hash_pinned_assets(value):
+                if isinstance(value, list):
+                    for item in value:
+                        verify_hash_pinned_assets(item)
+                    return
+                if not isinstance(value, dict):
+                    return
+                if "sha256" in value:
+                    self.assertRegex(str(value["sha256"]), r"^[a-fA-F0-9]{64}$")
+                if "url" in value:
+                    self.assertRegex(str(value.get("sha256", "")), r"^[a-fA-F0-9]{64}$")
+                    self.assertTrue(
+                        str(value["url"]).startswith(
+                            "https://www.modelscope.cn/models/mgchao/SnowShotOCR/"
+                        ),
+                        f"Unreviewed OCR binary source in {manifest_path}: {value['url']}",
+                    )
+                for item in value.values():
+                    verify_hash_pinned_assets(item)
+
+            verify_hash_pinned_assets(manifest)
+
     def test_community_documents_stay_in_docs_and_links_resolve(self):
         import urllib.parse
         community = sorted((ROOT / "docs").glob("community-*.md"))
