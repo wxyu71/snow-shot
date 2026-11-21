@@ -141,6 +141,40 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                 found.add(action)
         self.assertEqual(found, set(expected))
 
+    def test_community_ci_runs_full_build_on_completed_in_repo_goals(self):
+        # Intermediate PR commits stay cheap, but each complete goal must
+        # compile and package on Windows. PR heads from forks cannot opt in.
+        workflow = (ROOT / ".github/workflows/community-windows-x64.yml").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("git show -s --format=%B \"$PR_HEAD_SHA\"", workflow)
+        self.assertIn("grep -Fxq 'CI-Full: true'", workflow)
+        self.assertIn('"$PR_HEAD_REPO" == "$GITHUB_REPOSITORY"', workflow)
+        self.assertIn('echo "goal_full=$goal_full"', workflow)
+        self.assertIn("needs.preflight.outputs.goal_full == 'true'", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch'", workflow)
+        self.assertIn("cancel-in-progress: ${{ github.event_name == 'pull_request' }}", workflow)
+        self.assertIn("Build production Windows x64", workflow)
+        self.assertIn("Package production installers", workflow)
+        self.assertIn("Smoke-test real Windows installers", workflow)
+        self.assertIn("github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true", workflow)
+        cmake = (ROOT / "snow_shot/CMakeLists.txt").read_text(encoding="utf-8")
+        community_target = cmake.split("add_custom_target(snow-shot-community-tests DEPENDS", 1)[1].split(")", 1)[0]
+        for target in (
+            "snow-shot-paddleocr-client-tests",
+            "snow-shot-recognition-session-controller-tests",
+            "snow-shot-settings-page-loading-tests",
+            "snow-shot-configuration-schema-tests",
+        ):
+            self.assertIn(target, community_target)
+        presets = json.loads((ROOT / "CMakePresets.json").read_text(encoding="utf-8"))
+        selected = next(p for p in presets["testPresets"]
+                        if p["name"] == "test-snow-shot-msvc-community")
+        for name in ("snow-shot-community-cloud-ocr-settings-tests",
+                     "snow-shot-configuration-schema-tests",
+                     "snow-shot-installer-running-app-tests"):
+            self.assertIn(name, selected["filter"]["include"]["name"])
+
     def test_external_source_dependency_parser_rejects_mutable_refs(self):
         pinned = {
             "git": "https://example.invalid/dependency.git",

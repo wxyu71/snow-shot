@@ -14745,13 +14745,16 @@ if(SNOW_SHOT_BUILD_BENCHMARKS)
     endif()
 endif()
 
-# Keep the PR gate intentionally small: validate the provider protocol and
-# the complete in-product Cloud OCR session. Broader UI/plumbing tests remain
-# available in the normal native test suite without multiplying static-Qt links.
+# The goal-completion CI builds a focused but cross-layer acceptance set:
+# PaddleOCR protocol, actual recognition sessions, Settings UI and persisted
+# configuration schema. These exercise independent app areas without compiling
+# every unrelated benchmark, Mini test executable or interactive harness.
 if(SNOW_SHOT_BUILD_TESTS)
     add_custom_target(snow-shot-community-tests DEPENDS
         snow-shot-paddleocr-client-tests
-        snow-shot-recognition-session-controller-tests)
+        snow-shot-recognition-session-controller-tests
+        snow-shot-settings-page-loading-tests
+        snow-shot-configuration-schema-tests)
 endif()
 
 # Focused fixtures also compile recognition surfaces outside the application target.

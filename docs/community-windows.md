@@ -52,17 +52,22 @@ static Qt, NSIS, the repository's vcpkg toolchain and OCR runtime assets:
 The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
 
-The CI pipeline deliberately separates normal review from release acceptance:
-ordinary PR updates (including Draft Beta PR #2) run only the Ubuntu
-repository-policy and helper **preflight**; they do **not** start a Windows
-runner, build production installers, or upload release candidates. Freeze a
-reviewed Beta candidate, then use **Actions > Community Windows x64 > Run
-workflow** on the exact Beta branch with `publish_prerelease=false`. That
-single explicit `workflow_dispatch` runs focused native Windows tests, builds
-the production application, packages real online/offline NSIS installers,
-verifies their checksums/manifests, exercises online-to-offline installation
-and uninstall, and uploads six verified CI artifacts. The artifacts are
-test outputs, not private or approved release binaries.
+The CI pipeline separates **intermediate commits** from **completed user
+goals**, not routine development from real testing. Ordinary PR updates run a
+fast Ubuntu preflight. When a goal is implemented and locally reviewed, the
+Agent must put `CI-Full: true` on its final commit (a standalone commit
+message trailer). For same-repository PRs, that single PR update then
+automatically enters the full Windows job **even when PR #2 is Draft**. No
+extra draft/ready toggling or empty commit is required. A maintainer may
+instead use **Actions > Community Windows x64 > Run workflow** on the exact
+candidate branch with `publish_prerelease=false` (avoid duplicate runs).
+
+The full goal-completion run compiles the focused native C++/Qt tests, builds
+the production Windows x64 executable, creates both real Full online/offline
+NSIS installers, validates checksums/manifests, performs online-to-offline
+in-place install and uninstall smoke, and uploads six verified CI artifacts.
+An ordinary green preflight is never sufficient evidence of a completed
+goal. CI artifacts are test outputs, not approved release binaries.
 
 Only after the manual official **1.5.7** upgrade acceptance and merge into
 the reviewed current `main` branch may a maintainer start the same workflow
@@ -141,18 +146,22 @@ layer of source-text contract tests. New behavior is tested in the existing C++/
 and executed through CMake/CTest. Compiler, CMake, Cargo and NSIS failures are validated by the
 real tools that produce the application.
 
-Every pull request enters the lightweight preflight, while the expensive
-Windows job runs only when the workflow is **explicitly dispatched**:
+Every pull request enters the lightweight preflight. The expensive Windows
+job runs once for each reviewed goal-completion commit carrying
+`CI-Full: true`, or for an explicit `workflow_dispatch`:
 
 1. The Ubuntu preflight runs upstream-sync policy tests, deletion guard,
-   Qt/CMake contract tests, PaddleOCR fixture self-test, and the release
-   helper self-test. Documentation-only and native PR changes stop here.
-2. On one deliberate `workflow_dispatch`, the Windows job checks the exact
-   MSVC/SDK toolchain, restores dependency caches, and builds focused
-   `snow-shot-msvc-test` C++/Qt tests:
-   `snow-shot-paddleocr-client-tests` and
-   `snow-shot-recognition-session-controller-tests`. It never substitutes
-   a text-only check for the real compiler, CMake or CTest.
+   Qt/CMake contract tests, PaddleOCR fixture self-test, and release
+   helper self-test. On a same-repository PR, the actual head commit's
+   `CI-Full: true` trailer marks a completed goal and enables native CI.
+   Untrusted fork PRs cannot opt into expensive Windows jobs via a commit.
+2. A completed goal or deliberate `workflow_dispatch` checks the pinned
+   MSVC/SDK, restores dependency caches, configures `snow-shot-msvc-test`
+   and compiles targeted C++/Qt executables covering the PaddleOCR
+   protocol, recognition session, Cloud OCR settings UI and persistent
+   configuration schema. It runs the matching CTest cases plus the native
+   NSIS running-application fixture. The production build is a separate
+   full application compile, not a static code scan.
 3. The same Windows job tests NSIS/CPack, validates production Cargo licenses,
    builds `snow-shot-msvc-release`, creates both real Full NSIS installers,
    verifies SHA-256/manifest assets, silently installs the online variant,
@@ -166,18 +175,21 @@ Windows job runs only when the workflow is **explicitly dispatched**:
 The pipeline caches dependencies and the audited static Qt kit, not CMake/MSVC application build
 trees. This avoids stale compiled state while retaining the expensive dependency work.
 
-**CI budget for maintainers and automated agents:** Follow
-[repository Agent guidelines](../AGENTS.md). Run only locally relevant
-formatting, static and targeted tests before pushing; consolidate verified
-changes into one commit rather than a push-per-failure loop. Keep PR
-`concurrency` cancellation enabled for obsolete runs. Avoid toggling
-`ready_for_review`, no-op commits, manual reruns or automatic full-build
-dispatches to force CI. Analyze the last failure log, freeze a candidate,
-then spend **one** intentional full Windows CI run on it. If the run fails,
-fix and test a batch of problems before the next manual acceptance run.
-The workflow uses a new concurrency namespace so the first lightweight
-PR check does not cancel the already-running previous full Beta check.
-Do not infer Windows acceptance for a new head commit from a run on an older SHA.
+**CI policy for maintainers and automated agents:** Follow
+[repository Agent guidelines](../AGENTS.md). A group of commits may implement
+one user goal; perform relevant local checks along the way, then **always
+run one full CI after the goal is complete** by adding `CI-Full: true` to
+the goal's final commit. The commit trailer is intentionally not required
+on intermediate commits. The complete Windows build is the normal
+goal-acceptance mechanism, not a rare privilege reserved for release day.
+
+Keep per-PR `concurrency` cancellation for superseded runs. Avoid redundant
+manual dispatches when the trailer has already requested full CI; do not
+trigger builds using empty commits or `ready_for_review` toggles. If the
+full run fails, diagnose the earliest failure, batch fixes, and use a new
+goal-completion commit to retest. Track the exact tested commit and require
+fresh full CI if the production candidate changes. A clean preflight never
+substitutes for compiled/native and NSIS validation.
 
 The separate source-grep `test-community-*` scripts, standalone PaddleOCR CMake harness, and
 duplicate OCR license workflow are intentionally removed. The production Cargo license preflight

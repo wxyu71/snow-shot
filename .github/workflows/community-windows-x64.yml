@@ -1,7 +1,8 @@
 name: Community Windows x64
 
 on:
-  # PR commits are limited to the Ubuntu preflight; full Windows acceptance is manual.
+  # Ordinary PR commits are lightweight. A goal-completion commit with the
+  # exact "CI-Full: true" trailer requests the full Windows acceptance once.
   pull_request:
     types: [opened, reopened, synchronize]
   workflow_dispatch:
@@ -27,6 +28,7 @@ jobs:
     timeout-minutes: 10
     outputs:
       native: ${{ steps.classify.outputs.native }}
+      goal_full: ${{ steps.classify.outputs.goal_full }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,13 +37,17 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Classify change
+      - name: Classify change and goal completion
         id: classify
         shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
           if [[ "${{ github.event_name }}" != "pull_request" ]]; then
             echo "native=true" >> "$GITHUB_OUTPUT"
+            echo "goal_full=false" >> "$GITHUB_OUTPUT"
             exit 0
           fi
           native=false
@@ -51,7 +57,17 @@ jobs:
               *) native=true ;;
             esac
           done < <(git diff --name-only -z "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")
+          goal_full=false
+          # In-repo reviewed goal only. A fork cannot request expensive runners.
+          # Read the actual PR head, not GitHub's synthetic PR merge commit.
+          if [[ "$PR_HEAD_REPO" == "$GITHUB_REPOSITORY" ]] &&
+              git show -s --format=%B "$PR_HEAD_SHA" | grep -Fxq 'CI-Full: true'; then
+            goal_full=true
+            native=true
+            echo "Goal completed: run the full Windows build and NSIS acceptance."
+          fi
           echo "native=$native" >> "$GITHUB_OUTPUT"
+          echo "goal_full=$goal_full" >> "$GITHUB_OUTPUT"
       - name: Run repository policy and helper tests
         shell: bash
         run: |
@@ -80,9 +96,9 @@ jobs:
 
   windows:
     needs: [preflight]
-    # No Windows runner for ordinary PR pushes, including Beta PR #2.
-    # workflow_dispatch explicitly opts into full production installer validation.
-    if: needs.preflight.outputs.native == 'true' && github.event_name == 'workflow_dispatch'
+    # Full CI is required once per completed goal, not once per intermediate
+    # commit. workflow_dispatch remains available for deliberate validation.
+    if: needs.preflight.outputs.native == 'true' && (github.event_name == 'workflow_dispatch' || needs.preflight.outputs.goal_full == 'true')
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     env:
@@ -186,14 +202,14 @@ jobs:
           path: .tools/qt/6.12.0/x64-static-release
           key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
 
-      - name: Configure focused native tests
+      - name: Configure goal acceptance native tests
         shell: pwsh
         run: cmake --preset snow-shot-msvc-test
-      - name: Build core Community native tests
+      - name: Build Community native acceptance tests
         timeout-minutes: 120
         shell: pwsh
         run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
-      - name: Run core Community native tests
+      - name: Run Community native acceptance tests
         shell: pwsh
         run: ctest --preset test-snow-shot-msvc-community
 
