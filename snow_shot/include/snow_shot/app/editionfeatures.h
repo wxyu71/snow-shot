@@ -31,15 +31,9 @@ namespace snow_shot::app {
         return false;
 #endif
     }
-    if (id == QStringLiteral("barcode-recognition"))
-        return edition::qrRecognition;
-    if (id == QStringLiteral("document-recognition"))
-        return edition::documentRecognition;
-    if (id == QStringLiteral("table-recognition"))
-        return edition::tableRecognition;
-    if (id == QStringLiteral("latex-recognition"))
-        return edition::latexRecognition;
-    if (id == QStringLiteral("convert-to-markdown") || id == QStringLiteral("convert-to-html"))
+    // Only Markdown is the configurable online OCR toolbar action. The
+    // unsupported IDs above are intentionally blocked before this point.
+    if (id == QStringLiteral("convert-to-markdown"))
         return edition::imageConversion;
     if (id == QStringLiteral("text-translation"))
         return edition::textTranslation;
