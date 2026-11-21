@@ -52,16 +52,20 @@ ctest --test-dir build/snow-shot-msvc-release -C Release --output-on-failure
 
 The package script creates online and offline full installers; the **offline**
 variant includes the packaged OCR runtime and its default local model.
-`.github/workflows/community-windows-x64.yml` validates the build and
-uploads both installers as artifacts **on successful completion**. A prerelease is
+`.github/workflows/community-windows-x64.yml` validates the focused native build for
+ordinary PRs. The Beta integration PR #2 additionally builds and packages the
+full production application, tests the actual online/offline NSIS installers,
+and uploads the verified artifacts **only after these checks pass**. A prerelease is
 started manually from **Actions > Community Windows x64**
 on the current `main` branch with `publish_prerelease=true`. The workflow first
 performs the clean Windows build, native packaging checks, three-model C++ Qt contract
 tests and SHA-256/manifest verification. Only after those pass does it create the
 version tag (for example, `v1.5.8-beta.1_snow-shot`), assemble a draft GitHub
 Release, verify that all six expected assets are attached, and publish it as a
-prerelease. PR runs and manual runs with `publish_prerelease=false` only upload
-private workflow artifacts. Releases contain only
+prerelease. Beta PR #2 and manual runs with `publish_prerelease=false` upload
+workflow artifacts without creating tags or GitHub Releases. Other PRs only
+run the focused native checks. Treat artifacts from public-repository CI as
+test outputs, not as private or approved release binaries. Releases contain only
 the x64 Full online/offline NSIS installers, checksums and manifests, never
 Mini, ARM64, macOS or portable builds.
 
@@ -96,9 +100,9 @@ This branch remains `1.5.8-beta.1` while the PR is under review; a future
 version bump is a separate release decision.
 
 **Verification required before public release:** actual Windows build and
-unit tests; NSIS upgrade over an installed official 1.5.7; preservation of
-user settings and shortcuts; local OCR model bootstrapping and all three
-AI Studio model responses. A version-number change alone does not prove
+unit tests; installer smoke on the latest candidate; a **separate manual** NSIS upgrade
+over an installed official 1.5.7; preservation of user settings and shortcuts;
+local OCR model bootstrapping and all three AI Studio model responses. A version-number change alone does not prove
 these upgrade and runtime behaviors.
 
 ## Commercial-code removal and upstream guard
@@ -125,16 +129,19 @@ Every pull request enters one workflow:
 2. Native changes use the pinned Windows toolchain and the cached vcpkg/Cargo/static-Qt dependency
    layers.
 3. A dedicated `snow-shot-msvc-test` build enables the repository's real tests without enabling
-   packaging or release optimization. The PR gate intentionally builds only two executables:
+   packaging or release optimization. The normal PR gate intentionally builds only two executables:
    `snow-shot-paddleocr-client-tests` for the provider protocol and
    `snow-shot-recognition-session-controller-tests` for the complete in-product Cloud OCR session.
    Broader Settings/About/storage/toolbar tests remain in the normal native suite but are not paid
    for on every Community PR. PRs do not link the production `snow_shot.exe`; the core build has
    its own two-hour timeout so a stalled compiler or linker cannot consume the whole Windows job.
-4. A normal `workflow_dispatch` additionally smoke-tests the pinned NSIS/CPack toolchain, runs
-   the production Cargo/license collector, creates the `snow-shot-msvc-release` production build
-   tree, links the full application once, packages the Full-only NSIS online/offline installers,
-   verifies their manifests and SHA-256 files, and uploads them as private workflow artifacts.
+4. Beta integration PR #2 and a normal `workflow_dispatch` additionally smoke-test the pinned
+   NSIS/CPack toolchain, run the production Cargo/license collector, create the
+   `snow-shot-msvc-release` production build tree, link the full application once, package
+   the Full-only NSIS online/offline installers, and verify their manifests and SHA-256 files.
+   A Windows runner then silently installs the real online NSIS artifact, upgrades it in place
+   to the offline artifact, verifies the embedded OCR payload and uninstall path, and uploads
+   the verified binaries as CI artifacts. Neither path publishes a release by itself.
 5. With `publish_prerelease=true`, the same manually verified production artifacts continue into
    the draft/prerelease publication gate.
 
