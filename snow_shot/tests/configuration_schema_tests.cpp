@@ -103,10 +103,17 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
         }
         require(!foundCommunityKey, "Community shortcut schema key must be unique");
         foundCommunityKey = true;
+        // The raw descriptor stores "Tab" as a StringList, but buildEntries()
+        // materializes all drawing shortcuts as typed ShortcutList objects.
+        // Validate the runtime contract rather than the intermediate descriptor.
+        const QJsonValue storedDefault = entry.value(QStringLiteral("defaultValue"));
+        const auto bindings = snow_shot::shortcuts::shortcutBindingsFromJson(storedDefault, false);
+        const auto normalized = ConfigurationSchema::normalize(communityKey, storedDefault);
         require(
-            entry.value(QStringLiteral("valueKind")).toString() == QStringLiteral("StringList") &&
-                entry.value(QStringLiteral("defaultValue")).toArray() ==
-                    QJsonArray{QStringLiteral("Tab")} &&
+            entry.value(QStringLiteral("valueKind")).toString() == QStringLiteral("ShortcutList") &&
+                bindings == snow_shot::shortcuts::ShortcutBindingList{QStringLiteral("Tab")} &&
+                storedDefault == snow_shot::shortcuts::shortcutBindingsToJson(bindings) &&
+                normalized.valid && !normalized.changed && normalized.value == storedDefault &&
                 entry.value(QStringLiteral("maximumListItems")).toInt() == 2,
             "Community annotation cycle shortcut must retain its typed Tab default");
     }
