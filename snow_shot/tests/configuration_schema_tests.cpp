@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
 #include <QStandardPaths>
 
@@ -64,6 +65,62 @@ QJsonArray metadata() {
     }
     return result;
 }
+
+
+#ifdef Q_OS_WIN
+// The original author baseline is intentionally immutable. Only the five
+// reviewed Community-disabled toolbar actions may disappear from three
+// affected Full-edition layouts. Compare all remaining data exactly.
+QJsonObject communityToolbarBaseline(QJsonObject entry) {
+    if (snow_shot::app::edition::isMini)
+        return entry;
+
+    const QString key = entry.value(QStringLiteral("key")).toString();
+    const QString floating = QStringLiteral("floating_toolbar/layout");
+    const QString pinned = QStringLiteral("pin_to_screen/action_tools_layout");
+    const QString screenshot = QStringLiteral("screenshot_toolbar/action_tools_layout");
+    if (key != floating && key != pinned && key != screenshot)
+        return entry;
+
+    const QSet<QString> unavailable{
+        QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition"),
+        QStringLiteral("latex-recognition"), QStringLiteral("document-recognition"),
+        QStringLiteral("convert-to-html")};
+    QSet<QString> expectedRemoved = unavailable;
+    if (key == floating)
+        expectedRemoved.remove(QStringLiteral("document-recognition"));
+
+    QJsonObject layout = entry.value(QStringLiteral("defaultValue")).toObject();
+    require(layout.value(QStringLiteral("positions")).isArray() &&
+                layout.value(QStringLiteral("hidden")).isArray(),
+            "frozen original toolbar layout must contain positions and hidden arrays");
+    QSet<QString> removed;
+    const auto withoutUnavailable = [&unavailable, &removed](const QJsonArray& original) {
+        QJsonArray retained;
+        for (const auto& item : original) {
+            if (unavailable.contains(item.toString()))
+                removed.insert(item.toString());
+            else
+                retained.append(item);
+        }
+        return retained;
+    };
+    QJsonArray positions;
+    for (const auto& group : layout.value(QStringLiteral("positions")).toArray()) {
+        require(group.isArray(), "frozen toolbar positions must be arrays");
+        const QJsonArray retained = withoutUnavailable(group.toArray());
+        if (!retained.isEmpty())
+            positions.append(retained);
+    }
+    layout.insert(QStringLiteral("positions"), positions);
+    layout.insert(QStringLiteral("hidden"),
+                  withoutUnavailable(layout.value(QStringLiteral("hidden")).toArray()));
+    require(removed == expectedRemoved,
+            "frozen toolbar baseline must retain exactly the reviewed disabled Community actions");
+    entry.insert(QStringLiteral("defaultValue"), layout);
+    return entry;
+}
+#endif
 
 void publicMetadataMatchesOriginal(const QJsonArray& actual) {
     // The Community safety policy makes startup registration opt-in on every
@@ -136,12 +193,14 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
     }
     require(originalEntries.size() == expected.size(),
             "original schema entry counts must match after the checked Community addition");
+    int changedEntries = 0;
     for (qsizetype i = 0; i < expected.size(); ++i) {
-        QJsonObject expectedEntry = expected.at(i).toObject();
+        QJsonObject expectedEntry = communityToolbarBaseline(expected.at(i).toObject());
         const auto key = expectedEntry.value(QStringLiteral("key")).toString();
         // Keep the original-author fixture unchanged for regression provenance.
         // Community opts out of startup registration and persistent histories
-        // on a fresh installation; exactly these three defaults may differ.
+        // on a fresh installation; these three booleans and three approved
+        // toolbar layouts are the only original-baseline differences.
         if (key == QStringLiteral("system/auto_start_at_boot") ||
             key == QStringLiteral("capture_history/enabled") ||
             key == QStringLiteral("pinned_history/enabled")) {
@@ -150,14 +209,19 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
             expectedEntry.insert(QStringLiteral("defaultValue"), false);
         }
         if (originalEntries.at(i).toObject() != expectedEntry) {
-            std::cerr
-                << "schema metadata changed at entry " << i << ": "
-                << key.toStdString()
-                << "\nactual: " << QJsonDocument(originalEntries.at(i).toObject()).toJson().constData()
-                << "expected: " << QJsonDocument(expectedEntry).toJson().constData();
-            std::exit(1);
+            ++changedEntries;
+            // Show multiple independent schema mismatches in a single native CI
+            // run instead of iterating through one failing fixture row per run.
+            if (changedEntries <= 12) {
+                std::cerr << "schema metadata changed at entry " << i << ": "
+                          << key.toStdString() << "\nactual: "
+                          << QJsonDocument(originalEntries.at(i).toObject()).toJson().constData()
+                          << "expected: " << QJsonDocument(expectedEntry).toJson().constData();
+            }
         }
     }
+    require(changedEntries == 0,
+            "unreviewed original schema metadata differences remain (see all listed keys)");
 #else
     // The frozen field-by-field references are native Windows Full/Mini runs.
     // Other hosts still exercise the common contracts and native defaults below.
