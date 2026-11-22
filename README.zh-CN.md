@@ -6,6 +6,7 @@
 
 [English](README.md) · [测试版更新记录](docs/community-changelog.md) ·
 [Windows 构建说明](docs/community-windows.md) ·
+[文档导航](docs/README.md) ·
 [本 Fork 的 Issue](https://github.com/wxyu71/snow-shot/issues)
 
 ## 当前状态：v1.5.8-beta.1

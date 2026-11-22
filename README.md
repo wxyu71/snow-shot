@@ -6,6 +6,7 @@
 
 [简体中文](README.zh-CN.md) · [Changes](docs/community-changelog.md) ·
 [Windows build and verification](docs/community-windows.md) ·
+[Documentation](docs/README.md) ·
 [Issues](https://github.com/wxyu71/snow-shot/issues)
 
 ## Status — v1.5.8-beta.1
