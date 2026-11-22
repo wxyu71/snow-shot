@@ -23,12 +23,12 @@ class CommunityToolbarPolicyTests final : public QObject {
         QCOMPARE(error.error, QJsonParseError::NoError);
         QVERIFY(document.isObject());
 
-        const QSet<QString> disabled{
-            QStringLiteral("barcode-recognition"),
-            QStringLiteral("table-recognition"),
-            QStringLiteral("latex-recognition"),
-            QStringLiteral("document-recognition"),
-            QStringLiteral("convert-to-html")};
+        QSet<QString> disabled;
+        disabled.insert(QStringLiteral("barcode-recognition"));
+        disabled.insert(QStringLiteral("table-recognition"));
+        disabled.insert(QStringLiteral("latex-recognition"));
+        disabled.insert(QStringLiteral("document-recognition"));
+        disabled.insert(QStringLiteral("convert-to-html"));
         for (const QString& id : disabled)
             QVERIFY2(!snow_shot::app::editionActionToolAvailable(id),
                      qPrintable(QStringLiteral("Disabled Community action was enabled: ") + id));
@@ -77,13 +77,14 @@ class CommunityToolbarPolicyTests final : public QObject {
         }
         expectedHidden = retainEnabled(original.value(QStringLiteral("hidden")).toArray());
 
-        QVERIFY(removed == QSet<QString>({QStringLiteral("latex-recognition"),
-                                          QStringLiteral("barcode-recognition"),
-                                          QStringLiteral("table-recognition"),
-                                          QStringLiteral("convert-to-html")}));
+        QSet<QString> expectedRemoved;
+        expectedRemoved.insert(QStringLiteral("latex-recognition"));
+        expectedRemoved.insert(QStringLiteral("barcode-recognition"));
+        expectedRemoved.insert(QStringLiteral("table-recognition"));
+        expectedRemoved.insert(QStringLiteral("convert-to-html"));
+        QVERIFY(removed == expectedRemoved);
         const auto live = snow_shot::storage::defaultFloatingToolbarLayout();
-        QVERIFY2(live.positions == expectedPositions,
-                 "Live production floating toolbar does not match the reviewed Community exclusions");
+        QVERIFY2(live.positions == expectedPositions, "Community floating positions differ");
         QCOMPARE(live.hidden, expectedHidden);
     }
 };
