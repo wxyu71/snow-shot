@@ -1,0 +1,10 @@
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    # A short review buffer reduces the risk of newly compromised dependencies.
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3

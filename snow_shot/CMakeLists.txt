@@ -1223,7 +1223,9 @@ target_sources(snow_shot_settings PRIVATE
     include/snow_shot/presentation/components/clouduploadsettingswidget.h
     src/presentation/components/clouduploadsettingswidget.cpp
     include/snow_shot/presentation/components/cloudocrsettingswidget.h
-    src/presentation/components/cloudocrsettingswidget.cpp)
+    src/presentation/components/cloudocrsettingswidget.cpp
+    include/snow_shot/presentation/components/cloudocrenginechoices.h
+    src/presentation/components/cloudocrenginechoices.cpp)
 target_link_libraries(snow_shot_settings PUBLIC snow_shot_permissions snow_shot_login_item
     snow_shot_store_lifecycle)
 qt_add_resources(snow_shot_settings "snow_shot_about_assets"

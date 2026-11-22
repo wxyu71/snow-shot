@@ -1,0 +1,29 @@
+{
+  "version": 6,
+  "configurePresets": [
+    {
+      "name": "community-native-smoke",
+      "displayName": "Fast native Qt contracts (system Qt; no release LTCG)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/../../build/ci-native-smoke",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "Debug"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "community-native-smoke",
+      "configurePreset": "community-native-smoke"
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "community-native-smoke",
+      "configurePreset": "community-native-smoke",
+      "output": {
+        "outputOnFailure": true
+      }
+    }
+  ]
+}

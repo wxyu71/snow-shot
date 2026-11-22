@@ -18,8 +18,6 @@ ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / ".github" / "upstream-protection.json"
 COMMUNITY_UPDATE_KEYS = ROOT / "snow_shot" / "resources" / "update-trusted-keys.json"
 CONFIGURATION_SCHEMA = ROOT / "snow_shot" / "src" / "storage" / "configurationschema.cpp"
-WORKFLOW_ROOT = ROOT / ".github" / "workflows"
-ACTION_USE = re.compile(r"uses:\s+([^@\s]+)@([^\s#]+)")
 COMMERCIAL_PATH = re.compile(
     r"(?:^|[/_-])(account|membership|membercenter|billing|payment|purchase|topup|"
     r"recharge|credits?|points?|paywall|subscription|login|signin|signup|register|checkout)(?:[/_.-]|$)", re.I
@@ -310,24 +308,6 @@ def assert_external_source_pins() -> None:
 
 
 
-def assert_workflow_actions_pinned() -> None:
-    violations: list[str] = []
-    for path in sorted(WORKFLOW_ROOT.glob("*.y*ml")):
-        content = path.read_text(encoding="utf-8")
-        for match in ACTION_USE.finditer(content):
-            action, reference = match.groups()
-            if action.startswith("./"):
-                continue
-            if re.fullmatch(r"[0-9a-fA-F]{40}", reference) is None:
-                line = content.count("\n", 0, match.start()) + 1
-                violations.append(f"{path.relative_to(ROOT).as_posix()}:{line}: {action}@{reference}")
-    if violations:
-        raise SystemExit(
-            "External GitHub Actions must be pinned to immutable 40-character commit SHAs:\n" +
-            "\n".join(violations)
-        )
-
-
 def assert_deleted_files_absent() -> None:
     policy = json.loads(POLICY.read_text(encoding="utf-8"))
     for path in policy["deleted_files"]:
@@ -340,7 +320,6 @@ def assert_deleted_files_absent() -> None:
     assert_community_update_signers_disabled()
     assert_sensitive_local_control_defaults_disabled()
     assert_privacy_persistence_defaults_disabled()
-    assert_workflow_actions_pinned()
     assert_external_source_pins()
 
 

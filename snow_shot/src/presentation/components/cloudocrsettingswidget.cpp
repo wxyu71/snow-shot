@@ -1,4 +1,5 @@
 #include "snow_shot/presentation/components/cloudocrsettingswidget.h"
+#include "snow_shot/presentation/components/cloudocrenginechoices.h"
 #include "snow_shot/network/communitycloudocrsettings.h"
 #include "snow_shot/app/edition.h"
 #include "snow_shot/customaimodelconfiguration.h"
@@ -43,10 +44,9 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     m_engine->setObjectName(QStringLiteral("onlineOcrEngine"));
     // Use the text + userData overload, not the QIcon + text overload.
     // An empty braced first argument would silently discard the engine ID.
-    m_engine->addItem(tr("Baidu PaddleOCR (AI Studio)"), QStringLiteral("paddleocr"));
-#if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    m_engine->addItem(tr("OpenAI-compatible vision model"), QStringLiteral("vision"));
-#endif
+    // This exact production option population is compiled in fast native Qt tests.
+    snow_shot::presentation::components::populateCloudOcrEngineChoices(
+        *m_engine, SNOW_SHOT_ENABLE_IMAGE_CONVERSION != 0);
     m_engineLabel = new QLabel(this);
     form->addRow(m_engineLabel, m_engine);
 

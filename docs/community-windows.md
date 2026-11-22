@@ -54,7 +54,8 @@ variant includes the packaged OCR runtime and its default local model.
 
 The CI pipeline separates **intermediate commits** from **completed user
 goals**, not routine development from real testing. Ordinary PR updates run a
-fast Ubuntu preflight. When a goal is implemented and locally reviewed, the
+fast Ubuntu workflow/security preflight **followed by real compiled C++/Qt
+contract tests**; a failed early native test prevents the full Windows job. When a goal is implemented and locally reviewed, the
 Agent must put `CI-Full: true` on its final commit (a standalone commit
 message trailer). For same-repository PRs, that single PR update then
 automatically enters the full Windows job **even when PR #2 is Draft**. No
@@ -84,9 +85,12 @@ For reproducible Windows CI, the workflow pins MSVC to the exact installed
 that toolset disappears from the hosted runner, the job stops immediately
 instead of silently switching compilers. Local builds may still select the
 newest supported toolset unless `SNOW_MSVC_TOOLSET_VERSION` is set explicitly.
-The vcpkg **binary** cache is keyed by the selected MSVC and Windows SDK
-versions as well as dependency inputs. A separate `VCPKG_DOWNLOADS` cache
-preserves source archives and downloads even if dependency bootstrap fails.
+The vcpkg **binary** cache is keyed by the selected MSVC/SDK versions and
+dependency inputs. vcpkg's official SHA-addressed `X_VCPKG_ASSET_SOURCES`
+asset cache complements a separate `VCPKG_DOWNLOADS` archive cache.
+The Windows workflow optionally configures GitHub Packages NuGet as a per-port
+binary provider, retaining the local vcpkg file cache as a fallback. This uses
+supported providers, **not** the removed `x-gha` binary backend.
 The Windows CI x264 overlay uses `mirror/x264` with the exact pinned
 Git commit to bypass unreliable VideoLAN GitLab downloads; the regular
 VideoLAN archive source and its SHA-512 check remain intact outside CI.
@@ -141,59 +145,65 @@ See [sync policy](community-upstream-sync.md).
 
 ## CI and prerelease pipeline
 
-The Community fork follows the repository's native test design instead of maintaining a second
-layer of source-text contract tests. New behavior is tested in the existing C++/Rust test targets
-and executed through CMake/CTest. Compiler, CMake, Cargo and NSIS failures are validated by the
-real tools that produce the application.
+A completed user goal still requires **one full Windows production build and both real NSIS
+installers** on the final SHA. The stages are deliberately ordered: cheap workflow/policy
+checks, **compiled native** C++/Qt tests, then the slow production static-Qt Windows build.
+A CTest contract that fails in seconds must not be discovered for the first time after
+70+ minutes of static MSVC linking.
 
-Every pull request enters the lightweight preflight. The expensive Windows
-job runs once for each reviewed goal-completion commit carrying
-`CI-Full: true`, or for an explicit `workflow_dispatch`:
+1. **P0 — workflow and supply-chain preflight:** `actionlint v1.7.12` checks
+   GitHub Actions YAML, expressions and embedded ShellCheck; `zizmor v1.32.0`
+   checks workflow security and SHA pins. `clang-format` checks new native
+   code; `PSScriptAnalyzer` checks changed PowerShell. Domain-specific
+   upstream trust, privacy, immutable source and release policy tests remain
+   fail-closed. Generic text-matching Python assertions for Actions and C++
+   behavior have been removed.
+2. **P0 — compiled native smoke:** `ci/native-smoke/` uses CMake Presets,
+   Ninja, Ubuntu distribution Qt6, Qt Test and CTest. It compiles the **real**
+   PaddleOCR client and Community OCR settings sources, plus the exact
+   `QComboBox` engine population implementation from the production settings
+   widget. It checks userData, normalization and persistence in real Qt
+   objects and produces JUnit and CTest diagnostics. This detects functional
+   errors early but does not claim Windows ABI compatibility.
+3. **P1 — Windows dependency supply:** Check the exact supported MSVC toolset
+   and Windows SDK; restore binary/source caches and a SHA-addressed vcpkg
+   asset cache; configure an optional GitHub Packages NuGet per-port binary
+   cache with the local file cache as fallback. Restore/build the audited
+   **static `/MT` Qt** kit; run the production Cargo license graph before
+   expensive test links.
+4. **P1 — native and production build:** Configure `snow-shot-msvc-test`,
+   build real cross-layer test executables, run `test-snow-shot-msvc-community`
+   with JUnit, and then build the actual production `snow-shot-msvc-release`
+   executable. Upload a structured MSBuild `.binlog`, JUnit, CTest
+   `LastTest.log`, CMake configure logs and a production transcript after
+   success **or failure**, rather than rerunning a large job simply to debug.
+5. **P2 — installable delivery:** Build online/offline Windows x64 Full NSIS
+   installers, verify manifests and SHA-256, install/upgrade/uninstall on
+   Windows, and upload candidate artifacts. Every completed same-repository
+   goal with exact standalone `CI-Full: true` triggers this full acceptance;
+   external forks cannot invoke expensive trusted jobs via commit trailers.
 
-1. The Ubuntu preflight runs upstream-sync policy tests, deletion guard,
-   Qt/CMake contract tests, PaddleOCR fixture self-test, and release
-   helper self-test. On a same-repository PR, the actual head commit's
-   `CI-Full: true` trailer marks a completed goal and enables native CI.
-   Untrusted fork PRs cannot opt into expensive Windows jobs via a commit.
-2. A completed goal or deliberate `workflow_dispatch` checks the pinned
-   MSVC/SDK, restores dependency caches, configures `snow-shot-msvc-test`
-   and compiles targeted C++/Qt executables covering the PaddleOCR
-   protocol, recognition session, Cloud OCR settings UI and persistent
-   configuration schema. It runs the matching CTest cases plus the native
-   NSIS running-application fixture. The production build is a separate
-   full application compile, not a static code scan.
-3. The same Windows job tests NSIS/CPack, validates production Cargo licenses,
-   builds `snow-shot-msvc-release`, creates both real Full NSIS installers,
-   verifies SHA-256/manifest assets, silently installs the online variant,
-   upgrades it in place with the offline variant, checks OCR payloads,
-   uninstalls, and uploads verified CI artifacts.
-4. `publish_prerelease=false` stops after artifact validation. Only
-   `publish_prerelease=true` on current, reviewed `main` can continue
-   to the draft/prerelease publication gate; the release source guard fails
-   closed on other branches.
+**Warning policy:** A successful CTest/NSIS run with unresolved warnings is
+*not* release approval. Do not globally silence Qt/CMake warnings, MSVC or
+Cargo diagnostics, or set `continue-on-error` on tests. The previously
+observed Qt policy warnings, PCRE2 conversion warnings, Qt `QVariant::save`
+serialization warnings and cross-thread timer messages require targeted
+source or reviewed upstream fixes. Offscreen Qt uses the real Windows font
+directory to avoid the known missing-font environment warning. Record the
+exact fix and link the diagnostic to the same tested SHA.
 
-The pipeline caches dependencies and the audited static Qt kit, not CMake/MSVC application build
-trees. This avoids stale compiled state while retaining the expensive dependency work.
+Publication remains separate and **manual only**: after a successful full
+run on reviewed current `main`, plus human validation of an in-place
+upgrade from an actually installed official **1.5.7**, use
+`workflow_dispatch` with `publish_prerelease=true`. Ordinary PR events
+never create a tag or public release. Preserve PR Draft state during
+unreviewed development and never reuse an older run's success after the
+candidate SHA changes.
 
-**CI policy for maintainers and automated agents:** Follow
-[repository Agent guidelines](../AGENTS.md). A group of commits may implement
-one user goal; perform relevant local checks along the way, then **always
-run one full CI after the goal is complete** by adding `CI-Full: true` to
-the goal's final commit. The commit trailer is intentionally not required
-on intermediate commits. The complete Windows build is the normal
-goal-acceptance mechanism, not a rare privilege reserved for release day.
-
-Keep per-PR `concurrency` cancellation for superseded runs. Avoid redundant
-manual dispatches when the trailer has already requested full CI; do not
-trigger builds using empty commits or `ready_for_review` toggles. If the
-full run fails, diagnose the earliest failure, batch fixes, and use a new
-goal-completion commit to retest. Track the exact tested commit and require
-fresh full CI if the production candidate changes. A clean preflight never
-substitutes for compiled/native and NSIS validation.
-
-The separate source-grep `test-community-*` scripts, standalone PaddleOCR CMake harness, and
-duplicate OCR license workflow are intentionally removed. The production Cargo license preflight
-already resolves the locked Windows release graph and runs the same collector used by packaging.
+The workflow deliberately does not cache mutable CMake/MSBuild application
+build trees, but it does reuse immutable dependency sources and audited Qt
+outputs. See [CI architecture and failure investigation](community-ci-architecture.md)
+and [repository guidelines](../AGENTS.md) for the staged engineering policy.
 
 ### Prerelease publication
 

@@ -68,15 +68,66 @@ jobs:
           fi
           echo "native=$native" >> "$GITHUB_OUTPUT"
           echo "goal_full=$goal_full" >> "$GITHUB_OUTPUT"
-      - name: Run repository policy and helper tests
+      - name: Validate workflows and embedded shell with actionlint
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -color
+
+      - name: Audit workflow security with zizmor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check zizmor==1.32.0
+          zizmor --strict-collection --min-severity=medium --min-confidence=high .
+
+      - name: Check native smoke formatting with clang-format
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-format-18 --dry-run --Werror \
+            ci/native-smoke/community_native_smoke_tests.cpp \
+            snow_shot/src/presentation/components/cloudocrenginechoices.cpp \
+            snow_shot/include/snow_shot/presentation/components/cloudocrenginechoices.h
+
+      - name: Analyze modified PowerShell with PSScriptAnalyzer
+        shell: pwsh
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = if ($env:PR_HEAD_SHA) { $env:PR_HEAD_SHA } else { $env:GITHUB_SHA }
+          $parent = "$head^"
+          $paths = @(& git diff --name-only $parent $head -- scripts |
+              Where-Object { $_ -match '\.(ps1|psm1|psd1)$' -and (Test-Path $_) })
+          if ($paths.Count -eq 0) {
+            Write-Host 'No modified PowerShell entry points.'
+          } else {
+            Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+            Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+            $findings = @($paths | ForEach-Object {
+              Invoke-ScriptAnalyzer -Path $_ -Severity Error,Warning
+            })
+            if ($findings.Count -gt 0) {
+              $findings | Format-Table ScriptName,Line,RuleName,Severity,Message -Wrap
+              throw "PSScriptAnalyzer found $($findings.Count) PowerShell issues"
+            }
+          }
+
+      - name: Run repository policy and helper tests
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          # Review newly committed lines, not pre-existing whitespace in
+          # frozen third-party license text from prior upstream history.
+          head="${PR_HEAD_SHA:-HEAD}"
+          git diff --check "$head^" "$head"
           python3 scripts/test-upstream-sync.py
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
-          python3 scripts/paddleocr_live_e2e.py --selftest
           python3 scripts/community_release.py selftest
       - name: Validate prerelease source
         if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
@@ -94,13 +145,58 @@ jobs:
           }
           python3 scripts/community_release.py validate-tag --tag "$(python3 scripts/community_release.py tag)"
 
-  windows:
+  native-smoke:
+    name: native-smoke (compiled Qt/C++ before Windows)
     needs: [preflight]
+    if: needs.preflight.outputs.native == 'true'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install distribution Qt6 and Ninja
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            qt6-base-dev ninja-build
+      - name: Configure fast native contracts with CMake
+        working-directory: ci/native-smoke
+        run: cmake --preset community-native-smoke
+      - name: Compile the actual Community Qt and OCR sources
+        working-directory: ci/native-smoke
+        run: cmake --build --preset community-native-smoke --parallel 4
+      - name: Run Qt Test and OCR contract CTest cases
+        working-directory: ci/native-smoke
+        run: |
+          ctest --preset community-native-smoke --output-on-failure \
+            --output-junit "$GITHUB_WORKSPACE/build/ci-native-smoke/native-smoke.junit.xml"
+      - name: Upload fast native CTest diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: community-native-smoke-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            build/ci-native-smoke/native-smoke.junit.xml
+            build/ci-native-smoke/Testing/Temporary/LastTest.log
+            build/ci-native-smoke/CMakeFiles/CMakeConfigureLog.yaml
+
+  windows:
+    needs: [preflight, native-smoke]
     # Full CI is required once per completed goal, not once per intermediate
     # commit. workflow_dispatch remains available for deliberate validation.
-    if: needs.preflight.outputs.native == 'true' && (github.event_name == 'workflow_dispatch' || needs.preflight.outputs.goal_full == 'true')
+    if: needs.native-smoke.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.preflight.outputs.goal_full == 'true')
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
+    permissions:
+      contents: read
+      packages: write
     env:
       # Known available on the 2026-11-21 runner. A missing pin fails before
       # NSIS, cache restoration, or dependency compilation.
@@ -142,12 +238,52 @@ jobs:
           key: community-vcpkg-sources-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/x264/portfile.cmake') }}
           restore-keys: |
             community-vcpkg-sources-v1-
-      - name: Enable vcpkg binary cache
+      - name: Restore SHA-addressed vcpkg asset cache
+        id: vcpkg-assets
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tools/vcpkg-asset-cache
+          key: community-vcpkg-assets-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**') }}
+          restore-keys: |
+            community-vcpkg-assets-v1-
+
+      - name: Bootstrap pinned vcpkg executable before configuring cache
         shell: pwsh
+        run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipDependencyInstall -SkipQtValidation
+
+      - name: Configure official vcpkg binary and asset cache providers
+        shell: pwsh
+        env:
+          GH_PACKAGES_TOKEN: ${{ github.token }}
         run: |
-          $cache = Join-Path $PWD '.tools/vcpkg-binary-cache'
-          New-Item -ItemType Directory -Force -Path $cache | Out-Null
-          "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          $ErrorActionPreference = 'Stop'
+          $binary = Join-Path $PWD '.tools/vcpkg-binary-cache'
+          $assets = Join-Path $PWD '.tools/vcpkg-asset-cache'
+          New-Item -ItemType Directory -Force -Path $binary,$assets | Out-Null
+          $assetUri = [Uri]::new(((Resolve-Path $assets).Path + [IO.Path]::DirectorySeparatorChar)).AbsoluteUri
+          "X_VCPKG_ASSET_SOURCES=clear;x-azurl,$assetUri,,readwrite" |
+            Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          $sources = "clear;files,$binary,readwrite"
+          $feed = "https://nuget.pkg.github.com/$env:GITHUB_REPOSITORY_OWNER/index.json"
+          $vcpkg = Join-Path $PWD '.tools/vcpkg/vcpkg.exe'
+          try {
+            $nuget = (& $vcpkg fetch nuget --disable-metrics | Select-Object -Last 1)
+            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $nuget)) {
+              throw 'vcpkg could not retrieve the official NuGet client'
+            }
+            & $nuget sources Add -Name SnowShotGitHubPackages -Source $feed `
+              -UserName $env:GITHUB_ACTOR -Password $env:GH_PACKAGES_TOKEN `
+              -StorePasswordInClearText -NonInteractive
+            if ($LASTEXITCODE -ne 0) { throw 'NuGet source authentication failed' }
+            & $nuget setapikey $env:GH_PACKAGES_TOKEN -Source $feed -NonInteractive
+            if ($LASTEXITCODE -ne 0) { throw 'NuGet package publishing authorization failed' }
+            $sources += ";nuget,$feed,readwrite"
+            Write-Host 'GitHub Packages per-port NuGet binary cache enabled.'
+          } catch {
+            Write-Host "Optional NuGet cache unavailable: $($_.Exception.Message). Local binary cache remains enabled."
+          }
+          "VCPKG_BINARY_SOURCES=$sources" |
+            Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: Restore Cargo sources
         id: cargo-cache
@@ -169,6 +305,14 @@ jobs:
         with:
           path: .tools/vcpkg-downloads
           key: community-vcpkg-sources-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/x264/portfile.cmake') }}
+
+      - name: Save SHA-addressed vcpkg asset cache
+        if: (success() || failure()) && steps.vcpkg-assets.outputs.cache-hit != 'true'
+        continue-on-error: true
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .tools/vcpkg-asset-cache
+          key: community-vcpkg-assets-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**') }}
 
       - name: Save vcpkg binary cache
         if: (success() || failure()) && steps.vcpkg-cache.outputs.cache-hit != 'true'
@@ -202,20 +346,22 @@ jobs:
           path: .tools/qt/6.12.0/x64-static-release
           key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
 
+      - name: Verify release license graph before expensive native linking
+        shell: pwsh
+        run: ./scripts/preflight-community-release-licenses.ps1
+
       - name: Configure goal acceptance native tests
         shell: pwsh
         run: cmake --preset snow-shot-msvc-test
       - name: Build Community native acceptance tests
         timeout-minutes: 120
         shell: pwsh
-        run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
+        run: cmake --build --preset build-snow-shot-msvc-test --parallel 8 -- "/bl:$env:RUNNER_TEMP/community-tests-msbuild.binlog"
       - name: Run Community native acceptance tests
         shell: pwsh
-        run: ctest --preset test-snow-shot-msvc-community
-
-      - name: Verify production license graph
-        shell: pwsh
-        run: ./scripts/preflight-community-release-licenses.ps1
+        env:
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+        run: ctest --preset test-snow-shot-msvc-community --output-on-failure --output-junit "$env:RUNNER_TEMP/community-windows-native-junit.xml"
       - name: Save complete Cargo sources
         if: steps.cargo-cache.outputs.cache-hit != 'true'
         continue-on-error: true
@@ -228,7 +374,14 @@ jobs:
 
       - name: Build production Windows x64
         shell: pwsh
-        run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
+        run: |
+          Start-Transcript -Path "$env:RUNNER_TEMP/community-production-build.log" | Out-Null
+          try {
+            ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
+            if ($LASTEXITCODE -ne 0) { throw 'Production Windows build returned a nonzero exit code' }
+          } finally {
+            Stop-Transcript | Out-Null
+          }
       - name: Package production installers
         shell: pwsh
         run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
@@ -240,6 +393,21 @@ jobs:
         timeout-minutes: 20
         shell: pwsh
         run: ./scripts/test-community-windows-installer-smoke.ps1 -BuildDirectory build/snow-shot-msvc-release
+
+      - name: Upload Windows native and production diagnostics on every outcome
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: community-windows-diagnostics-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/community-tests-msbuild.binlog
+            ${{ runner.temp }}/community-windows-native-junit.xml
+            ${{ runner.temp }}/community-production-build.log
+            build/snow-shot-msvc-test/Testing/Temporary/LastTest.log
+            build/snow-shot-msvc-test/CMakeFiles/CMakeConfigureLog.yaml
+            build/snow-shot-msvc-release/CMakeFiles/CMakeConfigureLog.yaml
 
       - name: Upload release candidates
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
