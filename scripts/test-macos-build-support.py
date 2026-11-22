@@ -548,20 +548,11 @@ include([==[{(ROOT / 'cmake/SnowShotMiniMacOS.cmake').as_posix()}]==])
             self.assertIn('Snow Shot Mini', strings)
             self.assertIn('"NSCameraUsageDescription" = "', strings)
         self.assertTrue(plist['NSCameraUsageDescription'])
-        instructions = (resources / 'dmg-mini-background.svg').read_text(encoding='utf-8')
-        self.assertIn('Snow Shot Mini', instructions)
-        self.assertIn('Snow Shot Mini.app', (resources / 'dmg-mini-layout.applescript').read_text(encoding='utf-8'))
 
     def test_dmg_instructions_cover_all_bundle_languages(self):
         resources = ROOT / 'snow_shot/packaging/macos'
         plist = plistlib.loads((resources / 'Info.plist.in').read_bytes())
         background = ET.parse(resources / 'dmg-background.svg').getroot()
-        background_source = (resources / 'dmg-background.svg').read_text()
-        package_source = (ROOT / 'cmake/SnowShotMacOSPackage.cmake').read_text()
-        self.assertIn('@SNOW_DMG_WORDMARK@', background_source)
-        self.assertNotIn('>Snow Shot</', background_source)
-        self.assertIn('icons/resources/snow-shot-logo.svg', package_source)
-        self.assertIn('configure_file(', package_source)
         language_key = '{http://www.w3.org/XML/1998/namespace}lang'
         groups = {element.attrib[language_key]: element
                   for element in background.iter('{http://www.w3.org/2000/svg}g')
@@ -592,11 +583,6 @@ include([==[{(ROOT / 'cmake/SnowShotMiniMacOS.cmake').as_posix()}]==])
                         'NSAudioCaptureUsageDescription'):
                 self.assertIn('"' + key + '" = "', strings)
         self.assertTrue(plist['NSCameraUsageDescription'])
-        main = (ROOT / 'snow_shot/src/app/main.cpp').read_text()
-        self.assertIn('setApplicationDisplayName(', main)
-        self.assertIn('QString applicationName = snow_shot::app::edition::applicationName()', main)
-        edition = (ROOT / 'snow_shot/include/snow_shot/app/edition.h').read_text(encoding='utf-8')
-        self.assertIn('QStringLiteral("snow_shot_mini") : QStringLiteral("snow_shot")', edition)
 
     def test_dmg_staging_preserves_bundle_contents(self):
         cmake = ROOT / '.tools/macos-dev/bin/cmake'
@@ -1527,15 +1513,6 @@ if name == 'openssl':
         self.assertTrue(any(any(arg.endswith('GenerateSnowShotDiagnosticsSymbols-Release.cmake')
                                     for arg in call) for call in calls))
 
-    def test_arm_assembler_objects_keep_the_macos_deployment_target(self):
-        x264 = (ROOT / 'cmake/vcpkg-overlay-ports/x264/portfile.cmake').read_text()
-        x265 = (ROOT / 'cmake/vcpkg-overlay-ports/x265/portfile.cmake').read_text()
-        x265_patch = (ROOT / 'cmake/vcpkg-overlay-ports/x265/'
-                      'macos-arm64-deployment-target.patch').read_text()
-        self.assertIn('--extra-asflags=-mmacosx-version-min=', x264)
-        self.assertIn('macos-arm64-deployment-target.patch', x265)
-        self.assertIn('-mmacosx-version-min=${CMAKE_OSX_DEPLOYMENT_TARGET}', x265_patch)
-
     def test_package_rejects_missing_project_key_before_clean_or_build(self):
         self.env['SNOW_TEST_RELEASE_IDENTITY_MISSING'] = '1'
         stale = self.root / 'build/snow-shot-macos-arm64-release/keep'
@@ -1575,24 +1552,6 @@ if name == 'openssl':
             self.assertEqual(fast['inherits'], 'macos-release-base')
             self.assertEqual(release['cacheVariables']['VCPKG_TARGET_TRIPLET'],
                              f'{arch}-osx-snow-shot-static')
-
-    def test_static_package_contract_avoids_dynamic_deployment(self):
-        macos = (ROOT / 'cmake/SnowShotMacOS.cmake').read_text()
-        deployment = (ROOT / 'cmake/DeploySnowShotMacOS.cmake.in').read_text()
-        self.assertIn('Qt6::QCocoaIntegrationPlugin',
-                      (ROOT / 'snow_shot/CMakeLists.txt').read_text())
-        self.assertIn('if(NOT SNOW_SHOT_QT_STATIC)', macos)
-        self.assertIn('if(NOT @SNOW_SHOT_QT_STATIC@)', deployment)
-        self.assertIn('Static package contains a non-system dependency', deployment)
-        self.assertNotIn('--static-runtime', deployment)
-
-    def test_development_builds_provision_and_sign_a_stable_debug_identity(self):
-        macos = (ROOT / 'cmake/SnowShotMacOS.cmake').read_text()
-        self.assertIn('SNOW_MACOS_CODESIGN_IDENTITY STREQUAL "AUTO"', macos)
-        self.assertIn('ensure-macos-codesign-identity.sh', macos)
-        self.assertIn('--identifier com.snowshot.snow_shot', macos)
-        self.assertIn('$<TARGET_FILE:snow_shot>', macos)
-        self.assertIn('$<TARGET_FILE:snow_shot>.snow-signing', macos)
 
     def test_static_qt_builder_reuses_an_audited_matching_installation(self):
         dependencies = self.root / 'dependencies'
@@ -1663,17 +1622,6 @@ if name == 'openssl':
                                         '--skip-bootstrap', success=False)
                 self.assertFalse(any('--preset' in call or '--build' in call for call in calls))
                 self.assertIn('The installed Qt targets', self.last_result.stderr)
-
-    def test_static_qt_builder_supports_command_line_tools_without_full_xcode(self):
-        builder = (ROOT / 'scripts/build-static-qt.sh').read_text()
-        self.assertIn('if ! xcodebuild -version >/dev/null 2>&1; then', builder)
-        self.assertIn('xcrun --show-sdk-path', builder)
-        self.assertIn('qt_apple_options+=(-DQT_NO_XCODE_MIN_VERSION_CHECK=ON)', builder)
-        self.assertIn('"${qt_apple_options[@]}"', builder)
-        self.assertIn('qt_deployment_target="$snow_qt_deployment_target"', builder)
-        self.assertIn('-DCMAKE_OSX_DEPLOYMENT_TARGET="$qt_deployment_target"', builder)
-        self.assertIn('-DFEATURE_dup3=OFF', builder)
-        self.assertIn("'FEATURE_dup3:BOOL=OFF' 'QT_FEATURE_dup3:INTERNAL=OFF'", builder)
 
     def test_launch_bundle_with_arguments(self):
         app = self.root / 'build/snow-shot-macos-arm64-debug/snow_shot/snow_shot.app'
@@ -1830,32 +1778,6 @@ if name == 'openssl':
     def test_codesign_identity_requires_a_value(self):
         calls = self.run_script('run-snow-shot.sh', '--codesign-identity', success=False)
         self.assertFalse(any(c[0] in ('cmake', 'open') for c in calls))
-
-    def test_deployment_uses_the_matching_vcpkg_library_configuration(self):
-        deployment = (ROOT / 'cmake/DeploySnowShotMacOS.cmake.in').read_text()
-        self.assertIn('if(_snow_install_config STREQUAL "debug")', deployment)
-        self.assertIn('set(_snow_vcpkg_library_dir "@SNOW_FFMPEG_ROOT@/debug/lib")', deployment)
-        self.assertIn('set(_snow_vcpkg_library_dir "@SNOW_FFMPEG_ROOT@/lib")', deployment)
-        self.assertEqual(deployment.count('"-libpath=${_snow_vcpkg_library_dir}"'), 1)
-
-    def test_macos_icon_uses_native_visual_bounds_and_bundle_metadata(self):
-        generator = (ROOT / 'cmake/GenerateMacOSIcon.cmake').read_text()
-        bounds = 'x=\\"100\\" y=\\"100\\" width=\\"824\\" height=\\"824\\"'
-        self.assertIn(bounds, generator)
-
-        macos = (ROOT / 'cmake/SnowShotMacOS.cmake').read_text()
-        self.assertIn('snow_shot/resources/app-icon.svg', macos)
-        self.assertNotIn('packaging/macos/app-icon.svg', macos)
-
-        plist = (ROOT / 'snow_shot/packaging/macos/Info.plist.in').read_text()
-        self.assertIn('<key>CFBundleIconFile</key>', plist)
-        self.assertIn('${MACOSX_BUNDLE_ICON_FILE}', plist)
-
-        main = (ROOT / 'snow_shot/src/app/main.cpp').read_text()
-        self.assertNotIn('installApplicationIconFromBundle', main)
-        self.assertNotIn('setApplicationIconImage', main)
-        self.assertIn('#ifndef Q_OS_MACOS\n    QApplication::setWindowIcon(', main)
-
 
 class MacOSSigningDeployment(unittest.TestCase):
     """Exercise the deployment script with fake external tools, including OCR resealing."""

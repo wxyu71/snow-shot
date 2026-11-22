@@ -75,6 +75,17 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint" -color
 
+      - name: Check local documentation links with Lychee
+        uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411 # v2.8.0
+        with:
+          args: >-
+            --offline --no-progress --root-dir .
+            README.md README.zh-CN.md AGENTS.md docs/README.md
+            docs/architecture/overview.md docs/development/testing.md
+            docs/releases/beta1-checklist.md docs/platforms/macos-build.md
+            docs-macos-build.md
+          fail: true
+
       - name: Audit workflow security with zizmor
         shell: bash
         run: |
@@ -126,6 +137,7 @@ jobs:
           head="${PR_HEAD_SHA:-HEAD}"
           git diff --check "$head^" "$head"
           python3 scripts/test-upstream-sync.py
+          python3 scripts/upstream_sync.py verify-review-ancestry
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
           python3 scripts/community_release.py selftest

@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import re
 import subprocess
 import tomllib
@@ -323,15 +324,42 @@ def assert_deleted_files_absent() -> None:
     assert_external_source_pins()
 
 
+
+def verify_review_ancestry(head_ref: str | None = None, root: Path = ROOT) -> None:
+    """Verify the real upstream commit is reachable from a review candidate."""
+    head_ref = head_ref if head_ref is not None else os.environ.get("GITHUB_HEAD_REF", "")
+    if not head_ref.startswith("automation/upstream-review-"):
+        return
+    match = re.fullmatch(
+        r"automation/upstream-review-([0-9a-f]{12})-[0-9a-f]{8}", head_ref
+    )
+    if match is None:
+        raise SystemExit(f"Invalid upstream review branch name: {head_ref}")
+    if (root / ".github" / "upstream-review-pending.md").exists():
+        raise SystemExit("Unresolved upstream tracking placeholder must be removed")
+    check = subprocess.run(
+        ["git", "merge-base", "--is-ancestor", match.group(1), "HEAD"],
+        cwd=root, capture_output=True, text=True, check=False,
+    )
+    if check.returncode:
+        raise SystemExit(
+            "Upstream review branch must contain the real upstream commit "
+            + match.group(1)
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("command", choices=["classify", "verify-deletions"])
+    parser.add_argument("command", choices=["classify", "verify-deletions", "verify-review-ancestry"])
     parser.add_argument("--upstream", default="upstream/main")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.command == "verify-deletions":
         assert_deleted_files_absent()
         print("Commercial deletion guard: PASS")
+    elif args.command == "verify-review-ancestry":
+        verify_review_ancestry()
+        print("Upstream review ancestry guard: PASS")
     else:
         print(json.dumps(classify(args.upstream, args.output), ensure_ascii=False))
 

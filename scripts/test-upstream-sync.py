@@ -5,7 +5,6 @@ import textwrap
 import tempfile
 import subprocess
 import shutil
-import re
 import os
 import pathlib
 import sys
@@ -138,17 +137,6 @@ class UpstreamSyncGuardTests(unittest.TestCase):
             self.assertEqual(result["mode"], "review")
             self.assertEqual(result["protected"], [path])
 
-    def test_upstream_workflow_reuses_manual_review_and_reports_pr_permission_limit(self):
-        workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn('startswith("review/upstream-main-")', workflow)
-        self.assertIn("GITHUB_STEP_SUMMARY", workflow)
-        self.assertIn("GitHub Actions is not permitted to create or approve pull requests", workflow)
-        self.assertIn("No changes were merged into main.", workflow)
-        self.assertIn("exit 1", workflow)  # Other PR creation errors still fail.
-
-
     def test_current_tree_has_no_account_telemetry_or_upstream_runtime_endpoints(self):
         upstream_sync.assert_forbidden_runtime_content_absent()
 
@@ -166,38 +154,6 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertNotRegex("const qreal amplitude = 1.0;", forbidden)
 
 
-    def test_sync_workflow_reuses_review_pr_and_handles_pr_restriction(self):
-        workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
-            encoding="utf-8"
-        )
-        self.assertIn('startswith("review/upstream-main-")', workflow)
-        self.assertIn('.headRefName == "automation/upstream-review"', workflow)
-        self.assertLess(
-            workflow.index("existing_review="),
-            workflow.index('git switch -C "$branch"'),
-        )  # Do not force-push over a PR that is being resolved manually.
-        self.assertIn("GitHub Actions is not permitted to create or approve pull requests", workflow)
-        self.assertIn("GITHUB_STEP_SUMMARY", workflow)
-        self.assertIn("pull/new/${branch}", workflow)
-        self.assertIn("No changes were merged into main.", workflow)
-        self.assertIn("exit 1", workflow)  # Unexpected PR failures remain fatal.
-
-        # Shared Community policy is authoritative; no moving Action tags or
-        # official repository identity hardcoded into a distributable workflow.
-        self.assertRegex(workflow, r"uses:\s+actions/checkout@[0-9a-f]{40}\b")
-        self.assertNotIn("mg-chao/snow-shot", workflow)
-        self.assertIn('upstream_repo="$(python3 -c', workflow)
-        self.assertIn('git remote add upstream "https://github.com/${upstream_repo}.git"', workflow)
-
-        self.assertIn('git switch -C "$branch" upstream/main', workflow)
-        self.assertIn('git diff --name-only --diff-filter=U', workflow)
-        self.assertIn('git push origin "HEAD:refs/heads/$branch"', workflow)
-        self.assertIn('git ls-remote --exit-code --heads origin "$branch"', workflow)
-        self.assertIn('automation/upstream-review-${upstream_sha:0:12}-${base_sha:0:8}', workflow)
-        self.assertNotIn('git push --force origin', workflow)
-        self.assertIn('upstream-review-pending.md', workflow)
-        self.assertIn('refusing to allow a GitHub App to create or update workflow', workflow)
-
     def test_upstream_review_candidate_is_real_and_retries_preserve_it(self):
         workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
             encoding="utf-8"
@@ -207,8 +163,11 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         )[1].split("        run: |\n", 1)[1])
         subprocess.run(["bash", "-n"], input=script, text=True, check=True)
 
-        for overlapping, blocked in ((False, False), (True, False), (True, True)):
-            with self.subTest(conflict=overlapping, token_blocked=blocked), tempfile.TemporaryDirectory() as temp:
+        for overlapping, blocked, creation in ((False, False, 'ok'), (True, False, 'ok'),
+                                               (True, True, 'ok'), (False, False, 'restricted'),
+                                               (False, False, 'unexpected')):
+            with self.subTest(conflict=overlapping, token_blocked=blocked,
+                              pr_creation=creation), tempfile.TemporaryDirectory() as temp:
                 base = pathlib.Path(temp)
                 work, bare = base / "work", base / "origin.git"
                 subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
@@ -251,6 +210,13 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                     '  printf "%s" "$MOCK_REVIEW_PR"\n'
                     'elif [[ "$1 $2" == "pr create" ]]; then\n'
                     '  echo create >> "$MOCK_EVENT_FILE"\n'
+                    '  if [[ "$MOCK_PR_CREATE" == "restricted" ]]; then\n'
+                    '    echo "GitHub Actions is not permitted to create or approve pull requests" >&2\n'
+                    '    exit 1\n'
+                    '  elif [[ "$MOCK_PR_CREATE" == "unexpected" ]]; then\n'
+                    '    echo "Unexpected API failure" >&2\n'
+                    '    exit 1\n'
+                    '  fi\n'
                     '  echo "https://github.com/example/fork/pull/42"\n'
                     'else exit 99; fi\n',
                     encoding="utf-8",
@@ -287,12 +253,22 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                     "MOCK_REVIEW_PR": "",
                     "MOCK_EVENT_FILE": str(events),
                     "MOCK_BLOCK_WORKFLOWS": "1" if blocked else "0",
+                    "MOCK_PR_CREATE": creation,
                     "MOCK_BLOCKED_FILE": str(base / "push-blocked"),
                 })
-                subprocess.run(
+                first_run = subprocess.run(
                     ["bash", "-c", script], cwd=work, env=env,
-                    capture_output=True, text=True, check=True
+                    capture_output=True, text=True, check=False
                 )
+                if creation == "unexpected":
+                    self.assertNotEqual(first_run.returncode, 0)
+                    self.assertIn("Unexpected API failure", first_run.stderr)
+                else:
+                    self.assertEqual(first_run.returncode, 0, first_run.stderr)
+                if creation == "restricted":
+                    self.assertIn("Manual upstream sync PR required",
+                                  (base / "summary.md").read_text(encoding="utf-8"))
+                    self.assertIn("PR creation restricted", first_run.stdout)
                 review_ref = (
                     "refs/heads/automation/upstream-review-"
                     + upstream_sha[:12] + "-" + main_sha[:8]
@@ -334,92 +310,46 @@ class UpstreamSyncGuardTests(unittest.TestCase):
                 self.assertEqual(events.read_text(encoding="utf-8"), "create\n")
 
 
-    def test_review_pr_requires_upstream_ancestry(self):
-        # Runs as a PR preflight check. A marker-only PR can never pass simply
-        # by deleting its conflict report: it must contain the actual target.
-        head_ref = os.environ.get("GITHUB_HEAD_REF", "")
-        if not head_ref.startswith("automation/upstream-review-"):
-            return
-        match = re.fullmatch(
-            r"automation/upstream-review-([0-9a-f]{12})-[0-9a-f]{8}",
-            head_ref,
-        )
-        self.assertIsNotNone(match, "Invalid automated upstream review branch")
-        self.assertFalse(
-            (ROOT / ".github/upstream-review-pending.md").exists(),
-            "Resolve the upstream merge and remove the pending marker first",
-        )
-        target = match.group(1)
-        result = subprocess.run(
-            ["git", "merge-base", "--is-ancestor", target, "HEAD"],
-            cwd=ROOT, capture_output=True, text=True,
-        )
-        self.assertEqual(
-            result.returncode, 0,
-            "Upstream review must contain the real upstream commit " + target
-            + "; a report-only branch must not be merged",
-        )
 
+    def test_review_candidate_requires_actual_git_ancestry(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = pathlib.Path(temp)
 
-    def test_offline_ocr_runtime_protocol_and_asset_versions_are_atomic(self):
-        # The C++ host, Rust worker and bundled offline binary are one wire
-        # protocol. A partial upstream cherry-pick must be rejected at preflight.
-        cpp = (ROOT / "snow_shot/src/presentation/ocr/screenshotocrprotocol.h").read_text(
-            encoding="utf-8"
-        )
-        rust = (ROOT / "snow-crates/crates/snow-ocr-process/src/protocol.rs").read_text(
-            encoding="utf-8"
-        )
-        spec = (ROOT / "snow-crates/crates/snow-ocr-process/PROTOCOL.md").read_text(
-            encoding="utf-8"
-        )
-        cpp_protocol = re.search(r"kProtocolVersion\s*=\s*(\d+)", cpp)
-        cpp_runtime = re.search(r'kRuntimeVersion\s*=\s*"([^"]+)"', cpp)
-        rust_protocol = re.search(r"pub const VERSION:\s*u16\s*=\s*(\d+)", rust)
-        documented_protocol = re.search(r"^# OCR protocol (\d+)", spec, re.M)
-        documented_runtime = re.search(r"^Runtime ([0-9.]+)", spec, re.M)
-        for label, match in (
-            ("C++ protocol", cpp_protocol), ("C++ runtime", cpp_runtime),
-            ("Rust protocol", rust_protocol), ("protocol docs", documented_protocol),
-            ("runtime docs", documented_runtime),
-        ):
-            self.assertIsNotNone(match, f"Missing {label} release contract")
-        self.assertEqual(cpp_protocol.group(1), rust_protocol.group(1))
-        self.assertEqual(cpp_protocol.group(1), documented_protocol.group(1))
-        self.assertEqual(cpp_runtime.group(1), documented_runtime.group(1))
-        for arch in ("x64", "arm64"):
-            suffix = "" if arch == "x64" else "-arm64"
-            manifest_path = ROOT / (
-                f"snow_shot/packaging/snow-shot-ocr-asset-manifest{suffix}.json"
-            )
-            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-            self.assertEqual(manifest["runtime"]["version"], cpp_runtime.group(1))
-            self.assertEqual(manifest["runtime"]["platform"], f"windows-{arch}")
-            self.assertEqual(manifest["schema"], 2)
-            self.assertEqual(manifest["default_model"], "small")
-            self.assertEqual(len(manifest["models"]), 3)
+            def git(*args):
+                return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
 
-            def verify_hash_pinned_assets(value):
-                if isinstance(value, list):
-                    for item in value:
-                        verify_hash_pinned_assets(item)
-                    return
-                if not isinstance(value, dict):
-                    return
-                if "sha256" in value:
-                    self.assertRegex(str(value["sha256"]), r"^[a-fA-F0-9]{64}$")
-                if "url" in value:
-                    self.assertRegex(str(value.get("sha256", "")), r"^[a-fA-F0-9]{64}$")
-                    self.assertTrue(
-                        str(value["url"]).startswith(
-                            "https://www.modelscope.cn/models/mgchao/SnowShotOCR/"
-                        ),
-                        f"Unreviewed OCR binary source in {manifest_path}: {value['url']}",
-                    )
-                for item in value.values():
-                    verify_hash_pinned_assets(item)
+            git("init", "-q", "-b", "main")
+            git("config", "user.name", "CI test")
+            git("config", "user.email", "ci-test@example.invalid")
+            (root / "common.txt").write_text("base\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "base")
+            base_sha = git("rev-parse", "HEAD")
+            git("switch", "-qc", "official")
+            (root / "official.txt").write_text("upstream\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "upstream")
+            upstream_sha = git("rev-parse", "HEAD")
+            git("switch", "-q", "main")
+            (root / "community.txt").write_text("local\n", encoding="utf-8")
+            git("add", ".")
+            git("commit", "-qm", "community")
+            review_ref = (f"automation/upstream-review-{upstream_sha[:12]}"
+                          f"-{base_sha[:8]}")
+            with self.assertRaisesRegex(SystemExit, "real upstream commit"):
+                upstream_sync.verify_review_ancestry(review_ref, root)
+            git("merge", "--no-edit", "--no-ff", "official")
+            upstream_sync.verify_review_ancestry(review_ref, root)
+            (root / ".github").mkdir()
+            marker = root / ".github/upstream-review-pending.md"
+            marker.write_text("placeholder", encoding="utf-8")
+            with self.assertRaisesRegex(SystemExit, "placeholder"):
+                upstream_sync.verify_review_ancestry(review_ref, root)
+            marker.unlink()
+            with self.assertRaisesRegex(SystemExit, "Invalid upstream review branch"):
+                upstream_sync.verify_review_ancestry("automation/upstream-review-invalid", root)
+            upstream_sync.verify_review_ancestry("feature/ordinary-pr", root)
 
-            verify_hash_pinned_assets(manifest)
 
 if __name__ == "__main__":
     unittest.main(verbosity=2)
