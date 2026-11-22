@@ -37,3 +37,18 @@ add_test(NAME snow-shot-community-native-settings-tests
 set_tests_properties(snow-shot-community-native-settings-tests PROPERTIES
     TIMEOUT 30 LABELS "native;community;settings"
     ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+# Runs against production edition/floating-toolbar policy on system Qt, without
+# compiling the full static-Qt Windows integration graph or copying schema code.
+add_executable(snow-shot-community-native-toolbar-policy-tests
+    community_toolbar_policy_tests.cpp)
+target_include_directories(snow-shot-community-native-toolbar-policy-tests PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include")
+target_compile_definitions(snow-shot-community-native-toolbar-policy-tests PRIVATE
+    SNOW_COMMUNITY_SCHEMA_BASELINE_JSON="${SNOW_SHOT_ROOT}/snow_shot/tests/fixtures/configuration-schema-windows-full.json")
+target_link_libraries(snow-shot-community-native-toolbar-policy-tests PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Test)
+add_test(NAME snow-shot-community-native-toolbar-policy-tests
+    COMMAND snow-shot-community-native-toolbar-policy-tests)
+set_tests_properties(snow-shot-community-native-toolbar-policy-tests PROPERTIES
+    TIMEOUT 15 LABELS "native;community;schema")

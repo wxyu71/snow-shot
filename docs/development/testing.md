@@ -40,3 +40,35 @@ protect release inputs, but never claim that a text-scanning Python test
 validates C++ behavior, bundled OCR, OS permissions or package signing.
 Do not replace these layers with new homegrown parsers when a maintained
 community tool or native executable already handles the job.
+
+## Fast-fail gates for Community Windows
+
+Full Windows release linking uses MSVC and audited static Qt and remains a
+**release acceptance** step, not an appropriate first detector for tiny
+configuration-policy mismatches.
+
+1. Every code PR runs the Linux system-Qt `native-smoke`, including
+   `snow-shot-community-native-toolbar-policy-tests`, which calls the
+   production Community action availability and floating-toolbar default
+   functions against the immutable Windows Full baseline. It is a real native
+   executable, not a source-text grep.
+2. Once the reviewed `CI-Full: true` trailer requests Windows acceptance,
+   build and execute the existing production
+   `snow-shot-configuration-schema-tests` **first** with CTest `-R`.
+   Only after it passes link the other, more expensive UI/OCR acceptance
+   executables. Incremental MSBuild reuses the compiled schema target.
+3. Continue with full native acceptance, production binary, NSIS online/offline
+   packages and in-place upgrade smoke. A fast green test never approves release.
+
+Run the canary locally with the existing `ci/native-smoke` CMake preset:
+```bash
+cd ci/native-smoke
+cmake --preset community-native-smoke
+cmake --build --preset community-native-smoke --parallel 4
+ctest --preset community-native-smoke --output-on-failure
+```
+
+For later performance tuning, compare the CI job step durations and CTest XML
+at the same exact SHA. Consider proven compiler caches (e.g. sccache) after
+separate verification against the MSVC/static-Qt toolchain; cache compilation
+but do not treat cache hits as proof of correct linkage or installed artifacts.

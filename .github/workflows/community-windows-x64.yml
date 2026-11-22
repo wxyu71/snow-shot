@@ -99,6 +99,7 @@ jobs:
           set -euo pipefail
           clang-format-18 --dry-run --Werror \
             ci/native-smoke/community_native_smoke_tests.cpp \
+            ci/native-smoke/community_toolbar_policy_tests.cpp \
             snow_shot/src/presentation/components/cloudocrenginechoices.cpp \
             snow_shot/include/snow_shot/presentation/components/cloudocrenginechoices.h
 
@@ -365,7 +366,18 @@ jobs:
       - name: Configure goal acceptance native tests
         shell: pwsh
         run: cmake --preset snow-shot-msvc-test
-      - name: Build Community native acceptance tests
+      # The actual schema executable was already linked ~34 minutes before the
+      # last large UI test in #135. Catch its failures before those other links.
+      - name: Build focused Windows schema contract first
+        timeout-minutes: 75
+        shell: pwsh
+        run: cmake --build --preset build-snow-shot-msvc-test --target snow-shot-configuration-schema-tests --parallel 8 -- "/bl:$env:RUNNER_TEMP/community-schema-msbuild.binlog"
+      - name: Run focused Windows schema contract first
+        shell: pwsh
+        env:
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+        run: ctest --preset test-snow-shot-msvc-community -R "^snow-shot-configuration-schema-tests$" --output-on-failure --output-junit "$env:RUNNER_TEMP/community-windows-schema-junit.xml"
+      - name: Build remaining Community native acceptance tests
         timeout-minutes: 120
         shell: pwsh
         run: cmake --build --preset build-snow-shot-msvc-test --parallel 8 -- "/bl:$env:RUNNER_TEMP/community-tests-msbuild.binlog"
@@ -414,6 +426,8 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
           path: |
+            ${{ runner.temp }}/community-schema-msbuild.binlog
+            ${{ runner.temp }}/community-windows-schema-junit.xml
             ${{ runner.temp }}/community-tests-msbuild.binlog
             ${{ runner.temp }}/community-windows-native-junit.xml
             ${{ runner.temp }}/community-production-build.log
