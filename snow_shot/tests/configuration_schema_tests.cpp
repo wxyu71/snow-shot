@@ -87,8 +87,32 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
                 (snow_shot::app::edition::isMini ? QStringLiteral("mini") : QStringLiteral("full")),
             "the reference must match the linked storage edition");
     const auto expected = fixture.value(QStringLiteral("entries")).toArray();
-    if (actual.size() != expected.size()) {
-        std::cerr << "schema entries: actual=" << actual.size() << " expected=" << expected.size()
+    // Preserve the original-author fixture. The Community-only shortcut for
+    // cycling annotation options is a new field, not an upstream field change.
+    // Validate its full contract and exclude only this known addition when
+    // comparing all frozen original fields against the historical baseline.
+    const QString communityKey =
+        QStringLiteral("drawing_shortcuts/cycle_annotation_tool_options");
+    QJsonArray originalEntries;
+    bool foundCommunityKey = false;
+    for (const auto& value : actual) {
+        const auto entry = value.toObject();
+        if (entry.value(QStringLiteral("key")).toString() != communityKey) {
+            originalEntries.append(value);
+            continue;
+        }
+        require(!foundCommunityKey, "Community shortcut schema key must be unique");
+        foundCommunityKey = true;
+        require(
+            entry.value(QStringLiteral("valueKind")).toString() == QStringLiteral("StringList") &&
+                entry.value(QStringLiteral("defaultValue")).toArray() ==
+                    QJsonArray{QStringLiteral("Tab")} &&
+                entry.value(QStringLiteral("maximumListItems")).toInt() == 2,
+            "Community annotation cycle shortcut must retain its typed Tab default");
+    }
+    require(foundCommunityKey, "Community annotation cycle shortcut must be present");
+    if (originalEntries.size() != expected.size()) {
+        std::cerr << "schema entries: actual=" << originalEntries.size() << " expected=" << expected.size()
                   << '\n';
         const auto keys = [](const QJsonArray& entries) {
             QSet<QString> result;
@@ -96,14 +120,15 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
                 result.insert(entry.toObject().value(QStringLiteral("key")).toString());
             return result;
         };
-        const auto actualKeys = keys(actual);
+        const auto actualKeys = keys(originalEntries);
         const auto expectedKeys = keys(expected);
         for (const auto& key : actualKeys - expectedKeys)
             std::cerr << "missing fixture key: " << key.toStdString() << '\n';
         for (const auto& key : expectedKeys - actualKeys)
             std::cerr << "unexpected fixture key: " << key.toStdString() << '\n';
     }
-    require(actual.size() == expected.size(), "schema entry counts must match the original");
+    require(originalEntries.size() == expected.size(),
+            "original schema entry counts must match after the checked Community addition");
     for (qsizetype i = 0; i < expected.size(); ++i) {
         QJsonObject expectedEntry = expected.at(i).toObject();
         const auto key = expectedEntry.value(QStringLiteral("key")).toString();
@@ -117,11 +142,11 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
                     "the frozen original startup/history defaults must remain enabled");
             expectedEntry.insert(QStringLiteral("defaultValue"), false);
         }
-        if (actual.at(i).toObject() != expectedEntry) {
+        if (originalEntries.at(i).toObject() != expectedEntry) {
             std::cerr
                 << "schema metadata changed at entry " << i << ": "
                 << key.toStdString()
-                << "\nactual: " << QJsonDocument(actual.at(i).toObject()).toJson().constData()
+                << "\nactual: " << QJsonDocument(originalEntries.at(i).toObject()).toJson().constData()
                 << "expected: " << QJsonDocument(expectedEntry).toJson().constData();
             std::exit(1);
         }

@@ -41,9 +41,11 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     auto* form = new QFormLayout;
     m_engine = new QComboBox(this);
     m_engine->setObjectName(QStringLiteral("onlineOcrEngine"));
-    m_engine->addItem({}, QStringLiteral("paddleocr"));
+    // Use the text + userData overload, not the QIcon + text overload.
+    // An empty braced first argument would silently discard the engine ID.
+    m_engine->addItem(tr("Baidu PaddleOCR (AI Studio)"), QStringLiteral("paddleocr"));
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    m_engine->addItem({}, QStringLiteral("vision"));
+    m_engine->addItem(tr("OpenAI-compatible vision model"), QStringLiteral("vision"));
 #endif
     m_engineLabel = new QLabel(this);
     form->addRow(m_engineLabel, m_engine);

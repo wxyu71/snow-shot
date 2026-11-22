@@ -156,6 +156,22 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertIn("+      elseif(DEFINED Eigen3_VERSION_MAJOR)", patch)
         self.assertIn("+      else()  # Deprecated package config variables", patch)
 
+    def test_community_cloud_ocr_engine_items_preserve_user_data(self):
+        # QComboBox::addItem({}, QStringLiteral(...)) resolves to QIcon +
+        # display text, silently leaving Qt::UserRole empty in the actual UI.
+        widget = (
+            ROOT / "snow_shot/src/presentation/components/cloudocrsettingswidget.cpp"
+        ).read_text(encoding="utf-8")
+        self.assertNotIn('m_engine->addItem({},', widget)
+        self.assertIn(
+            'm_engine->addItem(tr("Baidu PaddleOCR (AI Studio)"), QStringLiteral("paddleocr"))',
+            widget,
+        )
+        self.assertIn(
+            'm_engine->addItem(tr("OpenAI-compatible vision model"), QStringLiteral("vision"))',
+            widget,
+        )
+
     def test_community_ci_runs_full_build_on_completed_in_repo_goals(self):
         # Intermediate PR commits stay cheap, but each complete goal must
         # compile and package on Windows. PR heads from forks cannot opt in.
