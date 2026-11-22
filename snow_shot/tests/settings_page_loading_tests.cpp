@@ -532,7 +532,10 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                  QStringLiteral("text-recognition.cloud-ocr")});
     drainEvents();
 
-    auto* widget = page.findChild<QWidget*>(QStringLiteral("settings-cloud-ocr"));
+    // SettingsPageWidget assigns the canonical settings-item object name to
+    // custom controls after construction; the constructor-local name is replaced.
+    auto* widget = page.findChild<QWidget*>(settings::generatedObjectName(
+        QStringLiteral("settings-item"), QStringLiteral("text-recognition.cloud-ocr")));
     auto* engine = page.findChild<QComboBox*>(QStringLiteral("onlineOcrEngine"));
     auto* output = page.findChild<QComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
     auto* visionModelSelector =

@@ -66,14 +66,11 @@ QJsonArray metadata() {
 }
 
 void publicMetadataMatchesOriginal(const QJsonArray& actual) {
-#ifdef Q_OS_MACOS
+    // The Community safety policy makes startup registration opt-in on every
+    // platform, including Windows. The original-author fixtures stay frozen.
     require(
         !ConfigurationSchema::defaultValue(QStringLiteral("system/auto_start_at_boot")).toBool(),
-        "macOS login registration defaults off in both editions");
-#else
-    require(ConfigurationSchema::defaultValue(QStringLiteral("system/auto_start_at_boot")).toBool(),
-            "other platforms retain the enabled startup default");
-#endif
+        "Community auto-start must default off in both editions on all platforms");
 
 #ifdef Q_OS_WIN
     QFile file(QString::fromUtf8(SNOW_SCHEMA_BASELINE_JSON));
@@ -111,12 +108,13 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
         QJsonObject expectedEntry = expected.at(i).toObject();
         const auto key = expectedEntry.value(QStringLiteral("key")).toString();
         // Keep the original-author fixture unchanged for regression provenance.
-        // Community deliberately opts out of persistent capture/pinned histories
-        // on a fresh installation; only these two defaults may differ.
-        if (key == QStringLiteral("capture_history/enabled") ||
+        // Community opts out of startup registration and persistent histories
+        // on a fresh installation; exactly these three defaults may differ.
+        if (key == QStringLiteral("system/auto_start_at_boot") ||
+            key == QStringLiteral("capture_history/enabled") ||
             key == QStringLiteral("pinned_history/enabled")) {
             require(expectedEntry.value(QStringLiteral("defaultValue")).toBool(),
-                    "the frozen original history defaults must remain enabled");
+                    "the frozen original startup/history defaults must remain enabled");
             expectedEntry.insert(QStringLiteral("defaultValue"), false);
         }
         if (actual.at(i).toObject() != expectedEntry) {
