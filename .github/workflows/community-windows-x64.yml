@@ -12,6 +12,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: community-windows-x64-${{ github.ref }}
@@ -58,6 +59,25 @@ jobs:
           python3 scripts/test-qt-cmake-contract.py
           python3 scripts/paddleocr_live_e2e.py --selftest
           python3 scripts/community_release.py selftest
+
+      - name: Verify rolling upstream sync PR ancestry
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/upstream-sync-')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SYNC_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SYNC_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          upstream_repo="$(python3 -c 'import json; print(json.load(open(".github/upstream-protection.json"))["upstream"])')"
+          git remote add upstream "https://github.com/${upstream_repo}.git"
+          git fetch --no-tags upstream '+refs/heads/main:refs/remotes/upstream/main'
+          git fetch --no-tags origin "+refs/heads/${GITHUB_HEAD_REF}:refs/remotes/origin/${GITHUB_HEAD_REF}"
+          gh pr view "$SYNC_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/upstream-sync-pr-body.md"
+          python3 scripts/upstream_sync.py validate-pr \
+            --body-file "$RUNNER_TEMP/upstream-sync-pr-body.md" \
+            --head "$SYNC_HEAD_SHA" --base "$SYNC_BASE_SHA"
       - name: Validate prerelease source
         if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
         shell: bash
