@@ -9678,15 +9678,6 @@ void ScreenshotToolPalette::setImageConversionBusy(bool markdownBusy, bool htmlB
 #endif
 }
 
-#if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-void ScreenshotToolPalette::createImageConversionActionFamily() {
-    // Cloud OCR credentials/model are configured in Settings > Text recognition.
-    // Keep the original-image preview, but do not show a per-screenshot model
-    // selector or settings button that interrupts the async Markdown action.
-}
-
-#endif
-
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION
 void ScreenshotToolPalette::createTableRecognitionActionFamily() {
     if (m_selectActionLayout == nullptr || m_tableMergeButton != nullptr) {
