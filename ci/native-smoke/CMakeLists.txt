@@ -71,6 +71,18 @@ target_include_directories(snow-shot-community-native-clang-only PRIVATE
 target_link_libraries(snow-shot-community-native-clang-only PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets)
 
+# Compile-check the real Community PaddleOCR settings widget, not a test copy.
+# An object-only target exports compiler flags to compile_commands.json on
+# Linux and is explicitly compiled with MSVC in the Windows fast gate.
+add_library(snow-shot-community-native-cloud-ocr-widget OBJECT EXCLUDE_FROM_ALL
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/cloudocrsettingswidget.cpp")
+set_target_properties(snow-shot-community-native-cloud-ocr-widget PROPERTIES AUTOMOC OFF)
+target_include_directories(snow-shot-community-native-cloud-ocr-widget PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include"
+    "${SNOW_SHOT_ROOT}/ant_design_qt/packages/adqt_icon_core/src")
+target_link_libraries(snow-shot-community-native-cloud-ocr-widget PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets)
+
 # Compile a real production QObject implementation *and its CMake AUTOMOC output*
 # without linking the full GUI. This catches Q_OBJECT/meta-object generation,
 # declaration/signature and missing-header errors on both native hosts.
