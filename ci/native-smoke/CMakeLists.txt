@@ -61,7 +61,9 @@ add_library(snow-shot-community-native-clang-only OBJECT EXCLUDE_FROM_ALL
     "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/core/screenshotgeometry.cpp"
     "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/recording/screenrecordinggeometry.cpp"
     "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrtexttransform.cpp"
-    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrtextlayout.cpp"
+    # OCR text shaping needs Qt 6.12 (QTextLayout::RetrieveGlyphIndexes);
+    # use the genuine Qt6.4-compatible OCR paragraph-layout implementation.
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrlayout.cpp"
     "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/canvasstatusreadout.cpp")
 set_target_properties(snow-shot-community-native-clang-only PROPERTIES AUTOMOC OFF)
 target_include_directories(snow-shot-community-native-clang-only PRIVATE

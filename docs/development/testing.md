@@ -121,7 +121,7 @@ files, changed-source coverage, and changed production files **not present**
 in this build graph. Uncovered sources are reported explicitly, not
 silently counted as passing. The curated lightweight graph currently covers eight production `.cpp`
 files: PaddleOCR client, cloud OCR settings, cloud OCR engine choices,
-screenshot geometry, recording geometry, OCR text transform, OCR text
+screenshot geometry, recording geometry, OCR text transform, OCR paragraph
 layout and canvas status readout. The latter five are excluded from the
 ordinary native test build but still undergo real Clang syntax analysis. The Windows Release compiler must
 still validate the full app, platform macros, linking, ABI, NSIS and upgrade.
@@ -144,3 +144,9 @@ python3 scripts/check-clang-compile-database.py \
 
 The original `community-native-smoke` preset remains available with GCC
 for developers who do not have Clang 18 installed.
+
+The more specialized `screenshotocrtextlayout.cpp` uses
+`QTextLayout::RetrieveGlyphIndexes`, unavailable in Ubuntu 24.04's system
+Qt 6.4. It is explicitly **not** covered by this older system-Qt gate;
+the production Windows build uses Qt 6.12 and must compile it. Do not
+modify that source merely to appease the older Clang preflight SDK.
