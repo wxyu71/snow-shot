@@ -175,6 +175,7 @@ jobs:
           clang-format-18 --dry-run --Werror \
             ci/native-smoke/community_native_smoke_tests.cpp \
             ci/native-smoke/community_toolbar_policy_tests.cpp \
+            ci/native-smoke/community_cloud_ocr_widget_tests.cpp \
             snow_shot/src/presentation/components/cloudocrenginechoices.cpp \
             snow_shot/include/snow_shot/presentation/components/cloudocrenginechoices.h
 
@@ -227,6 +228,7 @@ jobs:
           python3 scripts/upstream_sync.py verify-review-ancestry
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
+          python3 scripts/test-test-runner-policy.py
           python3 scripts/community_release.py selftest
       - name: Validate prerelease source
         if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
@@ -378,14 +380,14 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc snow-shot-community-native-cloud-ocr-widget
+          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc snow-shot-community-native-cloud-ocr-widget-tests
           if ($LASTEXITCODE -ne 0) { throw 'Windows native C++/Qt contract compilation failed' }
       - name: Run real Windows Qt and platform policy CTests
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          ctest --test-dir build/ci-windows-contracts -C Release -R 'snow-shot-community-native-(settings|toolbar-policy)-tests' --output-on-failure --output-junit "$env:RUNNER_TEMP/windows-fast-native-junit.xml"
+          ctest --test-dir build/ci-windows-contracts -C Release -R 'snow-shot-community-native-(settings|toolbar-policy|cloud-ocr-widget)-tests' --output-on-failure --output-junit "$env:RUNNER_TEMP/windows-fast-native-junit.xml"
           if ($LASTEXITCODE -ne 0) { throw 'Windows-native Qt contract tests failed' }
       - name: Upload Windows fast-gate CTest diagnostics
         if: always()
