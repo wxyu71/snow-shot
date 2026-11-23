@@ -4714,10 +4714,8 @@ SettingsItemDefinition communityCloudOcrSettingsItem() {
         QStringLiteral("text-recognition.cloud-ocr"),
         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Online OCR")),
         settingsText(QT_TRANSLATE_NOOP(
-            "SettingsCatalog", "Choose the online OCR engine, output format and provider settings")),
+            "SettingsCatalog", "Configure the PaddleOCR AI Studio endpoint, access token and model")),
         {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "PaddleOCR AI Studio")),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Large-model OCR")),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "LaTeX")),
          settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Markdown"))},
         {},
         SettingsCustomDefinition{SettingsCustomRenderer::CloudOcr},
