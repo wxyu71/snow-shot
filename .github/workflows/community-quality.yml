@@ -47,8 +47,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Audit workflow security with zizmor
+      - name: Publish workflow security findings to Code Scanning
         uses: zizmorcore/zizmor-action@bd12b495c90993a4301c73398142281a61499af3 # v0.9.0
         with:
           version: v1.32.0
           strict-collection: true
+
+      # SARIF mode intentionally exits 0 even with findings; use the
+      # tool's native exit code as a separate enforceable security gate.
+      - name: Reject confirmed high-severity Actions vulnerabilities
+        uses: zizmorcore/zizmor-action@bd12b495c90993a4301c73398142281a61499af3 # v0.9.0
+        with:
+          version: v1.32.0
+          strict-collection: true
+          advanced-security: false
+          min-severity: high
+          min-confidence: high
