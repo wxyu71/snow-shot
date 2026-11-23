@@ -15,13 +15,15 @@ class CommunityCloudOcrWidgetTests final : public QObject {
   private slots:
     void initTestCase() {
         QVERIFY(m_settingsDirectory.isValid());
-        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
-                           m_settingsDirectory.path());
+        const QString root = m_settingsDirectory.path();
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, root);
     }
 
     void init() {
+        const QString organization = QStringLiteral("SnowShot");
+        const QString application = QStringLiteral("CloudOcr");
         QSettings settings(QSettings::IniFormat, QSettings::UserScope,
-                           QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+                           organization, application);
         settings.clear();
         settings.sync();
         QCOMPARE(settings.status(), QSettings::NoError);
@@ -64,8 +66,9 @@ class CommunityCloudOcrWidgetTests final : public QObject {
     }
 
     void widgetSavesPaddleAndNormalizesLegacyChoices() {
-        QSettings legacy(QSettings::IniFormat, QSettings::UserScope,
-                         QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+        const QString organization = QStringLiteral("SnowShot");
+        const QString application = QStringLiteral("CloudOcr");
+        QSettings legacy(QSettings::IniFormat, QSettings::UserScope, organization, application);
         legacy.setValue(QStringLiteral("engine"), QStringLiteral("vision"));
         legacy.setValue(QStringLiteral("output_format"), QStringLiteral("latex"));
         legacy.sync();
@@ -106,11 +109,11 @@ class CommunityCloudOcrWidgetTests final : public QObject {
         QCOMPARE(stored.outputFormat, QStringLiteral("markdown"));
 
         QSettings persisted(QSettings::IniFormat, QSettings::UserScope,
-                            QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
-        QCOMPARE(persisted.value(QStringLiteral("engine")).toString(),
-                 QStringLiteral("paddleocr"));
-        QCOMPARE(persisted.value(QStringLiteral("output_format")).toString(),
-                 QStringLiteral("markdown"));
+                            organization, application);
+        const QString persistedEngine = persisted.value(QStringLiteral("engine")).toString();
+        const QString persistedOutput = persisted.value(QStringLiteral("output_format")).toString();
+        QCOMPARE(persistedEngine, QStringLiteral("paddleocr"));
+        QCOMPARE(persistedOutput, QStringLiteral("markdown"));
 #ifdef Q_OS_WIN
         QVERIFY(persisted.value(QStringLiteral("access_token")).toString().isEmpty());
         QVERIFY(!persisted.value(QStringLiteral("access_token_dpapi_v1")).toString().isEmpty());
