@@ -150,12 +150,33 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          key: community-qt-r2-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
       - name: Build or validate static Qt
         shell: pwsh
         run: |
           $prefix = Join-Path $PWD '.tools/qt/6.12.0/x64-static-release'
-          ./scripts/build-static-qt.ps1 -InstallPrefix $prefix -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
+          $buildArgs = @{
+            InstallPrefix = $prefix
+            Architecture = 'x64'
+            Configuration = 'Release'
+            DevelopmentModules = $true
+            Parallelism = 8
+          }
+          try {
+            ./scripts/build-static-qt.ps1 @buildArgs
+          }
+          catch {
+            # A GitHub cache is immutable. An older/incompatible kit must never
+            # be silently accepted, but it can be safely discarded and rebuilt.
+            # Retry only the known audited-kit mismatch, not arbitrary Qt failures.
+            $cacheHit = '${{ steps.qt-cache.outputs.cache-hit }}'
+            if ($cacheHit -ne 'true' -or
+                $_.Exception.Message -notlike 'The Qt installation at * does not match the audited Release feature policy.*') {
+              throw
+            }
+            Write-Warning 'Restored static Qt cache failed the audited feature/dependency check. Rebuilding a fresh kit.'
+            ./scripts/build-static-qt.ps1 @buildArgs -Force
+          }
           if ($LASTEXITCODE -ne 0) { throw 'Static Qt build failed' }
           $qt6Dir = Join-Path $prefix 'lib/cmake/Qt6'
           if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) { throw 'Qt6Config.cmake missing' }
@@ -167,7 +188,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          key: community-qt-r2-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
 
       - name: Configure focused native tests
         shell: pwsh
