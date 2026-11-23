@@ -48,6 +48,7 @@ jobs:
         with:
           ref: main
           fetch-depth: 0
+          persist-credentials: false
           token: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN || github.token }}
 
       - name: Test sync invariants
@@ -62,6 +63,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # Keep the temporary token out of the checkout's persisted git config.
+          # The GitHub CLI credential helper authenticates fetch/push using GH_TOKEN.
+          gh auth setup-git --hostname github.com
           if [[ "$AUTO_MERGE" == "true" ]]; then
             if [[ -z "$NON_DEFAULT_TOKEN" ]]; then
               echo '::error::Automatic merge needs an App/PAT token so PR checks actually trigger.'
