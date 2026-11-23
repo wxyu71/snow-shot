@@ -11,25 +11,27 @@
 
 ## 当前状态：v1.5.8-beta.1
 
-**尚处于测试阶段，未达到正式发行条件。** Windows x64 完整版、离线 OCR
-资源、从原版 1.5.7 覆盖升级和原生回归测试均需实际通过后才能发布。
-请不要把原作者 GitHub Release 中的安装包误当成此 Fork 的测试版。
+**仍处于测试阶段，不是稳定版。** 必须先通过 Windows 正式构建、打包和
+安装程序自动化检查，才能发布供个人安装的 Beta1 测试包。原版 1.5.7
+覆盖升级、实际本地 OCR 模型及云 OCR 仍需在 Windows 电脑上手动实测。
+请勿将上游 Release 当作本 Fork 的测试版。
 
 ## 核心功能
 
 - 保留智能窗口/元素框选、截图、快捷键、批注、贴图及原有引擎。
 - **快速离线 PP-OCRv6**：本地运行，无需联网；识别完成自动复制全部文字，
   并保留可局部选择的文字层。
-- **一个可配置的“在线 OCR”按钮**：在设置中选择实际 OCR 提供方。
-  百度 AI Studio PaddleOCR 使用用户自己的 HTTPS API URL 与 Access Token，
-  支持 PP-OCRv6、PP-StructureV3、PaddleOCR-VL-1.6，输出结构化 Markdown，
-  其中公式保留为 LaTeX；也可以复用上游的大模型 OCR 管线，使用用户配置的
-  OpenAI-compatible 视觉模型，并选择输出 Markdown、HTML 或 LaTeX。
+- **唯一的“在线 OCR”按钮只使用 PaddleOCR**，且仅在用户主动操作时
+  发送图片。用户自行配置 AI Studio HTTPS 地址、Access Token 和模型
+  （PP-OCRv6、PP-StructureV3、PaddleOCR-VL-1.6），输出 Markdown，公式
+  以 LaTeX 保留。不会使用自定义视觉模型服务。
+- **截图历史和固定图片历史默认开启**，仅保存在用户电脑本地；
+  可手动关闭或配置保留期限，不会因保存历史而自动上传云端。
 - 不含 Snow Shot 登录注册、会员、积分支付、分析统计或遥测。
 - 上游定时同步具备商业文件保护；未经 Windows 回归测试的源码合并必须人工审核。
 
-在线 OCR 会将选中的图片**直接发送至用户在设置中选择的 OCR 提供方**，
-不会经过 Snow Shot 账户服务。Windows 上 PaddleOCR Access Token 使用当前
+只有用户**主动使用在线 OCR**，图片才会直接发送到其配置的 PaddleOCR
+AI Studio 服务，不经过 Snow Shot 账户服务。Windows 上 PaddleOCR Access Token 使用当前
 用户作用域的 DPAPI 保护；其它平台目前仍保存在用户 Qt 设置中，应按敏感信息
 处理。详见[此 Fork 的隐私说明](docs/community-privacy.md)。
 
