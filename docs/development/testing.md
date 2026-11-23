@@ -119,9 +119,11 @@ checks that an undeclared class member is rejected and a fixed one accepted.
 The `build/ci-native-clang/clang-syntax-report.json` artifact records checked
 files, changed-source coverage, and changed production files **not present**
 in this build graph. Uncovered sources are reported explicitly, not
-silently counted as passing. Currently only the three existing production
-`.cpp` units (PaddleOCR client, cloud OCR settings, cloud OCR engine
-choices) are in this lightweight graph. The Windows Release compiler must
+silently counted as passing. The curated lightweight graph currently covers eight production `.cpp`
+files: PaddleOCR client, cloud OCR settings, cloud OCR engine choices,
+screenshot geometry, recording geometry, OCR text transform, OCR text
+layout and canvas status readout. The latter five are excluded from the
+ordinary native test build but still undergo real Clang syntax analysis. The Windows Release compiler must
 still validate the full app, platform macros, linking, ABI, NSIS and upgrade.
 
 Local validation requires Qt6, Ninja and Clang 18:

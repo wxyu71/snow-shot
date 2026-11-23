@@ -52,3 +52,19 @@ add_test(NAME snow-shot-community-native-toolbar-policy-tests
     COMMAND snow-shot-community-native-toolbar-policy-tests)
 set_tests_properties(snow-shot-community-native-toolbar-policy-tests PROPERTIES
     TIMEOUT 15 LABELS "native;community;schema")
+
+# Production-only translation units with system-Qt headers. CMake exports
+# their real Clang compile commands, but EXCLUDE_FROM_ALL avoids compiling or
+# linking them in the small native CTest build. The semantic gate still runs
+# Clang's parser/type checker on each one before any expensive Windows work.
+add_library(snow-shot-community-native-clang-only OBJECT EXCLUDE_FROM_ALL
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/core/screenshotgeometry.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/recording/screenrecordinggeometry.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrtexttransform.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrtextlayout.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/canvasstatusreadout.cpp")
+set_target_properties(snow-shot-community-native-clang-only PROPERTIES AUTOMOC OFF)
+target_include_directories(snow-shot-community-native-clang-only PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include")
+target_link_libraries(snow-shot-community-native-clang-only PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Widgets)

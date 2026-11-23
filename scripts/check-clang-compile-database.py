@@ -86,7 +86,7 @@ def main() -> int:
     ap.add_argument("--database", type=Path, required=True)
     ap.add_argument("--base-ref", help="PR base commit for changed-source priority/coverage")
     ap.add_argument("--report", type=Path, required=True)
-    ap.add_argument("--min-production", type=int, default=3)
+    ap.add_argument("--min-production", type=int, default=8)
     args = ap.parse_args()
     try:
         rows = json.loads(args.database.read_text(encoding="utf-8"))
