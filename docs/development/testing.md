@@ -72,3 +72,28 @@ For later performance tuning, compare the CI job step durations and CTest XML
 at the same exact SHA. Consider proven compiler caches (e.g. sccache) after
 separate verification against the MSVC/static-Qt toolchain; cache compilation
 but do not treat cache hits as proof of correct linkage or installed artifacts.
+
+### Static C++ declaration gate (before long-running Windows CI)
+
+`scripts/check-cpp-member-declarations.py` uses the pinned, upstream
+`tree-sitter` and `tree-sitter-cpp` parser wheels in the cheap Linux preflight.
+It parses the **real** `ScreenshotToolPalette` class body and all of its
+out-of-class member definitions across preprocessor branches. It fails if a
+source definition names a member that is absent from the class declaration.
+The mandatory `--self-test` reinserts the original
+`createImageConversionActionFamily()` MSVC C2039 regression into the actual
+source in memory and asserts that the parser rejects it. Minimum AST
+declaration/definition counts prevent silent parsing gaps.
+
+This is a **narrow structural preflight**. It does not compare C++ function
+signatures or overload resolution, validate generated Qt/moc output or replace
+Clang/MSVC compilation. For full semantic checks, configure the real
+dependency graph, export `compile_commands.json` with CMake, and run
+`clang-tidy -p <build-directory> <changed-translation-unit>` or
+`clang++ -fsyntax-only` with the same compile arguments. Do not run a
+compiler without project include paths and claim that it verified the app.
+The original Windows Release build, native CTests, NSIS packaging and
+installer-upgrade smoke remain mandatory release gates.
+
+The preflight also runs `compileall` on Python scripts; existing actionlint,
+zizmor, PSScriptAnalyzer, clang-format and Qt/CMake contract tests remain active.
