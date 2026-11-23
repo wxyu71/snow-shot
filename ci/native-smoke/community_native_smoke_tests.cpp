@@ -44,12 +44,13 @@ class CommunityNativeSmoke final : public QObject {
         QCOMPARE(restored.outputFormat, QStringLiteral("markdown"));
         QCOMPARE(restored.accessToken, QStringLiteral("native-test-token"));
 
-        QSettings legacy(QSettings::IniFormat, QSettings::UserScope,
-                         QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
-        QCOMPARE(legacy.value(QStringLiteral("engine")).toString(),
-                 QStringLiteral("paddleocr"));
-        QCOMPARE(legacy.value(QStringLiteral("output_format")).toString(),
-                 QStringLiteral("markdown"));
+        const QString organization = QStringLiteral("SnowShot");
+        const QString application = QStringLiteral("CloudOcr");
+        QSettings legacy(QSettings::IniFormat, QSettings::UserScope, organization, application);
+        const QString storedEngine = legacy.value(QStringLiteral("engine")).toString();
+        const QString storedOutput = legacy.value(QStringLiteral("output_format")).toString();
+        QCOMPARE(storedEngine, QStringLiteral("paddleocr"));
+        QCOMPARE(storedOutput, QStringLiteral("markdown"));
         // Existing installs can have obsolete Vision preferences. Even before
         // saving, the reader must not route a future OCR job to that provider.
         legacy.setValue(QStringLiteral("engine"), QStringLiteral("vision"));
