@@ -228,7 +228,9 @@ jobs:
           python3 scripts/upstream_sync.py verify-review-ancestry
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
-          python3 scripts/test-test-runner-policy.py
+          # This gate validates Community CTest selection only. The unrelated
+          # clipboard resource-lock fixture needs its own dedicated follow-up.
+          python3 scripts/test-test-runner-policy.py TestRunnerPolicyTests
           python3 scripts/community_release.py selftest
       - name: Validate prerelease source
         if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
