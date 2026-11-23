@@ -111,12 +111,35 @@ jobs:
         shell: pwsh
         run: ./scripts/bootstrap-community-nsis.ps1
 
+      - name: Test Qt cache ABI fingerprinting
+        shell: pwsh
+        run: ./scripts/test-qt-cache-identity.ps1
+
+      # A runner label can move to a newer MSVC/SDK/CMake image while its
+      # literal label remains unchanged. Include actual tool hashes.
+      - name: Identify native Windows toolchain
+        id: toolchain-cache
+        shell: pwsh
+        run: |
+          . ./scripts/snow-build-environment.ps1
+          Add-SnowMsvcToolsToPath -Architecture x64 | Out-Null
+          $inputs = @()
+          foreach ($tool in @('cl.exe', 'link.exe', 'lib.exe', 'cmake.exe')) {
+            $resolved = Get-Command $tool -CommandType Application -ErrorAction Stop | Select-Object -First 1
+            $inputs += (Get-FileHash -LiteralPath $resolved.Source -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $inputs += $env:VCToolsVersion, $env:WindowsSDKVersion, $PSVersionTable.PSVersion.ToString()
+          $digest = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData(
+            [System.Text.Encoding]::UTF8.GetBytes(($inputs -join '|')))).ToLowerInvariant()
+          "key=$digest" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host "Windows build toolchain fingerprint: $digest"
+
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@v4
         with:
           path: .tools/vcpkg-binary-cache
-          key: vcpkg-abi-windows-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: vcpkg-abi-windows-x64-static-${{ steps.toolchain-cache.outputs.key }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
       - name: Enable vcpkg binary cache
         shell: pwsh
         run: |
@@ -143,7 +166,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .tools/vcpkg-binary-cache
-          key: vcpkg-abi-windows-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: vcpkg-abi-windows-x64-static-${{ steps.toolchain-cache.outputs.key }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
 
       # Qt binaries are derived from the resolved vcpkg ABI and the exact
       # host compiler, not from manually bumped cache generations.
