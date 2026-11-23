@@ -11,10 +11,10 @@
 
 ## Status — v1.5.8-beta.1
 
-**Testing branch: not production-ready.** A release can only be published
-after the Windows x64 full installer, offline OCR assets, in-place upgrade
-from the original 1.5.7 and native regression tests pass. Do **not** download
-an upstream original-author release expecting these community changes.
+**Testing candidate, not a stable release.** Windows production build,
+packaging and automated installer smoke must pass before a personal prerelease
+is published. Upgrades from official 1.5.7, live cloud OCR and real local
+OCR models will be checked on a Windows PC after installation.
 
 ## Features
 
@@ -22,18 +22,17 @@ an upstream original-author release expecting these community changes.
   pin-to-screen; retain the existing screenshot engine.
 - **Fast local PP-OCRv6**: no network required; automatically copies the
   complete recognized text and keeps the selectable overlay.
-- **One configurable Online OCR button**: choose the provider in Settings.
-  Baidu AI Studio PaddleOCR uses your own HTTPS API URL and Access Token
-  (PP-OCRv6, PP-StructureV3 or PaddleOCR-VL-1.6) and returns structured
-  Markdown with formulas preserved as LaTeX. The inherited large-model OCR
-  pipeline can instead use a user-configured OpenAI-compatible vision model
-  and output Markdown, HTML or LaTeX.
+- **One user-triggered PaddleOCR-only Online OCR button**. Configure your
+  AI Studio HTTPS URL, Access Token and model (PP-OCRv6, PP-StructureV3 or
+  PaddleOCR-VL-1.6). The output is Markdown with formulas as LaTeX.
+- **Local screenshot and pinned-image histories default on**. Both stay on
+  the user's computer, with configurable retention and explicit opt-out.
 - No Snow Shot login, registration, membership, paid credits, analytics or telemetry.
 - Protected scheduled upstream synchronization; changes requiring full
   Windows verification are sent for human review.
 
-Screenshots submitted to Online OCR go **directly to the provider selected by
-the user**, not to a Snow Shot account service. On Windows the PaddleOCR Access
+Only screenshots **explicitly submitted to Online OCR** go to the configured
+PaddleOCR AI Studio endpoint, not to a Snow Shot account service. On Windows the PaddleOCR Access
 Token is protected with user-scoped DPAPI; on other platforms it is currently
 stored in the user's Qt settings and should be treated as sensitive. See
 [privacy](docs/community-privacy.md).
