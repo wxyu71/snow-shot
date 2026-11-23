@@ -11,6 +11,15 @@ Caches accelerate deterministic builds; they are **never** a source of truth.
 | Cargo sources | Downloaded Cargo registry and Git sources; no build output | Lockfile and toolchain/configuration inputs. Rust/Cargo verify downloaded content. |
 | Static Qt installation | Full locally compiled Qt SDK, not downloaded prebuilt Qt | SHA-256 identity of source archive, audited feature policy and source patches, actual zlib/libpng installed vcpkg ABI records, MSVC/linker/SDK/CMake/PowerShell/build tool identities, build scripts, target architecture, configuration and development-module selection. |
 
+## Sharing caches across feature PRs
+
+GitHub scopes caches saved on a `pull_request` merge ref to that PR.
+The Community Windows workflow therefore also runs on `push` to `main`.
+Its successfully validated Qt and vcpkg caches become reusable by subsequent
+feature PRs. A docs-only push runs the lightweight policy preflight but skips
+the Windows native job. Regular PR validation remains independent of cache
+availability; caches improve speed, not correctness.
+
 The Qt cache identity is calculated by `scripts/qt-cache-identity.ps1` **after**
 `scripts/bootstrap.ps1` has resolved and installed the actual vcpkg dependencies.
 This matters: a source manifest does not uniquely identify a built binary when
