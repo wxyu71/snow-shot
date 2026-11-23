@@ -83,6 +83,26 @@ target_include_directories(snow-shot-community-native-cloud-ocr-widget PRIVATE
 target_link_libraries(snow-shot-community-native-cloud-ocr-widget PRIVATE
     Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets)
 
+# Link the real production widget object into an offscreen Qt Test binary.
+# This closes the gap between policy tests and the full Settings acceptance:
+# fast CI now instantiates the same controls that ship in the application.
+add_executable(snow-shot-community-native-cloud-ocr-widget-tests
+    community_cloud_ocr_widget_tests.cpp
+    "${SNOW_SHOT_ROOT}/snow_shot/src/network/communitycloudocrsettings.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/network/baidupaddleocrclient.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/cloudocrenginechoices.cpp")
+target_include_directories(snow-shot-community-native-cloud-ocr-widget-tests PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include"
+    "${SNOW_SHOT_ROOT}/ant_design_qt/packages/adqt_icon_core/src")
+target_link_libraries(snow-shot-community-native-cloud-ocr-widget-tests PRIVATE
+    snow-shot-community-native-cloud-ocr-widget
+    Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Test)
+add_test(NAME snow-shot-community-native-cloud-ocr-widget-tests
+    COMMAND snow-shot-community-native-cloud-ocr-widget-tests)
+set_tests_properties(snow-shot-community-native-cloud-ocr-widget-tests PROPERTIES
+    TIMEOUT 30 LABELS "native;community;ocr;settings"
+    ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
 # Compile a real production QObject implementation *and its CMake AUTOMOC output*
 # without linking the full GUI. This catches Q_OBJECT/meta-object generation,
 # declaration/signature and missing-header errors on both native hosts.
@@ -98,6 +118,7 @@ if(WIN32)
     # Compiling the real Windows variants checks DPAPI and Windows SDK APIs.
     # crypt32 is the actual Windows link dependency of this Settings source.
     target_link_libraries(snow-shot-community-native-settings-tests PRIVATE crypt32)
+    target_link_libraries(snow-shot-community-native-cloud-ocr-widget-tests PRIVATE crypt32)
 
     add_library(snow-shot-community-native-windows-qos OBJECT EXCLUDE_FROM_ALL
         "${SNOW_SHOT_ROOT}/snow_shot/src/platform/windows/processpowerqos.cpp")
