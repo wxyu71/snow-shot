@@ -22,8 +22,7 @@ class CommunityCloudOcrWidgetTests final : public QObject {
     void init() {
         const QString organization = QStringLiteral("SnowShot");
         const QString application = QStringLiteral("CloudOcr");
-        QSettings settings(QSettings::IniFormat, QSettings::UserScope,
-                           organization, application);
+        QSettings settings(QSettings::IniFormat, QSettings::UserScope, organization, application);
         settings.clear();
         settings.sync();
         QCOMPARE(settings.status(), QSettings::NoError);
@@ -108,8 +107,7 @@ class CommunityCloudOcrWidgetTests final : public QObject {
         QCOMPARE(stored.engine, QStringLiteral("paddleocr"));
         QCOMPARE(stored.outputFormat, QStringLiteral("markdown"));
 
-        QSettings persisted(QSettings::IniFormat, QSettings::UserScope,
-                            organization, application);
+        QSettings persisted(QSettings::IniFormat, QSettings::UserScope, organization, application);
         const QString persistedEngine = persisted.value(QStringLiteral("engine")).toString();
         const QString persistedOutput = persisted.value(QStringLiteral("output_format")).toString();
         QCOMPARE(persistedEngine, QStringLiteral("paddleocr"));
