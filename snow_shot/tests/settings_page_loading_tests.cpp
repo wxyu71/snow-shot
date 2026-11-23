@@ -510,21 +510,20 @@ void toolbarReorderingKeepsPageStable(const settings::SettingsRegistry& registry
 
 void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                                settings::SettingsRuntimeSession& session) {
-#if SNOW_SHOT_ENABLE_API_CONFIGURATION && SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    const auto previousModels = snow_shot::storage::ApiConfigurationSettings().customModels();
-    const snow_shot::CustomAiModelConfiguration visionModel{
-        QStringLiteral("11111111-1111-4111-8111-111111111111"),
-        QStringLiteral("Community Vision Fixture"),
-        QStringLiteral("https://vision.example.test/v1"),
-        QStringLiteral("test-api-key"),
-        QStringLiteral("vision-model"),
-        true,
-        false,
-        1,
-        QStringLiteral("openai")};
-    require(snow_shot::storage::ApiConfigurationSettings().setCustomModels({visionModel}),
-            "install a custom vision model for Online OCR settings");
-#endif
+    // Legacy Vision/HTML/LaTeX preferences must never override the Community
+    // product contract, even before the settings widget is saved again.
+    QSettings legacy(QSettings::IniFormat, QSettings::UserScope,
+                     QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+    legacy.setValue(QStringLiteral("engine"), QStringLiteral("vision"));
+    legacy.setValue(QStringLiteral("output_format"), QStringLiteral("html"));
+    legacy.sync();
+    require(legacy.status() == QSettings::NoError,
+            "install legacy Cloud OCR preferences for migration coverage");
+    const auto normalized = snow_shot::network::readCommunityCloudOcrSettings();
+    require(normalized.engine == QStringLiteral("paddleocr") &&
+                normalized.outputFormat == QStringLiteral("markdown"),
+            "Community Online OCR ignores legacy Vision and HTML preferences");
+
     SettingsPageWidget page(registry, QStringLiteral("text-recognition-translation"), session);
     page.resize(880, 760);
     page.show();
@@ -538,8 +537,6 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
         QStringLiteral("settings-item"), QStringLiteral("text-recognition.cloud-ocr")));
     auto* engine = page.findChild<QComboBox*>(QStringLiteral("onlineOcrEngine"));
     auto* output = page.findChild<QComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
-    auto* visionModelSelector =
-        page.findChild<QComboBox*>(QStringLiteral("onlineOcrVisionModel"));
     auto* endpoint = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrApiUrl"));
     auto* token = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrAccessToken"));
     auto* model = page.findChild<QComboBox*>(QStringLiteral("paddleOcrModel"));
@@ -547,25 +544,28 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     auto* testConnection =
         page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
     auto* status = page.findChild<QLabel*>(QStringLiteral("paddleOcrConnectionStatus"));
-    require(widget && engine && output && visionModelSelector && endpoint && token && model &&
-                save && testConnection && status,
-            "Online OCR settings materialize engine, output and provider controls");
-    require(engine->findData(QStringLiteral("paddleocr")) >= 0,
-            "Online OCR settings retain the PaddleOCR engine");
-#if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    require(engine->findData(QStringLiteral("vision")) >= 0,
-            "Online OCR settings expose the upstream large-model engine");
-#endif
+    require(widget && engine && output && endpoint && token && model && save &&
+                testConnection && status,
+            "Online OCR settings materialize the real PaddleOCR controls");
+    require(page.findChild<QComboBox*>(QStringLiteral("onlineOcrVisionModel")) == nullptr &&
+                engine->count() == 1 &&
+                engine->currentData().toString() == QStringLiteral("paddleocr") &&
+                engine->findData(QStringLiteral("vision")) == -1 &&
+                !engine->isEnabled(),
+            "Community Online OCR exposes only the fixed PaddleOCR provider");
     require(output->count() == 1 &&
-                output->currentData().toString() == QStringLiteral("markdown"),
-            "PaddleOCR output is intentionally normalized to Markdown");
+                output->currentData().toString() == QStringLiteral("markdown") &&
+                output->findData(QStringLiteral("html")) == -1 &&
+                output->findData(QStringLiteral("latex")) == -1 &&
+                !output->isEnabled(),
+            "Community Online OCR exposes only Markdown output");
     require(token->echoMode() == QLineEdit::Password,
             "Cloud OCR token uses a password editor");
     require(model->count() == 3 &&
                 model->findText(QStringLiteral("PaddleOCR-VL-1.6")) >= 0 &&
                 model->findText(QStringLiteral("PP-StructureV3")) >= 0 &&
                 model->findText(QStringLiteral("PP-OCRv6")) >= 0,
-            "Cloud OCR settings expose all supported models");
+            "Cloud OCR settings expose all supported PaddleOCR models");
 
     endpoint->setText(QStringLiteral("not-a-url"));
     token->setText(QStringLiteral("token"));
@@ -580,53 +580,23 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     save->click();
     drainEvents();
     const auto stored = snow_shot::network::readCommunityCloudOcrSettings();
-    require(status->text() == QStringLiteral("Online OCR configuration saved.") &&
+    require(status->text() == QStringLiteral("PaddleOCR configuration saved.") &&
                 stored.apiUrl == QStringLiteral("http://127.0.0.1:5102") &&
                 stored.accessToken == QStringLiteral("native-test-token") &&
                 stored.model == QStringLiteral("PP-OCRv6") &&
                 stored.engine == QStringLiteral("paddleocr") &&
                 stored.outputFormat == QStringLiteral("markdown"),
-            "the Online OCR settings widget preserves the existing PaddleOCR configuration");
-
-#if SNOW_SHOT_ENABLE_API_CONFIGURATION && SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    engine->setCurrentIndex(engine->findData(QStringLiteral("vision")));
-    drainEvents();
-    require(output->findData(QStringLiteral("markdown")) >= 0 &&
-                output->findData(QStringLiteral("html")) >= 0,
-            "large-model OCR exposes structured output choices");
-#if SNOW_SHOT_ENABLE_LATEX_RECOGNITION
-    require(output->findData(QStringLiteral("latex")) >= 0,
-            "large-model OCR exposes LaTeX when the upstream recognizer is compiled");
-    output->setCurrentIndex(output->findData(QStringLiteral("latex")));
-#else
-    output->setCurrentIndex(output->findData(QStringLiteral("markdown")));
-#endif
-    require(visionModelSelector->findData(visionModel.selectionId()) >= 0,
-            "Online OCR lists configured OpenAI-compatible vision models");
-    visionModelSelector->setCurrentIndex(
-        visionModelSelector->findData(visionModel.selectionId()));
-    save->click();
-    drainEvents();
-    const auto visionStored = snow_shot::network::readCommunityCloudOcrSettings();
-    require(status->text() == QStringLiteral("Online OCR configuration saved.") &&
-                visionStored.engine == QStringLiteral("vision") &&
-                snow_shot::storage::ScreenshotImageConversionSettings().visionModel() ==
-                    visionModel.selectionId(),
-            "large-model Online OCR persists its provider/model selection");
-#if SNOW_SHOT_ENABLE_LATEX_RECOGNITION
-    require(visionStored.outputFormat == QStringLiteral("latex") &&
-                snow_shot::storage::ScreenshotRecognitionModelSettings().latexModel() ==
-                    visionModel.selectionId(),
-            "LaTeX output reuses the configured upstream vision model");
-#endif
-    require(snow_shot::storage::ApiConfigurationSettings().setCustomModels(previousModels),
-            "restore custom vision models");
-#endif
+            "the Online OCR widget saves its supported PaddleOCR configuration");
+    QSettings persisted(QSettings::IniFormat, QSettings::UserScope,
+                        QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+    require(persisted.value(QStringLiteral("engine")).toString() ==
+                QStringLiteral("paddleocr") &&
+                persisted.value(QStringLiteral("output_format")).toString() ==
+                    QStringLiteral("markdown"),
+            "saving Online OCR overwrites obsolete Vision and HTML preferences");
 #ifdef Q_OS_WIN
-    QSettings raw(QSettings::IniFormat, QSettings::UserScope,
-                  QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
-    require(raw.value(QStringLiteral("access_token")).toString().isEmpty() &&
-                !raw.value(QStringLiteral("access_token_dpapi_v1")).toString().isEmpty(),
+    require(persisted.value(QStringLiteral("access_token")).toString().isEmpty() &&
+                !persisted.value(QStringLiteral("access_token_dpapi_v1")).toString().isEmpty(),
             "Windows persists the Cloud OCR token through the protected settings slot");
 #endif
 }
