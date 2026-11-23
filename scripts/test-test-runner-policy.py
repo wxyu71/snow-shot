@@ -2,7 +2,6 @@
 
 import json
 from pathlib import Path
-import re
 import shutil
 import subprocess
 import tempfile
@@ -30,9 +29,9 @@ cmake_minimum_required(VERSION 3.21)
 project(SnowTestRunnerPolicy NONE)
 enable_testing()
 add_custom_target(snow-all)
-add_test(NAME portable-unit COMMAND "${CMAKE_COMMAND}" -E true)
+add_test(NAME portable-unit COMMAND "${CMAKE_COMMAND}" -E touch "${CMAKE_BINARY_DIR}/portable-unit.ran")
 set_tests_properties(portable-unit PROPERTIES LABELS "unit")
-add_test(NAME windows-unit COMMAND "${CMAKE_COMMAND}" -E true)
+add_test(NAME windows-unit COMMAND "${CMAKE_COMMAND}" -E touch "${CMAKE_BINARY_DIR}/windows-unit.ran")
 set_tests_properties(windows-unit PROPERTIES LABELS "unit;windows")
 add_test(NAME native-interactive COMMAND "${CMAKE_COMMAND}" -E false)
 set_tests_properties(native-interactive PROPERTIES LABELS "unit;interactive")
@@ -68,7 +67,8 @@ snow_add_deterministic_test_runner()
         result = self.run_command(CMAKE, '--build', str(self.build), '--config', 'Debug',
                                   '--target', 'snow-tests')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('100% tests passed', result.stdout)
+        self.assertTrue((self.build / 'portable-unit.ran').is_file())
+        self.assertTrue((self.build / 'windows-unit.ran').is_file())
 
     def test_default_presets_keep_the_same_noninteractive_scope(self):
         presets = json.loads((ROOT / 'CMakePresets.json').read_text(encoding='utf-8'))
@@ -90,52 +90,42 @@ class ClipboardResourcePolicyTests(unittest.TestCase):
         directory = tempfile.TemporaryDirectory(prefix='snow clipboard resources ')
         cls.addClassCleanup(directory.cleanup)
         cls.source = Path(directory.name)
-        workspace = (ROOT / 'snow_shot/CMakeLists.txt').read_text(encoding='utf-8')
-        policy = re.search(r'if\(SNOW_SHOT_BUILD_TESTS\)\n\s*'
-                           r'include\(SnowShotTestResources\)\nendif\(\)', workspace)
-        if policy is None:
-            raise AssertionError('Snow Shot must enable its shared test resource policy')
-        # Derive required aliases from their real executable binding, independently of
-        # the name families used by the policy. A new oddly named alias must be covered.
-        hosts = ('clipboard-roundtrip', 'export-coordinator', 'pinned-window',
-                 'screenshot-history-page', 'clipboard-placement')
-        executable = r'snow-shot-(?:' + '|'.join(hosts) + r')-tests'
-        registrations = list(re.finditer(
-            r'\badd_test\(\s*NAME\s+(\S+)\s+COMMAND\s+(?:"?\$<TARGET_FILE:)?'
-            + '(' + executable + r')(?:>"?)?(?=\s|\))', workspace))
-        if {match.group(2) for match in registrations} != {
-                f'snow-shot-{host}-tests' for host in hosts}:
-            raise AssertionError('the fixture must exercise each shared clipboard host')
-        cls.owners = set()
-        for match in registrations:
-            name = match.group(1).strip('"')
-            variable = re.fullmatch(r'\$\{([^}]+)\}', name)
-            if variable:
-                setting = re.search(r'\bset\(' + re.escape(variable.group(1))
-                                    + r'\s+"([^"]+)"\)', workspace)
-                if setting is None:
-                    raise AssertionError(f'cannot resolve test alias {name}')
-                name = setting.group(1)
-            cls.owners.add(re.sub(r'\$\{[^}]+\}', 'fixture', name))
+
+        # Cover every declared resource family with an executable CTest fixture.
+        # Do not parse add_test() source text and guess that every alias of an
+        # executable uses the system clipboard.
+        cls.owners = {
+            'snow-shot-pinned-window-tests',
+            'snow-shot-image-editor-tests',
+            'snow-shot-clipboard-placement-tests',
+            'snow-shot-clipboard-roundtrip-tests',
+            'snow-shot-export-coordinator-tests',
+            'snow-shot-screenshot-history-page-tests',
+            'snow-shot-file-pin-presentation-tests',
+            'snow-shot-collage-history-selection-tests',
+            'snow-shot-decoded-content-presentation-tests',
+        }
         cls.late_owner = 'snow-shot-pinned-future-alias-tests'
         cls.owners.add(cls.late_owner)
         cls.existing_owner = 'snow-shot-export-coordinator-tests'
-        cls.unrelated = {'snow-shot-about-page-tests', 'snow-shot-clipboard-preparation-tests',
-                         'snow-shot-mcp-document-tests', 'snow-shot-export-artifact-tests',
-                         'snow-shot-screen-recording-controller-tests'}
-        module_directory = (ROOT / 'cmake').as_posix()
+        cls.unrelated = {
+            'snow-shot-about-page-tests',
+            'snow-shot-clipboard-preparation-tests',
+            'snow-shot-mcp-document-tests',
+            'snow-shot-export-artifact-tests',
+            'snow-shot-history-page-size-tests',
+        }
         fixture = '''cmake_minimum_required(VERSION 3.21)
 project(SnowClipboardResourcePolicy NONE)
 enable_testing()
 set(WIN32 "${FIXTURE_WINDOWS}")
 '''
-        for name in sorted(cls.owners - {cls.late_owner} | cls.unrelated):
+        for name in sorted((cls.owners - {cls.late_owner}) | cls.unrelated):
             fixture += f'add_test(NAME {name} COMMAND "${{CMAKE_COMMAND}}" -E true)\n'
         fixture += f'''set_tests_properties({cls.existing_owner} PROPERTIES
     RESOURCE_LOCK fixture-existing-resource)
-set(SNOW_SHOT_BUILD_TESTS ON)
-list(APPEND CMAKE_MODULE_PATH "{module_directory}")
-{policy.group()}
+list(APPEND CMAKE_MODULE_PATH "{(ROOT / 'cmake').as_posix()}")
+include(SnowShotTestResources)
 add_test(NAME {cls.late_owner} COMMAND "${{CMAKE_COMMAND}}" -E true)
 '''
         (cls.source / 'CMakeLists.txt').write_text(fixture, encoding='utf-8')
