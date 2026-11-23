@@ -261,6 +261,26 @@ function Get-SnowStaticQtLtcgEnabled {
     return $Configuration -ceq "Release" -and $Architecture -ceq "x64"
 }
 
+function Get-SnowStaticQtBuildOptions {
+    param(
+        [ValidateSet("Debug", "Release")][string]$Configuration = "Release",
+        [ValidateSet("x64", "arm64")][string]$Architecture = "x64"
+    )
+    # One semantic policy shared by the actual Qt builder and its tests.
+    # The PowerShell/CMake cache validation intentionally stays fail-closed.
+    $ltcg = Get-SnowStaticQtLtcgEnabled -Configuration $Configuration -Architecture $Architecture
+    $release = $Configuration -ceq "Release"
+    return [pscustomobject]@{
+        ConfigurationArgument = $(if ($release) { "-release" } else { "-debug" })
+        LtcgEnabled = $ltcg
+        LtcgArgument = $(if ($ltcg) { "-ltcg" } else { "-no-ltcg" })
+        ZlibArgument = $(if ($release) { "-system-zlib" } else { "-qt-zlib" })
+        PngArgument = $(if ($release) { "-system-libpng" } else { "-qt-libpng" })
+        LtcgState = $(if ($ltcg) { "ON" } else { "OFF" })
+        SystemCodecState = $(if ($release) { "ON" } else { "OFF" })
+    }
+}
+
 function Test-SnowStaticQtStamp {
     param(
         [Parameter(Mandatory = $true)][object]$Stamp,
