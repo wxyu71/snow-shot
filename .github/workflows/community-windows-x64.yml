@@ -188,6 +188,10 @@ jobs:
 
       # Qt binaries are derived from the resolved vcpkg ABI and the exact
       # host compiler, not from manually bumped cache generations.
+      - name: Validate static Qt policies with executable fixtures
+        shell: pwsh
+        run: ./scripts/test-static-qt-features.ps1
+
       - name: Compute static Qt cache identity
         id: qt-identity
         shell: pwsh
