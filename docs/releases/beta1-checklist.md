@@ -7,8 +7,10 @@ Online OCR is PaddleOCR-only and user-triggered; Windows updates are manual.
 ## Required before publishing a testing prerelease
 
 - [ ] Final candidate SHA and reviewed upstream ancestry/Community protections.
-- [ ] Quick CI (actionlint, ShellCheck, zizmor, Ruff, PSScriptAnalyzer, Lychee,
-      Cargo manifests, Git lifecycle, real Clang/MSVC, Qt AUTOMOC and CTests).
+- [x] Quick CI (actionlint, ShellCheck, zizmor, Ruff, PSScriptAnalyzer, Lychee,
+      Cargo manifests, Git lifecycle, real Clang/MSVC, Qt AUTOMOC and CTests)
+      passed on the source tree at `f9041c01`, Actions #161; the final
+      release-acceptance run repeats these checks on its exact final SHA.
 - [ ] Full Windows x64 production MSVC/static Qt build and the actual native
       CTests on the exact final candidate SHA.
 - [ ] Real Windows online/offline NSIS installers built, with OCR assets,
@@ -38,7 +40,7 @@ credentials. Record results before recommending this build for general use:
 | Check | Commit / workflow / artifact | Result |
 | --- | --- | --- |
 | Final candidate SHA | Pending | Unverified |
-| Quick CI | Pending | Unverified |
+| Quick CI | [#161](https://github.com/wxyu71/snow-shot/actions/runs/45119471522) at `f9041c01` | Passed: Preflight; Clang 9/9, native CTest 3/3; Windows MSVC OCR widget and Qt CTest 2/2 |
 | Production Windows build and native CTests | Pending | Unverified |
 | NSIS online/offline and automated installer smoke | Pending | Unverified |
 | Personal testing prerelease | Pending | Not published |
