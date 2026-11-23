@@ -147,7 +147,7 @@ jobs:
           # Correctness/dataflow checks, not legacy project-wide style churn.
           # Covers real release, upstream-sync and helper source files.
           ruff check --isolated --target-version py312 \
-            --select F821,F822,F823,F601,F602,F621,F622,F631,F632,F633,F634,F701,F702,F704,F706,F707,B012,B023 \
+            --select F821,F822,F823,F601,F602,F621,F622,F631,F632,F633,F634,F701,F702,F704,F706,F707,B012 \
             --output-format github scripts
 
       - name: Validate Cargo workspace manifests without downloading or compiling crates

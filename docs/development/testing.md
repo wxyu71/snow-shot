@@ -215,8 +215,7 @@ Additional **upstream tooling** in the short Linux preflight:
   so missing ShellCheck is not silently skipped.
 - **Astral Ruff 0.17.6:** real Python release, upstream-sync, OCR and policy
   code is checked for undefined variables, incorrect local binding, duplicate
-  dictionary/set keys, dangerous control flow, closure late binding and
-  exception-swallowing `finally` paths. Select correctness rules to avoid
+  dictionary/set keys, dangerous control flow, exception-swallowing `finally` paths. Select correctness rules to avoid
   formatting churn. This extends, rather than replaces, Python `compileall`
   and the existing actual policy `unittest` executions.
 - **Rust Cargo metadata:** Cargo's official `--no-deps --offline --locked`
@@ -234,3 +233,12 @@ build. Measure actual job timings and revert or narrow any new checker whose
 cost approaches the timeout budget. Every checked artifact is real repo code;
 none of the lint tools or compiler negative fixtures is counted as a product
 test case.
+
+The `B023` loop-closure rule is not a blocking baseline check: review of the
+first real Ruff run (#147) identified 11 reports on locally defined helpers
+that are **called synchronously inside each iteration**, not stored as
+deferred callbacks. Upstream Ruff also tracks this false-positive shape
+(astral-sh/ruff#7847). We intentionally kept high-confidence Ruff rules
+rather than adding non-functional code changes or per-line suppressions to
+make existing tests pass. Revisit B023 only with a targeted check for genuinely
+deferred closures.
