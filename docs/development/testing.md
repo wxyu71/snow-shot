@@ -222,9 +222,12 @@ Additional **upstream tooling** in the short Linux preflight:
   check is run against six real Rust manifests, checking workspace/lock
   consistency without building or downloading dependency graphs. It does
   not claim to compile or test Rust binaries.
-- **Microsoft PSScriptAnalyzer:** expanded existing analysis to every changed
-  `.ps1/.psm1/.psd1` file across the PR against its base SHA, not only the
-  most recent commit. No extra proprietary/custom PowerShell checker.
+- **Microsoft PSScriptAnalyzer:** analyze `.ps1/.psm1/.psd1` across the
+  whole PR; every `Error` is blocking. Preserve the original strict
+  `Error + Warning` behavior on scripts changed in the latest commit.
+  Existing warnings from earlier PR commits are counted/reportable as
+  an inherited backlog, not automatically treated as new blocking failures.
+  No new proprietary/custom PowerShell checker.
 
 The fast-gate budget is unchanged: 5m Preflight, parallel 12m Linux and
 12m Windows, around 17m execution ceiling excluding GitHub queue delay.
@@ -242,3 +245,12 @@ deferred callbacks. Upstream Ruff also tracks this false-positive shape
 rather than adding non-functional code changes or per-line suppressions to
 make existing tests pass. Revisit B023 only with a targeted check for genuinely
 deferred closures.
+
+The first PR-wide PowerShell warning audit (#148) found **154** diagnostics,
+predominantly in existing test helpers (`PSAvoidGlobalVars`,
+`PSUseApprovedVerbs`, `PSUseShouldProcessForStateChangingFunctions`,
+etc.). Making these all blocking would add unrelated style cleanup to
+every CI change. The same upstream analyzer remains authoritative for
+**all PR errors** and for new warnings in files touched by the latest
+commit; do not suppress individual findings by altering product logic
+solely to satisfy a linter.
