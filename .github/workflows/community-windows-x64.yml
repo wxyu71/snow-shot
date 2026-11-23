@@ -116,7 +116,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: vcpkg-abi-windows-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
       - name: Enable vcpkg binary cache
         shell: pwsh
         run: |
@@ -131,7 +131,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: cargo-sources-windows-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Install pinned build dependencies
         shell: pwsh
@@ -143,52 +143,44 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: vcpkg-abi-windows-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+
+      # Qt binaries are derived from the resolved vcpkg ABI and the exact
+      # host compiler, not from manually bumped cache generations.
+      - name: Compute static Qt cache identity
+        id: qt-identity
+        shell: pwsh
+        run: |
+          ./scripts/qt-cache-identity.ps1 -Architecture x64 -Configuration Release -DevelopmentModules
 
       - name: Restore static Qt
         id: qt-cache
         uses: actions/cache/restore@v4
         with:
-          path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-r2-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          path: ${{ steps.qt-identity.outputs.prefix }}
+          key: qt-static-windows-${{ steps.qt-identity.outputs.key }}
+          # No restore-keys: using a kit from a different ABI is unsafe.
+
       - name: Build or validate static Qt
         shell: pwsh
+        env:
+          QT_INSTALL_PREFIX: ${{ steps.qt-identity.outputs.prefix }}
         run: |
-          $prefix = Join-Path $PWD '.tools/qt/6.12.0/x64-static-release'
-          $buildArgs = @{
-            InstallPrefix = $prefix
-            Architecture = 'x64'
-            Configuration = 'Release'
-            DevelopmentModules = $true
-            Parallelism = 8
-          }
-          try {
-            ./scripts/build-static-qt.ps1 @buildArgs
-          }
-          catch {
-            # A GitHub cache is immutable. An older/incompatible kit must never
-            # be silently accepted, but it can be safely discarded and rebuilt.
-            # Retry only the known audited-kit mismatch, not arbitrary Qt failures.
-            $cacheHit = '${{ steps.qt-cache.outputs.cache-hit }}'
-            if ($cacheHit -ne 'true' -or
-                $_.Exception.Message -notlike 'The Qt installation at * does not match the audited Release feature policy.*') {
-              throw
-            }
-            Write-Warning 'Restored static Qt cache failed the audited feature/dependency check. Rebuilding a fresh kit.'
-            ./scripts/build-static-qt.ps1 @buildArgs -Force
-          }
+          # An exact cache hit must pass the audited source/feature/ABI checks.
+          # A mismatch is a key-design or cache-integrity error, not an excuse
+          # to mutate an immutable cache entry and claim the build is green.
+          ./scripts/build-static-qt.ps1 -InstallPrefix $env:QT_INSTALL_PREFIX -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
           if ($LASTEXITCODE -ne 0) { throw 'Static Qt build failed' }
-          $qt6Dir = Join-Path $prefix 'lib/cmake/Qt6'
+          $qt6Dir = Join-Path $env:QT_INSTALL_PREFIX 'lib/cmake/Qt6'
           if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) { throw 'Qt6Config.cmake missing' }
           "SNOW_QT_STATIC_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           "Qt6_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-      - name: Save static Qt
+      - name: Save validated static Qt
         if: steps.qt-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
         uses: actions/cache/save@v4
         with:
-          path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-r2-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          path: ${{ steps.qt-identity.outputs.prefix }}
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
 
       - name: Configure focused native tests
         shell: pwsh
@@ -213,7 +205,7 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: cargo-sources-windows-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Build production Windows x64
         if: github.event_name == 'workflow_dispatch'
