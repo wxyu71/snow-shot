@@ -69,12 +69,43 @@ jobs:
           fi
           echo "native=$native" >> "$GITHUB_OUTPUT"
           echo "goal_full=$goal_full" >> "$GITHUB_OUTPUT"
-      - name: Validate workflows and embedded shell with actionlint
+      - name: Ensure upstream ShellCheck is available to actionlint
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends shellcheck
+          fi
+          shellcheck --version
+
+      - name: Validate workflows and embedded shell with actionlint and ShellCheck
         shell: bash
         run: |
           set -euo pipefail
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
-          "$(go env GOPATH)/bin/actionlint" -color
+          "$(go env GOPATH)/bin/actionlint" -color -shellcheck "$(command -v shellcheck)"
+
+      - name: Analyze actual PR-modified macOS Bash scripts with upstream ShellCheck
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          base="${PR_BASE_SHA:-HEAD^}"
+          head="${PR_HEAD_SHA:-HEAD}"
+          scripts=()
+          while IFS= read -r -d '' path; do
+            [[ "$path" == scripts/*.sh && -f "$path" ]] || continue
+            scripts+=("$path")
+          done < <(git diff --name-only --diff-filter=ACMR -z "$base" "$head" -- scripts)
+          if (( ${#scripts[@]} > 0 )); then
+            printf 'ShellCheck on %s real changed Bash scripts\n' "${#scripts[@]}"
+            shellcheck --severity=error --format=gcc "${scripts[@]}"
+          else
+            echo 'No PR-modified Bash scripts.'
+          fi
 
       - name: Check local documentation links with Lychee
         uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411 # v2.8.0
@@ -108,6 +139,35 @@ jobs:
         shell: bash
         run: python3 -m compileall -q scripts
 
+      - name: Static-analyze real Python release and sync code with Astral Ruff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: ruff==0.17.6
+          # Correctness/dataflow checks, not legacy project-wide style churn.
+          # Covers real release, upstream-sync and helper source files.
+          ruff check --isolated --target-version py312 \
+            --select F821,F822,F823,F601,F602,F621,F622,F631,F632,F633,F634,F701,F702,F704,F706,F707,B012,B023 \
+            --output-format github scripts
+
+      - name: Validate Cargo workspace manifests without downloading or compiling crates
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          cargo --version
+          for manifest in \
+            snow-crates/Cargo.toml \
+            snow_draw_engine_qt/Cargo.toml \
+            snow-image-rs/Cargo.toml \
+            snow_rust_ffi/Cargo.toml \
+            snow_shot/rust/snow-shot-mcp/Cargo.toml \
+            snow_shot/rust/snow-shot-updater/Cargo.toml; do
+            echo "Checking real Cargo workspace graph: $manifest"
+            cargo metadata --format-version 1 --no-deps --offline --locked \
+              --manifest-path "$manifest" > /dev/null
+          done
+
       - name: Check native smoke formatting with clang-format
         shell: bash
         run: |
@@ -122,11 +182,14 @@ jobs:
         shell: pwsh
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           $ErrorActionPreference = 'Stop'
           $head = if ($env:PR_HEAD_SHA) { $env:PR_HEAD_SHA } else { $env:GITHUB_SHA }
-          $parent = "$head^"
-          $paths = @(& git diff --name-only $parent $head -- scripts |
+          $base = if ($env:PR_BASE_SHA) { $env:PR_BASE_SHA } else { "$head^" }
+          # Analyze every modified PowerShell file in the PR, not just the
+          # last commit: earlier edits remain part of the release candidate.
+          $paths = @(& git diff --name-only --diff-filter=ACMR $base $head -- scripts |
               Where-Object { $_ -match '\.(ps1|psm1|psd1)$' -and (Test-Path $_) })
           if ($paths.Count -eq 0) {
             Write-Host 'No modified PowerShell entry points.'

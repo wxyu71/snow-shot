@@ -192,3 +192,45 @@ configuration, every `Q_OBJECT` class, every Windows-only branch, or every
 third-party library. The production Release build remains required. Do not
 count compiler self-check fixtures as product features or treat uncovered
 files as passing.
+
+### Community-maintained fast checks from real historical CI failures
+
+Historical failures in #93, #109, #117, #120 and #124 were largely **remote
+vcpkg asset / transport outages** (HTTP 502/503, x264 connection resets).
+Extra syntax tests cannot fix upstream network failures. The full Windows
+pipeline already uses Microsoft's vcpkg binary, source-download and
+SHA-addressed asset caches; avoid downloading/compiling OpenCV or FFmpeg in
+the fast jobs. Earlier #125/#126/#131/#135 and #139 were native configuration
+contracts or full-app compilation errors; retain the targeted Qt CTests and
+real Clang/MSVC fast compilation gates for these. #17 upstream sync failed
+to create a PR with the built-in GitHub token; workflow permissions and
+the existing-review/manual-conflict flow, not a fabricated source test,
+are the appropriate boundary.
+
+Additional **upstream tooling** in the short Linux preflight:
+
+- **koalaman/ShellCheck:** analyze real PR-changed Bash installer/build
+  scripts at high-confidence `error` severity. It also explicitly runs
+  *through* rhysd/actionlint for Bash embedded inside GitHub Actions,
+  so missing ShellCheck is not silently skipped.
+- **Astral Ruff 0.17.6:** real Python release, upstream-sync, OCR and policy
+  code is checked for undefined variables, incorrect local binding, duplicate
+  dictionary/set keys, dangerous control flow, closure late binding and
+  exception-swallowing `finally` paths. Select correctness rules to avoid
+  formatting churn. This extends, rather than replaces, Python `compileall`
+  and the existing actual policy `unittest` executions.
+- **Rust Cargo metadata:** Cargo's official `--no-deps --offline --locked`
+  check is run against six real Rust manifests, checking workspace/lock
+  consistency without building or downloading dependency graphs. It does
+  not claim to compile or test Rust binaries.
+- **Microsoft PSScriptAnalyzer:** expanded existing analysis to every changed
+  `.ps1/.psm1/.psd1` file across the PR against its base SHA, not only the
+  most recent commit. No extra proprietary/custom PowerShell checker.
+
+The fast-gate budget is unchanged: 5m Preflight, parallel 12m Linux and
+12m Windows, around 17m execution ceiling excluding GitHub queue delay.
+Do not convert these short preflight checks into a second full application
+build. Measure actual job timings and revert or narrow any new checker whose
+cost approaches the timeout budget. Every checked artifact is real repo code;
+none of the lint tools or compiler negative fixtures is counted as a product
+test case.
