@@ -2,7 +2,6 @@
 #include "snow_shot/presentation/components/windowconfirmation.h"
 #include "snow_shot/shortcuts/annotationoptionshortcut.h"
 #include "snow_shot/presentation/screenshottoolpalette.h"
-#include "snow_shot/network/communitycloudocrsettings.h"
 #include "snow_shot/presentation/components/pointerhoverevents.h"
 #include "snow_shot/ocrtextoptions.h"
 #include "snow_shot/translation/translationlanguagecatalog.h"
@@ -9637,15 +9636,9 @@ void ScreenshotToolPalette::setTextTargetLanguage(const QString& language) {
 void ScreenshotToolPalette::setImageConversionEnabled(bool enabled) {
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
     if (m_markdownButton != nullptr) {
-        const auto online = snow_shot::network::readCommunityCloudOcrSettings();
-        const bool latexRoute = online.engine == QStringLiteral("vision") &&
-                                online.outputFormat == QStringLiteral("latex");
-        if (online.engine == QStringLiteral("paddleocr")) {
-            // PaddleOCR is independent from the upstream image-conversion provider.
-            m_markdownButton->setEnabled(true);
-        } else if (!latexRoute) {
-            m_markdownButton->setEnabled(enabled);
-        }
+        // The Community Online OCR action only invokes user-configured
+        // PaddleOCR; it does not depend on upstream image-conversion models.
+        m_markdownButton->setEnabled(true);
     }
     if (m_htmlButton != nullptr)
         m_htmlButton->setEnabled(enabled);
@@ -9657,17 +9650,8 @@ void ScreenshotToolPalette::setImageConversionEnabled(bool enabled) {
 
 void ScreenshotToolPalette::setImageConversionBusy(bool markdownBusy, bool htmlBusy) {
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    if (m_markdownButton != nullptr) {
-        const auto online = snow_shot::network::readCommunityCloudOcrSettings();
-        if (!(online.engine == QStringLiteral("vision") &&
-              online.outputFormat == QStringLiteral("latex"))) {
-            m_markdownButton->setBusy(
-                online.engine == QStringLiteral("vision") &&
-                        online.outputFormat == QStringLiteral("html")
-                    ? htmlBusy
-                    : markdownBusy);
-        }
-    }
+    if (m_markdownButton != nullptr)
+        m_markdownButton->setBusy(markdownBusy);
     if (m_htmlButton != nullptr) {
         m_htmlButton->setBusy(htmlBusy);
     }
@@ -11535,16 +11519,6 @@ void ScreenshotToolPalette::setLatexState(bool enabled, bool busy) {
         m_latexButton->setEnabled(enabled);
         m_latexButton->setBusy(busy);
     }
-#if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    if (m_markdownButton) {
-        const auto online = snow_shot::network::readCommunityCloudOcrSettings();
-        if (online.engine == QStringLiteral("vision") &&
-            online.outputFormat == QStringLiteral("latex")) {
-            m_markdownButton->setEnabled(enabled);
-            m_markdownButton->setBusy(busy);
-        }
-    }
-#endif
     refreshActionToolGroups();
 #else
     Q_UNUSED(enabled);

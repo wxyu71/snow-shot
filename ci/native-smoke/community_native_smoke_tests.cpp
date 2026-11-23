@@ -10,21 +10,11 @@ class CommunityNativeSmoke final : public QObject {
     Q_OBJECT
 
   private slots:
-    void engineIdsAreStoredInQtUserRole() {
+    void productionEngineIsPaddleOnly() {
         QComboBox engines;
         snow_shot::presentation::components::populateCloudOcrEngineChoices(engines, true);
-        QCOMPARE(engines.count(), 2);
-        QCOMPARE(engines.itemData(0, Qt::UserRole).toString(), QStringLiteral("paddleocr"));
-        QCOMPARE(engines.itemData(1, Qt::UserRole).toString(), QStringLiteral("vision"));
-        QCOMPARE(engines.findData(QStringLiteral("paddleocr")), 0);
-        QCOMPARE(engines.findData(QStringLiteral("vision")), 1);
-    }
-
-    void paddleOnlyBuildOmitsVision() {
-        QComboBox engines;
-        snow_shot::presentation::components::populateCloudOcrEngineChoices(engines, false);
         QCOMPARE(engines.count(), 1);
-        QCOMPARE(engines.currentData().toString(), QStringLiteral("paddleocr"));
+        QCOMPARE(engines.itemData(0, Qt::UserRole).toString(), QStringLiteral("paddleocr"));
         QCOMPARE(engines.findData(QStringLiteral("vision")), -1);
     }
 
@@ -50,15 +40,24 @@ class CommunityNativeSmoke final : public QObject {
         QVERIFY(snow_shot::network::writeCommunityCloudOcrSettings(selected));
 
         const auto restored = snow_shot::network::readCommunityCloudOcrSettings();
-        QCOMPARE(restored.engine, QStringLiteral("vision"));
-        QCOMPARE(restored.outputFormat, QStringLiteral("html"));
+        QCOMPARE(restored.engine, QStringLiteral("paddleocr"));
+        QCOMPARE(restored.outputFormat, QStringLiteral("markdown"));
         QCOMPARE(restored.accessToken, QStringLiteral("native-test-token"));
 
-        selected.engine = QStringLiteral("paddleocr");
-        selected.outputFormat = QStringLiteral("latex");
-        QVERIFY(snow_shot::network::writeCommunityCloudOcrSettings(selected));
-        QCOMPARE(snow_shot::network::readCommunityCloudOcrSettings().outputFormat,
+        QSettings legacy(QSettings::IniFormat, QSettings::UserScope,
+                         QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+        QCOMPARE(legacy.value(QStringLiteral("engine")).toString(),
+                 QStringLiteral("paddleocr"));
+        QCOMPARE(legacy.value(QStringLiteral("output_format")).toString(),
                  QStringLiteral("markdown"));
+        // Existing installs can have obsolete Vision preferences. Even before
+        // saving, the reader must not route a future OCR job to that provider.
+        legacy.setValue(QStringLiteral("engine"), QStringLiteral("vision"));
+        legacy.setValue(QStringLiteral("output_format"), QStringLiteral("latex"));
+        legacy.sync();
+        const auto migrated = snow_shot::network::readCommunityCloudOcrSettings();
+        QCOMPARE(migrated.engine, QStringLiteral("paddleocr"));
+        QCOMPARE(migrated.outputFormat, QStringLiteral("markdown"));
     }
 };
 

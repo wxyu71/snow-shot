@@ -5,13 +5,11 @@
 
 namespace snow_shot::presentation::components {
 
-void populateCloudOcrEngineChoices(QComboBox& combo, bool supportsVision) {
+void populateCloudOcrEngineChoices(QComboBox& combo, bool /*supportsVision*/) {
     combo.clear();
-    // Explicit QString{} selects QComboBox::addItem(text, userData), not
-    // addItem(icon, text). The latter silently loses the engine identifier.
+    // The Community product intentionally exposes one user-configured provider:
+    // PaddleOCR. Preserve the stable Qt::UserRole ID for production settings.
     combo.addItem(QString{}, QStringLiteral("paddleocr"));
-    if (supportsVision)
-        combo.addItem(QString{}, QStringLiteral("vision"));
 }
 
 } // namespace snow_shot::presentation::components
