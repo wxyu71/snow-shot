@@ -35,7 +35,7 @@ if ([IO.Path]::GetFileName($uninstallName) -cne $uninstallName) {
     throw "Refusing an unsafe CPack uninstaller name: $uninstallName"
 }
 $uninstaller = Join-Path $installed ($uninstallName + '.exe')
-Write-Host "Expected NSIS uninstaller: $($uninstallName).exe"
+Write-Output "Expected NSIS uninstaller: $($uninstallName).exe"
 
 function Invoke-Nsis([string]$Executable, [string[]]$Arguments) {
     $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -PassThru -WindowStyle Hidden
@@ -80,7 +80,7 @@ function Assert-Installed([string]$Variant) {
     if ($Variant -eq 'offline' -and $assets.Count -le 1) {
         throw 'The offline installation is missing the bundled OCR runtime/model payload.'
     }
-    Write-Host "PASS: installed $Variant full x64 installer and OCR payload."
+    Write-Output "PASS: installed $Variant full x64 installer and OCR payload."
 }
 
 if (-not $env:RUNNER_TEMP) { throw 'Run this destructive installer smoke test only in an isolated CI runner.' }
@@ -104,7 +104,7 @@ try {
     if (Test-Path -LiteralPath $binary -PathType Leaf) {
         throw 'Silent uninstall did not remove snow_shot.exe.'
     }
-    Write-Host 'PASS: online -> offline in-place upgrade and silent uninstall.'
+    Write-Output 'PASS: online -> offline in-place upgrade and silent uninstall.'
 }
 finally {
     if (-not $didUninstall -and (Test-Path -LiteralPath $uninstaller -PathType Leaf)) {
