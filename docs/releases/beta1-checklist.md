@@ -1,44 +1,55 @@
-# Snow Shot Community v1.5.8-beta.1 acceptance
+# Snow Shot Community v1.5.8-beta.1 — testing prerelease checklist
 
-**Status: BLOCKED.** This is a release gate, not a statement that the
-candidate is approved or that a Beta1 release exists.
+**Status: candidate undergoing validation.** This is one Windows x64 Community
+product, without a Mini edition. Local screenshot/pinned histories default on;
+Online OCR is PaddleOCR-only and user-triggered; Windows updates are manual.
 
-## Required evidence for the final reviewed PR head
+## Required before publishing a testing prerelease
 
-- [ ] Exact SHA, source ancestry, changes and protected Community paths reviewed.
-- [ ] actionlint, zizmor, PSScriptAnalyzer, Lychee and Git lifecycle tests pass.
-- [ ] Compiled C++ Qt/CTest and Rust OCR protocol/process tests pass.
-- [ ] Full Windows x64 MSVC + audited static Qt production build passes.
-- [ ] Local OCR real-model behavior and direct cloud OCR responses, failures,
-      timeouts and credentials/privacy checks pass.
-- [ ] Online/offline NSIS packages, manifests and SHA-256 validate.
-- [ ] Real installed upgrade from official 1.5.7 preserves user data,
-      shortcuts, local OCR and privacy choices.
-- [ ] Fresh install, offline start, uninstall and native Windows UI smoke pass.
-- [ ] Third-party notices, release notes, product identity and security
-      warnings are reviewed and signed off.
-- [ ] No unresolved P0/P1 regressions or unexplained warnings.
+- [ ] Final candidate SHA and reviewed upstream ancestry/Community protections.
+- [ ] Quick CI (actionlint, ShellCheck, zizmor, Ruff, PSScriptAnalyzer, Lychee,
+      Cargo manifests, Git lifecycle, real Clang/MSVC, Qt AUTOMOC and CTests).
+- [ ] Full Windows x64 production MSVC/static Qt build and the actual native
+      CTests on the exact final candidate SHA.
+- [ ] Real Windows online/offline NSIS installers built, with OCR assets,
+      checked manifest metadata and SHA-256 sidecars, and automated installer smoke.
+- [ ] Only the one Community x64 product; no Mini or ARM64 release assets;
+      original author and third-party attribution kept intact.
+- [ ] No outstanding failure hidden by an older green CI run.
+
+## Hands-on testing after the testing prerelease is available
+
+These checks require an actual Windows installation and/or live provider
+credentials. Record results before recommending this build for general use:
+
+- [ ] Fresh install and launch; local capture and pinned histories are on by
+      default, remain on disk, and do not upload automatically.
+- [ ] Upgrade an installed official 1.5.7 while preserving prior opt-outs,
+      shortcuts, saved screenshots, OCR history and user settings.
+- [ ] Local PP-OCRv6 using the actual bundled model files while offline.
+- [ ] Explicit online OCR with each of the three real PaddleOCR AI Studio models,
+      plus handling of invalid credentials, failures, timeouts and retries.
+- [ ] Settings expose no Vision OCR fallback or unsolicited cloud connection;
+      manual update button opens this fork's Releases page.
+- [ ] Offline startup, installed UI smoke, rollback and uninstall.
 
 ## Evidence ledger
 
-| Check | Commit / workflow run / artifact | Result |
+| Check | Commit / workflow / artifact | Result |
 | --- | --- | --- |
-| Final PR #2 head | Pending | Unverified |
-| Security/preflight + compiled native | Pending | Unverified |
-| Full Windows x64 build | Pending | Unverified |
-| NSIS installed upgrade + offline/online | Pending | Unverified |
-| Actual OCR and privacy acceptance | Pending | Unverified |
-| Human product approval | Pending | Unverified |
+| Final candidate SHA | Pending | Unverified |
+| Quick CI | Pending | Unverified |
+| Production Windows build and native CTests | Pending | Unverified |
+| NSIS online/offline and automated installer smoke | Pending | Unverified |
+| Personal testing prerelease | Pending | Not published |
+| Installed OCR and upgrade on user's PC | Pending | Hands-on testing |
 
-Keep PR #2 as Draft until these checks pass. No merge or automated
-prerelease publication is authorized by a documentation-only pass.
-Publish Community Beta1 only from current reviewed `main`, with the
-Community identity, independently managed Windows updates and no
-upstream commercial/account service.
+Publishing first requires a complete, successful production build and package
+smoke. The GitHub release workflow operates on reviewed `main`, not on an
+unmerged Draft PR. Do not misrepresent after-install manual verification as a
+completed CI test or bypass failed acceptance.
 
-macOS Sparkle, Homebrew and Windows ARM64 are separate acceptance
-projects; do not advertise their release packages as covered by the
-Windows x64 Beta1 gate.
+macOS Sparkle/Homebrew and Windows ARM64 remain separate release projects.
 
 See [the Windows runbook](../community-windows.md),
 [CI design](../community-ci-architecture.md) and
