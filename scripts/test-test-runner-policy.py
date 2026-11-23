@@ -97,112 +97,13 @@ set_tests_properties(measurement PROPERTIES LABELS "benchmark")
         presets = json.loads((ROOT / 'CMakePresets.json').read_text(encoding='utf-8'))
         community = next(item for item in presets['testPresets']
                          if item['name'] == 'test-snow-shot-msvc-community')
-        self.assertEqual(community['filter'], {'include': {'label': '^community-fast(unittest.TestCase):
-    @classmethod
-    def setUpClass(cls):
-        directory = tempfile.TemporaryDirectory(prefix='snow clipboard resources ')
-        cls.addClassCleanup(directory.cleanup)
-        cls.source = Path(directory.name)
-        workspace = (ROOT / 'snow_shot/CMakeLists.txt').read_text(encoding='utf-8')
-        policy = re.search(r'if\(SNOW_SHOT_BUILD_TESTS\)\n\s*'
-                           r'include\(SnowShotTestResources\)\nendif\(\)', workspace)
-        if policy is None:
-            raise AssertionError('Snow Shot must enable its shared test resource policy')
-        # Derive required aliases from their real executable binding, independently of
-        # the name families used by the policy. A new oddly named alias must be covered.
-        hosts = ('clipboard-roundtrip', 'export-coordinator', 'pinned-window',
-                 'screenshot-history-page', 'clipboard-placement')
-        executable = r'snow-shot-(?:' + '|'.join(hosts) + r')-tests'
-        registrations = list(re.finditer(
-            r'\badd_test\(\s*NAME\s+(\S+)\s+COMMAND\s+(?:"?\$<TARGET_FILE:)?'
-            + '(' + executable + r')(?:>"?)?(?=\s|\))', workspace))
-        if {match.group(2) for match in registrations} != {
-                f'snow-shot-{host}-tests' for host in hosts}:
-            raise AssertionError('the fixture must exercise each shared clipboard host')
-        cls.owners = set()
-        for match in registrations:
-            name = match.group(1).strip('"')
-            variable = re.fullmatch(r'\$\{([^}]+)\}', name)
-            if variable:
-                setting = re.search(r'\bset\(' + re.escape(variable.group(1))
-                                    + r'\s+"([^"]+)"\)', workspace)
-                if setting is None:
-                    raise AssertionError(f'cannot resolve test alias {name}')
-                name = setting.group(1)
-            cls.owners.add(re.sub(r'\$\{[^}]+\}', 'fixture', name))
-        cls.late_owner = 'snow-shot-pinned-future-alias-tests'
-        cls.owners.add(cls.late_owner)
-        cls.existing_owner = 'snow-shot-export-coordinator-tests'
-        cls.unrelated = {'snow-shot-about-page-tests', 'snow-shot-clipboard-preparation-tests',
-                         'snow-shot-mcp-document-tests', 'snow-shot-export-artifact-tests',
-                         'snow-shot-screen-recording-controller-tests'}
-        module_directory = (ROOT / 'cmake').as_posix()
-        fixture = '''cmake_minimum_required(VERSION 3.21)
-project(SnowClipboardResourcePolicy NONE)
-enable_testing()
-set(WIN32 "${FIXTURE_WINDOWS}")
-'''
-        for name in sorted(cls.owners - {cls.late_owner} | cls.unrelated):
-            fixture += f'add_test(NAME {name} COMMAND "${{CMAKE_COMMAND}}" -E true)\n'
-        fixture += f'''set_tests_properties({cls.existing_owner} PROPERTIES
-    RESOURCE_LOCK fixture-existing-resource)
-set(SNOW_SHOT_BUILD_TESTS ON)
-list(APPEND CMAKE_MODULE_PATH "{module_directory}")
-{policy.group()}
-add_test(NAME {cls.late_owner} COMMAND "${{CMAKE_COMMAND}}" -E true)
-'''
-        (cls.source / 'CMakeLists.txt').write_text(fixture, encoding='utf-8')
-        cls.tests = {}
-        for platform in ('ON', 'OFF'):
-            build = cls.source / platform
-            configured = TestRunnerPolicyTests.run_command(
-                CMAKE, '-S', str(cls.source), '-B', str(build),
-                '-DCMAKE_BUILD_TYPE=Debug', f'-DFIXTURE_WINDOWS={platform}')
-            if configured.returncode != 0:
-                raise AssertionError(configured.stdout + configured.stderr)
-            inventory = TestRunnerPolicyTests.run_command(
-                CTEST, '--test-dir', str(build), '-C', 'Debug', '--show-only=json-v1')
-            if inventory.returncode != 0:
-                raise AssertionError(inventory.stdout + inventory.stderr)
-            cls.tests[platform] = {
-                test['name']: {entry['name']: entry['value']
-                               for entry in test.get('properties', [])}
-                for test in json.loads(inventory.stdout)['tests']}
-
-    def test_every_shared_host_alias_owns_the_windows_clipboard(self):
-        for name in self.owners:
-            with self.subTest(test=name):
-                resources = self.tests['ON'][name].get('RESOURCE_LOCK', [])
-                self.assertIn('snow-shot-system-clipboard', resources)
-
-    def test_unrelated_hosts_keep_parallel_execution(self):
-        for name in self.unrelated:
-            with self.subTest(test=name):
-                self.assertNotIn('RESOURCE_LOCK', self.tests['ON'][name])
-
-    def test_clipboard_resource_appends_to_existing_ownership(self):
-        self.assertEqual(set(self.tests['ON'][self.existing_owner]['RESOURCE_LOCK']),
-                         {'fixture-existing-resource', 'snow-shot-system-clipboard'})
-
-    def test_other_platforms_keep_their_existing_resources(self):
-        for name, properties in self.tests['OFF'].items():
-            with self.subTest(test=name):
-                self.assertNotIn('snow-shot-system-clipboard',
-                                 properties.get('RESOURCE_LOCK', []))
-        self.assertEqual(self.tests['OFF'][self.existing_owner]['RESOURCE_LOCK'],
-                         ['fixture-existing-resource'])
-
-
-if __name__ == '__main__':
-    unittest.main()
-}})
+        self.assertEqual(community['filter'], {'include': {'label': '^community-fast$'}})
         result = self.run_command(
             CTEST, '--test-dir', str(self.build), '-C', 'Debug',
             '--show-only=json-v1', '-L', community['filter']['include']['label'])
         self.assertEqual(result.returncode, 0, result.stderr)
         selected = {test['name'] for test in json.loads(result.stdout)['tests']}
-        # The test name deliberately differs from production CTest names: new
-        # Community fast contracts join this gate by label, not regex edits.
+        # Deliberately unrelated to the production test names.
         self.assertEqual(selected, {'renamed-community-ocr-contract'})
 
 
