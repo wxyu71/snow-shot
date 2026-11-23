@@ -65,7 +65,7 @@ def verify_assets(directory: Path, version: str, *, allow_build_intermediates: b
     else:
         found = actual
     if found != expected:
-        raise ValueError(f"Release assets differ from the x64 Full allowlist: missing={sorted(expected-found)}, unexpected={sorted(found-expected)}")
+        raise ValueError(f"Release assets differ from the sole Community x64 allowlist: missing={sorted(expected-found)}, unexpected={sorted(found-expected)}")
     for variant in ("online", "offline"):
         stem = f"snow-shot-{version}-windows-x64-{variant}"
         binary = directory / f"{stem}.exe"

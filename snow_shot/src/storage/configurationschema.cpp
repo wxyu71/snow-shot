@@ -938,7 +938,9 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"updates/mode", stringDefault(u"next_launch"), ConfigurationValueKind::String, nullptr,
      &kSchemaAllowed8},
 #else
-    {u"updates/mode", stringDefault(u"next_launch"), ConfigurationValueKind::String, nullptr,
+    // Community has no trusted signed-update manifest; install Windows releases manually.
+    // Keep the Rust updater's cryptographic signature verification fail-closed.
+    {u"updates/mode", stringDefault(u"manual"), ConfigurationValueKind::String, nullptr,
      &kSchemaAllowed9},
 #endif
     {u"network/proxy", stringDefault(u"none"), ConfigurationValueKind::String, nullptr,
@@ -1745,7 +1747,7 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      ConfigurationValueKind::String},
     {u"screenshot_selection/selection_rect_presets", emptyArrayDefault(),
      ConfigurationValueKind::Structured},
-    {u"capture_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean},
+    {u"capture_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean},
     {u"capture_history/keep_permanently", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"capture_history/compression_level", stringDefault(u"medium"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed69},
@@ -1755,7 +1757,7 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      &kSchemaRange25},
     {u"capture_history/max_disk_mib", integerDefault(1024), ConfigurationValueKind::Integer,
      &kSchemaRange26},
-    {u"pinned_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean},
+    {u"pinned_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean},
     {u"pinned_history/keep_permanently", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"pinned_history/compression_level", stringDefault(u"medium"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed69},

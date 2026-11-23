@@ -38,7 +38,7 @@
         "SNOW_APPS_BUILD_DRAW_ENGINE": "ON",
         "SNOW_APPS_BUILD_IMAGE_VIEWER": "ON",
         "SNOW_APPS_BUILD_SNOW_SHOT": "ON",
-        "SNOW_APPS_BUILD_SNOW_SHOT_MINI": "ON"
+        "SNOW_APPS_BUILD_SNOW_SHOT_MINI": "OFF"
       },
       "condition": {
         "type": "equals",

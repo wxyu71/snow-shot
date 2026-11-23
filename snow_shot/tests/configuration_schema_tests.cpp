@@ -128,6 +128,9 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
     require(
         !ConfigurationSchema::defaultValue(QStringLiteral("system/auto_start_at_boot")).toBool(),
         "Community auto-start must default off in both editions on all platforms");
+    require(ConfigurationSchema::defaultValue(QStringLiteral("capture_history/enabled")) == QJsonValue(true) &&
+                ConfigurationSchema::defaultValue(QStringLiteral("pinned_history/enabled")) == QJsonValue(true),
+            "Local screenshot and pinned histories default on; explicit user settings remain editable");
 
 #ifdef Q_OS_WIN
     QFile file(QString::fromUtf8(SNOW_SCHEMA_BASELINE_JSON));
@@ -198,15 +201,17 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
         QJsonObject expectedEntry = communityToolbarBaseline(expected.at(i).toObject());
         const auto key = expectedEntry.value(QStringLiteral("key")).toString();
         // Keep the original-author fixture unchanged for regression provenance.
-        // Community opts out of startup registration and persistent histories
-        // on a fresh installation; these three booleans and three approved
-        // toolbar layouts are the only original-baseline differences.
-        if (key == QStringLiteral("system/auto_start_at_boot") ||
-            key == QStringLiteral("capture_history/enabled") ||
-            key == QStringLiteral("pinned_history/enabled")) {
+        // Preserve original enabled local histories. Review only Community's
+        // opt-in startup, manual unsigned-release updates and toolbar filtering.
+        if (key == QStringLiteral("system/auto_start_at_boot")) {
             require(expectedEntry.value(QStringLiteral("defaultValue")).toBool(),
-                    "the frozen original startup/history defaults must remain enabled");
+                    "the upstream startup default must remain enabled");
             expectedEntry.insert(QStringLiteral("defaultValue"), false);
+        }
+        if (key == QStringLiteral("updates/mode")) {
+            require(expectedEntry.value(QStringLiteral("defaultValue")) == QStringLiteral("next_launch"),
+                    "the upstream update default must remain next_launch");
+            expectedEntry.insert(QStringLiteral("defaultValue"), QStringLiteral("manual"));
         }
         if (originalEntries.at(i).toObject() != expectedEntry) {
             ++changedEntries;
@@ -297,6 +302,10 @@ void nativeDefaultsRemainIntact(const QString& movies, const QString& pictures) 
                 QStringLiteral("pin_to_screen/automatic_text_recognition")) ==
                 QJsonValue(!snow_shot::app::edition::isMini),
         "edition-specific default booleans must remain intact");
+#ifdef Q_OS_WIN
+    require(ConfigurationSchema::defaultValue(QStringLiteral("updates/mode")) == QStringLiteral("manual"),
+            "Community Windows must not schedule unsigned automatic updates");
+#endif
 #ifdef Q_OS_MACOS
     require(ConfigurationSchema::defaultValue(QStringLiteral("updates/mode")) ==
                     QStringLiteral("next_launch") &&
