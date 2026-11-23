@@ -212,20 +212,22 @@ def assert_sensitive_local_control_defaults_disabled() -> None:
         )
 
 
-def assert_privacy_persistence_defaults_disabled() -> None:
+def assert_community_local_history_defaults() -> None:
+    """User-approved policy: local histories ON; startup registration remains opt-in."""
     try:
         schema = CONFIGURATION_SCHEMA.read_text(encoding="utf-8")
     except OSError as error:
         raise SystemExit(f"Community configuration schema is unavailable: {error}") from error
     required = (
         '{u"system/auto_start_at_boot", booleanDefault(false), ConfigurationValueKind::Boolean}',
-        '{u"capture_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean}',
-        '{u"pinned_history/enabled", booleanDefault(false), ConfigurationValueKind::Boolean}',
+        '{u"capture_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean}',
+        '{u"pinned_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean}',
     )
     missing = [entry for entry in required if entry not in schema]
     if missing:
         raise SystemExit(
-            "Community persistence defaults must remain opt-in: " + ", ".join(missing)
+            "Community local-history/startup defaults differ from the reviewed policy: "
+            + ", ".join(missing)
         )
 
 
@@ -320,7 +322,7 @@ def assert_deleted_files_absent() -> None:
     assert_forbidden_runtime_content_absent()
     assert_community_update_signers_disabled()
     assert_sensitive_local_control_defaults_disabled()
-    assert_privacy_persistence_defaults_disabled()
+    assert_community_local_history_defaults()
     assert_external_source_pins()
 
 

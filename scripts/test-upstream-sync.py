@@ -102,8 +102,8 @@ class UpstreamSyncGuardTests(unittest.TestCase):
     def test_sensitive_local_control_defaults_are_fail_closed(self):
         upstream_sync.assert_sensitive_local_control_defaults_disabled()
 
-    def test_privacy_persistence_defaults_are_opt_in(self):
-        upstream_sync.assert_privacy_persistence_defaults_disabled()
+    def test_local_histories_default_on_while_startup_remains_opt_in(self):
+        upstream_sync.assert_community_local_history_defaults()
 
     def test_external_source_dependency_parser_rejects_mutable_refs(self):
         pinned = {
