@@ -42,8 +42,9 @@ credentials. Record results before recommending this build for general use:
 | --- | --- | --- |
 | Final candidate SHA | Pending | Unverified |
 | Quick CI | [#173](https://github.com/wxyu71/snow-shot/actions/runs/45130630394) at `b955800` | Passed: preflight, Linux native-smoke, Windows prebuilt-Qt/MSVC fast contracts; full Windows not run |
-| Production Windows build and native CTests | Pending | Unverified |
-| NSIS online/offline and automated installer smoke | Pending | Unverified |
+| Production Windows build and native CTests | [#174](https://github.com/wxyu71/snow-shot/actions/runs/45135443924) | Passed on prior head; final repaired candidate still unverified |
+| NSIS online/offline and automated installer smoke | [#174](https://github.com/wxyu71/snow-shot/actions/runs/45135443924) | Packaging passed; smoke failed on stale uninstaller filename; fixed, awaiting new full run |
+| PSScriptAnalyzer on repaired installer smoke | [#175](https://github.com/wxyu71/snow-shot/actions/runs/45158705240) / [#176](https://github.com/wxyu71/snow-shot/actions/runs/45165672413) | #175 failed on Write-Host; replacement with Write-Output passed #176 preflight |
 | Personal testing prerelease | Pending | Not published |
 | Installed OCR and upgrade on user's PC | Pending | Hands-on testing |
 
