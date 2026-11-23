@@ -97,3 +97,48 @@ installer-upgrade smoke remain mandatory release gates.
 
 The preflight also runs `compileall` on Python scripts; existing actionlint,
 zizmor, PSScriptAnalyzer, clang-format and Qt/CMake contract tests remain active.
+
+### Real Clang semantic checks from CMake's compilation database
+
+The optional `community-native-clang` CMake preset uses Ninja, Clang 18,
+system Qt6 and `CMAKE_EXPORT_COMPILE_COMMANDS=ON`. Unlike the structural
+Tree-sitter gate, `scripts/check-clang-compile-database.py` **executes real
+Clang on production translation units** using the `-D`, `-I`,
+`-isystem`, C++ standard and related arguments exported by CMake. Only
+object/dependency-file output switches are removed; `-fsyntax-only`
+still runs the preprocessor, parser and semantic analyzer.
+
+On PRs, production sources changed since the PR's base commit are checked
+first. Every production translation unit in this small native compilation
+database is also checked, so edits to their included headers can be caught.
+The job fails when the compiler is not Clang, the database lacks expected
+production files, or any checked file has a semantic error. An additional
+real-compiler negative test builds a tiny CMake compilation database and
+checks that an undeclared class member is rejected and a fixed one accepted.
+
+The `build/ci-native-clang/clang-syntax-report.json` artifact records checked
+files, changed-source coverage, and changed production files **not present**
+in this build graph. Uncovered sources are reported explicitly, not
+silently counted as passing. Currently only the three existing production
+`.cpp` units (PaddleOCR client, cloud OCR settings, cloud OCR engine
+choices) are in this lightweight graph. The Windows Release compiler must
+still validate the full app, platform macros, linking, ABI, NSIS and upgrade.
+
+Local validation requires Qt6, Ninja and Clang 18:
+
+```bash
+cd ci/native-smoke
+cmake --preset community-native-clang
+cmake --build --preset community-native-clang --parallel 4 \
+  --target snow-shot-community-native-paddleocr-tests_autogen \
+           snow-shot-community-native-settings-tests_autogen \
+           snow-shot-community-native-toolbar-policy-tests_autogen
+cd ../..
+python3 scripts/test-clang-compile-database.py
+python3 scripts/check-clang-compile-database.py \
+  --database build/ci-native-clang/compile_commands.json \
+  --report build/ci-native-clang/clang-syntax-report.json
+```
+
+The original `community-native-smoke` preset remains available with GCC
+for developers who do not have Clang 18 installed.

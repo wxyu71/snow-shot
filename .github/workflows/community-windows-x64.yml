@@ -183,25 +183,60 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
+          fetch-depth: 2
           persist-credentials: false
-      - name: Install distribution Qt6 and Ninja
+      - name: Install distribution Qt6, Ninja and Clang 18
         shell: bash
         run: |
           set -euo pipefail
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            qt6-base-dev ninja-build
-      - name: Configure fast native contracts with CMake
+            qt6-base-dev ninja-build clang-18
+          clang++-18 --version
+      - name: Configure native Qt contracts and real compilation database
         working-directory: ci/native-smoke
-        run: cmake --preset community-native-smoke
+        run: |
+          cmake --preset community-native-clang
+          test -s "$GITHUB_WORKSPACE/build/ci-native-clang/compile_commands.json"
+      - name: Generate Qt MOC includes without compiling the full suite
+        working-directory: ci/native-smoke
+        run: |
+          cmake --build --preset community-native-clang --parallel 4 \
+            --target snow-shot-community-native-paddleocr-tests_autogen \
+                     snow-shot-community-native-settings-tests_autogen \
+                     snow-shot-community-native-toolbar-policy-tests_autogen
+      - name: Verify syntax gate rejects a real Clang member mismatch
+        shell: bash
+        run: python3 scripts/test-clang-compile-database.py
+      - name: Run real Clang semantic checks on production translation units
+        shell: bash
+        timeout-minutes: 8
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            git cat-file -e "$PR_BASE_SHA^{commit}" || {
+              echo "PR base missing in shallow checkout; cannot report honest coverage." >&2
+              exit 1
+            }
+            python3 scripts/check-clang-compile-database.py \
+              --database build/ci-native-clang/compile_commands.json \
+              --report build/ci-native-clang/clang-syntax-report.json \
+              --base-ref "$PR_BASE_SHA"
+          else
+            python3 scripts/check-clang-compile-database.py \
+              --database build/ci-native-clang/compile_commands.json \
+              --report build/ci-native-clang/clang-syntax-report.json
+          fi
       - name: Compile the actual Community Qt and OCR sources
         working-directory: ci/native-smoke
-        run: cmake --build --preset community-native-smoke --parallel 4
+        run: cmake --build --preset community-native-clang --parallel 4
       - name: Run Qt Test and OCR contract CTest cases
         working-directory: ci/native-smoke
         run: |
-          ctest --preset community-native-smoke --output-on-failure \
-            --output-junit "$GITHUB_WORKSPACE/build/ci-native-smoke/native-smoke.junit.xml"
+          ctest --preset community-native-clang --output-on-failure \
+            --output-junit "$GITHUB_WORKSPACE/build/ci-native-clang/native-smoke.junit.xml"
       - name: Upload fast native CTest diagnostics
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
@@ -210,9 +245,11 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
           path: |
-            build/ci-native-smoke/native-smoke.junit.xml
-            build/ci-native-smoke/Testing/Temporary/LastTest.log
-            build/ci-native-smoke/CMakeFiles/CMakeConfigureLog.yaml
+            build/ci-native-clang/compile_commands.json
+            build/ci-native-clang/clang-syntax-report.json
+            build/ci-native-clang/native-smoke.junit.xml
+            build/ci-native-clang/Testing/Temporary/LastTest.log
+            build/ci-native-clang/CMakeFiles/CMakeConfigureLog.yaml
 
   windows:
     needs: [preflight, native-smoke]

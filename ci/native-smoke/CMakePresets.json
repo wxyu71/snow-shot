@@ -9,18 +9,39 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Debug"
       }
+    },
+    {
+      "name": "community-native-clang",
+      "inherits": "community-native-smoke",
+      "displayName": "Fast system-Qt Clang 18 semantic and native tests",
+      "binaryDir": "${sourceDir}/../../build/ci-native-clang",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++-18",
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "community-native-smoke",
       "configurePreset": "community-native-smoke"
+    },
+    {
+      "name": "community-native-clang",
+      "configurePreset": "community-native-clang"
     }
   ],
   "testPresets": [
     {
       "name": "community-native-smoke",
       "configurePreset": "community-native-smoke",
+      "output": {
+        "outputOnFailure": true
+      }
+    },
+    {
+      "name": "community-native-clang",
+      "configurePreset": "community-native-clang",
       "output": {
         "outputOnFailure": true
       }
