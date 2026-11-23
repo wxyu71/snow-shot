@@ -25,7 +25,8 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    # 2026-11-23 #145 measured ~78 sec. Five minutes is a hard ceiling.
+    timeout-minutes: 5
     outputs:
       native: ${{ steps.classify.outputs.native }}
       goal_full: ${{ steps.classify.outputs.goal_full }}
@@ -177,7 +178,8 @@ jobs:
     needs: [preflight]
     if: needs.preflight.outputs.native == 'true'
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    # #145 measured ~53 sec. Do not let fast gates approach release build cost.
+    timeout-minutes: 12
     permissions:
       contents: read
     steps:
@@ -191,7 +193,7 @@ jobs:
           set -euo pipefail
           sudo apt-get update -qq
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
-            qt6-base-dev ninja-build clang-18
+            qt6-base-dev ninja-build clang-18 clang-tidy-18
           clang++-18 --version
       - name: Configure native Qt contracts and real compilation database
         working-directory: ci/native-smoke
@@ -204,7 +206,8 @@ jobs:
           cmake --build --preset community-native-clang --parallel 4 \
             --target snow-shot-community-native-paddleocr-tests_autogen \
                      snow-shot-community-native-settings-tests_autogen \
-                     snow-shot-community-native-toolbar-policy-tests_autogen
+                     snow-shot-community-native-toolbar-policy-tests_autogen \
+                     snow-shot-community-native-canvas-moc_autogen
       - name: Verify syntax gate rejects a real Clang member mismatch
         shell: bash
         run: python3 scripts/test-clang-compile-database.py
@@ -229,6 +232,20 @@ jobs:
               --database build/ci-native-clang/compile_commands.json \
               --report build/ci-native-clang/clang-syntax-report.json
           fi
+      - name: Run focused upstream clang-tidy static analyzer on real modified C++
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          clang-tidy-18 -p build/ci-native-clang \
+            -checks='-*,clang-analyzer-core.*,bugprone-use-after-move' \
+            --warnings-as-errors='clang-analyzer-core.*,bugprone-use-after-move' \
+            snow_shot/src/network/communitycloudocrsettings.cpp \
+            snow_shot/src/presentation/ocr/screenshotocrlayout.cpp
+      - name: Compile real production Qt AUTOMOC objects without application linking
+        working-directory: ci/native-smoke
+        timeout-minutes: 3
+        run: cmake --build --preset community-native-clang --parallel 4 --target snow-shot-community-native-canvas-moc
       - name: Compile the actual Community Qt and OCR sources
         working-directory: ci/native-smoke
         run: cmake --build --preset community-native-clang --parallel 4
@@ -251,11 +268,71 @@ jobs:
             build/ci-native-clang/Testing/Temporary/LastTest.log
             build/ci-native-clang/CMakeFiles/CMakeConfigureLog.yaml
 
+  windows-contracts:
+    name: windows-contracts (prebuilt Qt 6.12, MSVC and native CTest)
+    needs: [preflight]
+    if: needs.preflight.outputs.native == 'true'
+    runs-on: windows-2022
+    # Cold Qt installation + MSVC Qt checks must fit a strict fast-gate budget.
+    # No source-built static Qt, Cargo, vcpkg or installer work in this job.
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install official prebuilt Qt 6.12 desktop SDK
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: '6.12.0'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          archives: qtbase
+          # aqtinstall 3.3.x does not yet support Qt 6.11+ per-architecture
+          # repository layouts. Use an audited upstream fix at a fixed commit.
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7'
+          cache: 'false'
+      - name: Configure real MSVC Windows Qt native contracts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path "$env:QT_ROOT_DIR/lib/cmake/Qt6/Qt6Config.cmake")) {
+            throw 'Pinned prebuilt Qt 6.12.0 SDK was not installed'
+          }
+          cmake -S ci/native-smoke -B build/ci-windows-contracts -G 'Visual Studio 17 2022' -A x64 "-DQt6_DIR=$env:QT_ROOT_DIR/lib/cmake/Qt6"
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC Qt native-contract configuration failed' }
+      - name: Compile real Windows DPAPI, SDK and Qt AUTOMOC sources
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native C++/Qt contract compilation failed' }
+      - name: Run real Windows Qt and platform policy CTests
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ctest --test-dir build/ci-windows-contracts -C Release -R 'snow-shot-community-native-(settings|toolbar-policy)-tests' --output-on-failure --output-junit "$env:RUNNER_TEMP/windows-fast-native-junit.xml"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows-native Qt contract tests failed' }
+      - name: Upload Windows fast-gate CTest diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: community-windows-fast-contracts-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/windows-fast-native-junit.xml
+            build/ci-windows-contracts/Testing/Temporary/LastTest.log
+            build/ci-windows-contracts/CMakeFiles/CMakeConfigureLog.yaml
+
   windows:
-    needs: [preflight, native-smoke]
+    needs: [preflight, native-smoke, windows-contracts]
     # Full CI is required once per completed goal, not once per intermediate
     # commit. workflow_dispatch remains available for deliberate validation.
-    if: needs.native-smoke.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.preflight.outputs.goal_full == 'true')
+    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.preflight.outputs.goal_full == 'true')
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     permissions:

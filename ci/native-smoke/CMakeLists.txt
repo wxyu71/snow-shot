@@ -63,11 +63,33 @@ add_library(snow-shot-community-native-clang-only OBJECT EXCLUDE_FROM_ALL
     "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrtexttransform.cpp"
     # OCR text shaping needs Qt 6.12 (QTextLayout::RetrieveGlyphIndexes);
     # use the genuine Qt6.4-compatible OCR paragraph-layout implementation.
-    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrlayout.cpp"
-    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/canvasstatusreadout.cpp")
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/ocr/screenshotocrlayout.cpp")
 set_target_properties(snow-shot-community-native-clang-only PROPERTIES AUTOMOC OFF)
 target_include_directories(snow-shot-community-native-clang-only PRIVATE
     "${SNOW_SHOT_ROOT}/snow_shot/include"
     "${SNOW_SHOT_ROOT}/snow_draw_engine_qt/include")
 target_link_libraries(snow-shot-community-native-clang-only PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets)
+
+# Compile a real production QObject implementation *and its CMake AUTOMOC output*
+# without linking the full GUI. This catches Q_OBJECT/meta-object generation,
+# declaration/signature and missing-header errors on both native hosts.
+add_library(snow-shot-community-native-canvas-moc OBJECT EXCLUDE_FROM_ALL
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/canvasstatusreadout.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/include/snow_shot/presentation/canvasstatusreadout.h")
+target_include_directories(snow-shot-community-native-canvas-moc PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include")
+target_link_libraries(snow-shot-community-native-canvas-moc PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Widgets)
+
+if(WIN32)
+    # Compiling the real Windows variants checks DPAPI and Windows SDK APIs.
+    # crypt32 is the actual Windows link dependency of this Settings source.
+    target_link_libraries(snow-shot-community-native-settings-tests PRIVATE crypt32)
+
+    add_library(snow-shot-community-native-windows-qos OBJECT EXCLUDE_FROM_ALL
+        "${SNOW_SHOT_ROOT}/snow_shot/src/platform/windows/processpowerqos.cpp")
+    target_include_directories(snow-shot-community-native-windows-qos PRIVATE
+        "${SNOW_SHOT_ROOT}/snow_shot/include")
+    target_link_libraries(snow-shot-community-native-windows-qos PRIVATE Qt6::Core)
+endif()

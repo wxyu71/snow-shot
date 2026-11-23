@@ -150,3 +150,45 @@ The more specialized `screenshotocrtextlayout.cpp` uses
 Qt 6.4. It is explicitly **not** covered by this older system-Qt gate;
 the production Windows build uses Qt 6.12 and must compile it. Do not
 modify that source merely to appease the older Clang preflight SDK.
+
+### Pre-release fast-gate budget and upstream tooling (2026-11)
+
+The verified #145 baseline was **78 seconds preflight + 53 seconds Linux
+native Qt/Clang** (about 2m 11s sequentially). These are measured GitHub
+runner log durations, not optimistic estimates.
+
+The fast path now includes a **single Windows-native** contract job alongside
+Ubuntu, using maintained, SHA-pinned `jurplel/install-qt-action` to install
+Qt 6.12.0 desktop binaries and Visual Studio 2022 CMake/MSVC. No static Qt
+source build, vcpkg bootstrap, Cargo graph or release installer is involved.
+The real `communitycloudocrsettings.cpp` is compiled on Windows (including
+DPAPI), `processpowerqos.cpp` is compiled against actual Windows SDK types,
+the existing Settings and toolbar policy Qt/CTest binaries run natively, and
+the production `CanvasStatusReadout` `Q_OBJECT` header/source are compiled
+alongside **CMake-generated AUTOMOC output** (object files only; no full app
+link). The same production Qt meta-object sources are compiled on Linux,
+so a missing or invalid MOC declaration is not silently ignored.
+
+A small selected set of real changed Linux production C++ is also analyzed
+by upstream `clang-tidy-18` with `clang-analyzer-core.*` and
+`bugprone-use-after-move`, reusing the actual CMake compilation database.
+This targets possible dataflow/logic mistakes not covered by basic syntax
+checking. No duplicate handmade C++ matcher or fabricated feature test was
+added; the existing three native Qt/CTest cases still exercise production code.
+
+**Hard limits:** Preflight 5 minutes; Ubuntu CMake/Clang/CTest 12 minutes;
+Windows prebuilt-Qt/MSVC contracts 12 minutes. The independent Ubuntu and
+Windows jobs run *in parallel* after Preflight, so the configured runner
+execution upper bound is **17 minutes**, below the 20-minute fast feedback
+budget (GitHub queue times and artifact service availability are external).
+Actual Windows cold-install duration must be assessed from the first
+successful run; if it consistently approaches the limit, prefer a cache or
+reduce the Windows quick graph rather than extending its timeout. The full
+Windows Release/NSIS/installer acceptance is separate and much more expensive.
+
+The Windows fast contracts are **not** substitutes for the full Windows build:
+they do not compile `screenshottoolpalette.cpp`, the static Qt release
+configuration, every `Q_OBJECT` class, every Windows-only branch, or every
+third-party library. The production Release build remains required. Do not
+count compiler self-check fixtures as product features or treat uncovered
+files as passing.
