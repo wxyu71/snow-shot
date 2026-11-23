@@ -5,26 +5,29 @@ recharge or payment service. It does not contain analytics or telemetry upload
 code. Diagnostics and crash capture are local-only; Crashpad uploads are
 explicitly disabled.
 
-Screenshots and the optional offline PP-OCRv6 engine run on the local computer
-without remote OCR requests. Fresh Community profiles also keep automatic startup,
-capture history, and pinned-image history disabled until the user explicitly
-enables them. Existing saved preferences are preserved.
+Screenshots, capture history, pinned-image history and optional offline PP-OCRv6
+recognition stay on the user's computer. On a fresh installation, **both local
+histories are enabled by default**, while startup registration remains disabled.
+Users may disable histories or change retention limits; previously saved choices
+are respected. Local histories are not uploaded, but someone with access to the
+computer or its backups may be able to read them.
 
-**Online OCR is optional and provider-controlled in Settings.**
+**Online OCR is optional, PaddleOCR-only and explicitly user-initiated.**
 
-- **Baidu PaddleOCR (AI Studio):** the selected screenshot is uploaded directly
-  to the user-configured HTTPS AI Studio endpoint with the user's Access Token.
-  Structured Markdown is returned, with formulas preserved as LaTeX. Signed
-  result downloads do not carry the Access Token.
-- **OpenAI-compatible vision model:** the inherited large-model OCR pipeline can
-  send the selected screenshot directly to a vision-capable endpoint configured
-  by the user under Connections & services. Output can be Markdown, HTML or
-  LaTeX.
+- **Baidu PaddleOCR (AI Studio):** selecting Online OCR sends the selected image
+  directly to the user-configured AI Studio HTTPS endpoint with an Access Token.
+  Supported models are PP-OCRv6, PP-StructureV3 and PaddleOCR-VL-1.6.
+  Output is Markdown with formulas preserved as LaTeX. Result downloads
+  never carry the Access Token.
+- Obsolete Vision/HTML/LaTeX Online OCR preferences from older builds are
+  ignored, not treated as permission to contact another provider.
+- Separate user-configured cloud upload actions require an explicit user
+  action and a configured destination. Merely capturing an image or retaining
+  local histories never invokes a cloud upload.
 
-No original-author Snow Shot account or hosted API endpoint is configured by
-default. Network requests made by Online OCR therefore go only to a provider the
-user explicitly configures or selects. Provider terms and data-retention
-practices apply to those requests.
+No original-author account or hosted service endpoint is configured by default.
+Provider terms and retention practices apply only when the user intentionally
+submits an image to PaddleOCR or another independently configured cloud action.
 
 On Windows, the PaddleOCR Access Token is stored with user-scoped DPAPI
 protection. Custom AI / translation API keys and S3 access credentials are also
