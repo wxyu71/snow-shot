@@ -1,0 +1,54 @@
+name: Community quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: community-quality-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  workflow-and-contract-tests:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@d8cbb8045d7f43706b9177cceb36c1f91a6644d5 # v7
+        with:
+          go-version: '1.25'
+          cache: false
+      - name: Validate GitHub Actions syntax, expressions and embedded shell
+        run: go run github.com/rhysd/actionlint/cmd/actionlint@v1.7.12 -color
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6
+        with:
+          python-version: '3.12'
+      - name: Execute CMake and Git behavior contracts
+        run: |
+          set -euo pipefail
+          python3 scripts/test-test-runner-policy.py
+          python3 scripts/test-qt-cmake-contract.py
+          python3 scripts/test-upstream-sync.py
+
+  actions-security:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Audit workflow security with zizmor
+        uses: zizmorcore/zizmor-action@bd12b495c90993a4301c73398142281a61499af3 # v0.9.0
+        with:
+          version: v1.32.0
+          strict-collection: true
