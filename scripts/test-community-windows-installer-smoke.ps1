@@ -18,7 +18,24 @@ $root = Join-Path $env:RUNNER_TEMP ('snow-shot-community-installer-smoke-' + [gu
 $installed = Join-Path $root 'Community install'
 $binary = Join-Path $installed 'bin/snow_shot.exe'
 $ocrAssets = Join-Path $installed 'bin/assets/ocr'
-$uninstaller = Join-Path $installed 'Uninstall.exe'
+# CPack names the uninstaller using CPACK_NSIS_UNINSTALL_NAME (currently
+# "Uninstall Snow Shot"), not the default "Uninstall.exe". Read the generated
+# config rather than duplicating a production packaging decision in this test.
+$cpackConfig = Join-Path $build 'CPackConfig.cmake'
+if (-not (Test-Path -LiteralPath $cpackConfig -PathType Leaf)) {
+    throw "CPack configuration is missing: $cpackConfig"
+}
+$configText = Get-Content -LiteralPath $cpackConfig -Raw
+$uninstallMatch = [regex]::Match($configText, '(?m)^set\(CPACK_NSIS_UNINSTALL_NAME "([^"\r\n]+)"\)')
+if (-not $uninstallMatch.Success) {
+    throw "CPack configuration does not declare CPACK_NSIS_UNINSTALL_NAME."
+}
+$uninstallName = $uninstallMatch.Groups[1].Value
+if ([IO.Path]::GetFileName($uninstallName) -cne $uninstallName) {
+    throw "Refusing an unsafe CPack uninstaller name: $uninstallName"
+}
+$uninstaller = Join-Path $installed ($uninstallName + '.exe')
+Write-Host "Expected NSIS uninstaller: $($uninstallName).exe"
 
 function Invoke-Nsis([string]$Executable, [string[]]$Arguments) {
     $process = Start-Process -FilePath $Executable -ArgumentList $Arguments -PassThru -WindowStyle Hidden
