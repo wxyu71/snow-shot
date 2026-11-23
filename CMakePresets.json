@@ -637,7 +637,7 @@
       },
       "filter": {
         "include": {
-          "name": "^(snow-shot-paddleocr-client-tests|snow-shot-community-cloud-ocr-tests|snow-shot-community-cloud-ocr-settings-tests|snow-shot-configuration-schema-tests|snow-shot-installer-running-app-tests)$"
+          "label": "^community-fast$"
         }
       }
     },
