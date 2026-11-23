@@ -2,6 +2,7 @@
 param(
     [ValidateSet('x64', 'arm64')][string]$Architecture = 'x64',
     [ValidateSet('Debug', 'Release')][string]$Configuration = 'Release',
+    [string]$DependencyPrefix = '',
     [switch]$DevelopmentModules
 )
 
@@ -11,7 +12,9 @@ $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'snow-build-environment.ps1')
 Add-SnowMsvcToolsToPath -Architecture $Architecture | Out-Null
 $target = Get-SnowWindowsTarget -Architecture $Architecture
-$dependencyPrefix = Join-Path $target.InstalledRoot $target.Triplet
+if ([string]::IsNullOrWhiteSpace($DependencyPrefix)) {
+    $DependencyPrefix = Join-Path $target.InstalledRoot $target.Triplet
+}
 
 function Get-RequiredFileHash {
     param([Parameter(Mandatory = $true)][string]$Path)
@@ -40,7 +43,7 @@ foreach ($relative in ($recipePaths | Sort-Object -Unique)) {
 $dependencies = [ordered]@{}
 foreach ($port in @('libpng', 'zlib')) {
     $dependencies[$port] = Get-RequiredFileHash (
-        Join-Path $dependencyPrefix "share/$port/vcpkg_abi_info.txt")
+        Join-Path $DependencyPrefix "share/$port/vcpkg_abi_info.txt")
 }
 
 # A compiled Qt SDK is ABI-sensitive. A rolling runner image label is not a
