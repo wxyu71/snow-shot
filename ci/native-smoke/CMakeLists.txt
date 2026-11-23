@@ -65,6 +65,7 @@ add_library(snow-shot-community-native-clang-only OBJECT EXCLUDE_FROM_ALL
     "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/canvasstatusreadout.cpp")
 set_target_properties(snow-shot-community-native-clang-only PROPERTIES AUTOMOC OFF)
 target_include_directories(snow-shot-community-native-clang-only PRIVATE
-    "${SNOW_SHOT_ROOT}/snow_shot/include")
+    "${SNOW_SHOT_ROOT}/snow_shot/include"
+    "${SNOW_SHOT_ROOT}/snow_draw_engine_qt/include")
 target_link_libraries(snow-shot-community-native-clang-only PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets)
