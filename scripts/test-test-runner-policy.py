@@ -22,15 +22,9 @@ class TestRunnerPolicyTests(unittest.TestCase):
         cls.addClassCleanup(directory.cleanup)
         cls.source = Path(directory.name)
         cls.build = cls.source / 'build'
-        workspace = (ROOT / 'CMakeLists.txt').read_text(encoding='utf-8')
-        target = re.search(r'if\(NOT TARGET snow-tests\)\n.*?\nendif\(\)', workspace, re.S)
-        if target is None:
-            raise AssertionError('workspace must define the snow-tests runner')
-        exclusion = re.search(r'set\(_snow_deterministic_test_exclude "([^"]+)"\)',
-                              target.group())
-        if exclusion is None:
-            raise AssertionError('snow-tests must explicitly exclude non-default labels')
-        cls.exclusion = exclusion.group(1)
+        # Test the real CMake module and executable runner, not text
+        # extracted from a particular indentation/layout in CMakeLists.txt.
+        cls.exclusion = 'interactive|e2e|benchmark'
         (cls.source / 'CMakeLists.txt').write_text('''
 cmake_minimum_required(VERSION 3.21)
 project(SnowTestRunnerPolicy NONE)
@@ -46,7 +40,11 @@ add_test(NAME native-e2e COMMAND "${CMAKE_COMMAND}" -E false)
 set_tests_properties(native-e2e PROPERTIES LABELS "e2e")
 add_test(NAME measurement COMMAND "${CMAKE_COMMAND}" -E false)
 set_tests_properties(measurement PROPERTIES LABELS "benchmark")
-''' + target.group() + '\n', encoding='utf-8')
+''' + f'''
+list(APPEND CMAKE_MODULE_PATH "{(ROOT / 'cmake').as_posix()}")
+include(SnowTestRunner)
+snow_add_deterministic_test_runner()
+''', encoding='utf-8')
         configured = cls.run_command(CMAKE, '-S', str(cls.source), '-B', str(cls.build),
                                      '-DCMAKE_BUILD_TYPE=Debug')
         if configured.returncode != 0:
