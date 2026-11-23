@@ -41,8 +41,7 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     // Use the text + userData overload, not the QIcon + text overload.
     // An empty braced first argument would silently discard the engine ID.
     // This exact production option population is compiled in fast native Qt tests.
-    snow_shot::presentation::components::populateCloudOcrEngineChoices(
-        *m_engine, SNOW_SHOT_ENABLE_IMAGE_CONVERSION != 0);
+    snow_shot::presentation::components::populateCloudOcrEngineChoices(*m_engine, false);
     m_engineLabel = new QLabel(this);
     form->addRow(m_engineLabel, m_engine);
 
