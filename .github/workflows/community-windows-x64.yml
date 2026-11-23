@@ -378,7 +378,7 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc
+          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc snow-shot-community-native-cloud-ocr-widget
           if ($LASTEXITCODE -ne 0) { throw 'Windows native C++/Qt contract compilation failed' }
       - name: Run real Windows Qt and platform policy CTests
         shell: pwsh
