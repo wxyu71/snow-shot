@@ -86,7 +86,7 @@ jobs:
                [[ "$GITHUB_REF" == refs/heads/main && "$release" == true ]]; } &&
              [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] &&
              git merge-base --is-ancestor '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" &&
-             git diff --quiet 'b9938c0201cfa7a2e9447745905a1e770ecda79c' "$GITHUB_SHA" -- . ':(exclude).github/workflows/community-windows-x64.yml'; then
+             git diff --quiet '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" -- . ':(exclude).github/workflows/community-windows-x64.yml'; then
             reuse=true
             native=false
           fi
