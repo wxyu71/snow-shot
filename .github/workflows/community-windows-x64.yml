@@ -436,9 +436,25 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
+      - name: Restore hash-pinned NSIS installer
+        id: nsis-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nsis-3.12-setup.exe
+          key: nsis-3.12-3bc2b06253a7e4957111be152ac6a536e0c7478a706e19da814038db5d706495
+
       - name: Bootstrap NSIS and smoke-test CPack
+        id: nsis-bootstrap
         shell: pwsh
+        timeout-minutes: 15
         run: pwsh -NoProfile -NonInteractive -File ./scripts/bootstrap-community-nsis.ps1
+
+      - name: Save verified NSIS installer immediately
+        if: steps.nsis-bootstrap.outputs.cacheable == 'true' && steps.nsis-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nsis-3.12-setup.exe
+          key: ${{ steps.nsis-cache.outputs.cache-primary-key }}
 
       # Test scripts deliberately exercise failing native commands. Run each
       # in a separate PowerShell process so the step receives the suite's exit

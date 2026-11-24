@@ -24,32 +24,53 @@ function Find-PinnedNsis {
     }
 }
 
+$installer = Join-Path $env:RUNNER_TEMP "nsis-$version-setup.exe"
 $makensis = Find-PinnedNsis
 if (-not $makensis) {
-    $installer = Join-Path $env:RUNNER_TEMP "nsis-$version-setup.exe"
+    # Use only the exact upstream installer bytes, independent of transport.
+    # The BleachBit CI mirror and Fossies archive publish the same SHA-256.
+    # Avoid SourceForge's HTML download landing pages and redirector.
     $urls = @(
-        'https://sourceforge.net/projects/nsis/files/NSIS%203/3.12/nsis-3.12-setup.exe/download',
-        'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12-setup.exe'
+        'https://pilotfiber.dl.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12-setup.exe',
+        'https://download.bleachbit.org/dependency/nsis-3.12-setup.exe',
+        'https://netix.dl.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12-setup.exe',
+        'https://fossies.org/windows/misc/nsis-3.12-setup.exe'
     )
     $verified = $false
-    for ($attempt = 1; $attempt -le 3 -and -not $verified; $attempt++) {
+    if (Test-Path -LiteralPath $installer -PathType Leaf) {
+        $verified = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -eq $expectedHash
+        if (-not $verified) {
+            Write-Warning 'Discarding NSIS cache entry with incorrect SHA-256.'
+            Remove-Item -LiteralPath $installer -Force
+        }
+    }
+    $partial = "$installer.part"
+    for ($attempt = 1; $attempt -le 2 -and -not $verified; $attempt++) {
         foreach ($url in $urls) {
             try {
-                if (Test-Path -LiteralPath $installer) {
-                    Remove-Item -LiteralPath $installer -Force
+                if (Test-Path -LiteralPath $partial) {
+                    Remove-Item -LiteralPath $partial -Force
                 }
-                Invoke-WebRequest -Uri $url -OutFile $installer -TimeoutSec 90
-                $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+                & curl.exe --fail --location --silent --show-error --connect-timeout 15 --max-time 90 --output $partial --write-out 'NSIS response: %{http_code} %{content_type}, %{size_download} bytes\n' $url
+                if ($LASTEXITCODE -ne 0) {
+                    throw "NSIS download failed with curl exit code $LASTEXITCODE"
+                }
+                $hash = (Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash
                 if ($hash -ne $expectedHash) {
                     throw "NSIS installer SHA-256 mismatch: $hash"
                 }
+                Move-Item -LiteralPath $partial -Destination $installer -Force
                 $verified = $true
                 break
             } catch {
                 Write-Warning "NSIS download attempt $attempt from $url failed: $($_.Exception.Message)"
+            } finally {
+                if (Test-Path -LiteralPath $partial) {
+                    Remove-Item -LiteralPath $partial -Force
+                }
             }
         }
-        if (-not $verified -and $attempt -lt 3) { Start-Sleep -Seconds (5 * $attempt) }
+        if (-not $verified -and $attempt -lt 2) { Start-Sleep -Seconds 5 }
     }
     if (-not $verified) { throw "Could not download verified NSIS $version." }
     $process = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
@@ -99,3 +120,10 @@ if ($installers.Count -ne 1 -or $installers[0].Length -le 0) {
     throw "CPack NSIS smoke produced $($installers.Count) nonempty installers; expected exactly one."
 }
 Write-Information -InformationAction Continue -MessageData "CPack NSIS smoke passed: $($installers[0].FullName)"
+
+# Cache only a hash-verified installer, never a download response or build tree.
+if ($env:GITHUB_OUTPUT -and (Test-Path -LiteralPath $installer -PathType Leaf)) {
+    if ((Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash -eq $expectedHash) {
+        'cacheable=true' | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
+    }
+}
