@@ -20,7 +20,7 @@ function Find-PinnedNsis {
         if ($LASTEXITCODE -eq 0 -and $actual -match '(?i)^v?3\.12(?:\.0)?$') {
             return $candidate
         }
-        Write-Host "Ignoring unexpected NSIS version '$actual' at $candidate"
+        Write-Information -InformationAction Continue -MessageData "Ignoring unexpected NSIS version '$actual' at $candidate"
     }
 }
 
@@ -69,7 +69,7 @@ $env:PATH = "$nsisDirectory;$env:PATH"
 if ($env:GITHUB_PATH) {
     $nsisDirectory | Out-File -FilePath $env:GITHUB_PATH -Append -Encoding utf8
 }
-Write-Host "Validated pinned NSIS compiler $actual at $makensis"
+Write-Information -InformationAction Continue -MessageData "Validated pinned NSIS compiler $actual at $makensis"
 
 # A real CPack -> makensis smoke test catches missing plugins / PATH /
 # generator incompatibility *before* vcpkg and the expensive native build.
@@ -98,4 +98,4 @@ $installers = @(Get-ChildItem -LiteralPath $output -Filter '*.exe' -File)
 if ($installers.Count -ne 1 -or $installers[0].Length -le 0) {
     throw "CPack NSIS smoke produced $($installers.Count) nonempty installers; expected exactly one."
 }
-Write-Host "CPack NSIS smoke passed: $($installers[0].FullName)"
+Write-Information -InformationAction Continue -MessageData "CPack NSIS smoke passed: $($installers[0].FullName)"
