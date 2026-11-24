@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Offline signing of the two accepted Community EXEs. Never creates a production key."""
+"""Offline signing of accepted Community EXEs and transactional update ZIPs. No production key generation."""
 from __future__ import annotations
 
 import argparse
@@ -9,12 +9,17 @@ import json
 import re
 import subprocess
 import tempfile
+import zipfile
+import stat
 from datetime import datetime, timezone
 from pathlib import Path
 
 import community_release as release
 
-FEED = "community-installers.json"
+FEED = "latest-version.json"
+MAX_BYTES = 4 * 1024**3
+MAX_FILES = 20_000
+RECORD = "snow-shot-installation.json"
 TRUST = release.ROOT / "snow_shot/resources/update-trusted-keys.json"
 
 
@@ -50,21 +55,104 @@ def openssl(*args: str, payload: bytes | None = None) -> bytes:
                           stdout=subprocess.PIPE).stdout
 
 
+def file_digest(path: Path) -> str:
+    if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= MAX_BYTES:
+        raise ValueError("Unsafe release input")
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
+def inventory_key(path: str) -> str:
+    if (not isinstance(path, str) or len(path.encode("utf-16-le")) // 2 > 220
+            or not (path.startswith(("bin/", "share/snow-shot/")) or path == RECORD)
+            or path.lower().startswith("bin/portable/") or path.lower() == "bin/__data_directory"):
+        raise ValueError("Unsafe update path")
+    for part in path.split("/"):
+        if (not part or part in (".", "..") or part.endswith((".", " "))
+                or any(ord(c) < 32 or c in '\\:<>\"|?*' for c in part)
+                or re.fullmatch(r"(CON|PRN|AUX|NUL|CONIN\$|CONOUT\$|CLOCK\$|COM[0-9¹²³]|LPT[0-9¹²³])",
+                                part.split(".")[0], re.IGNORECASE)):
+            raise ValueError("Unsafe update path")
+    return path.lower()
+
+
+def index_inventory(items: list[dict]) -> dict[str, tuple[int, str]]:
+    indexed = {}
+    lowered = set()
+    total = 0
+    for item in items:
+        path, size, sha = item["path"], item["size"], item["sha256"]
+        key = inventory_key(path)
+        if key in lowered or type(size) is not int or size < 0 or not re.fullmatch(r"[0-9a-f]{64}", sha):
+            raise ValueError("Invalid or duplicate inventory entry")
+        lowered.add(key)
+        indexed[path] = (size, sha)
+        total += size
+    if not 0 < len(indexed) <= MAX_FILES or total > MAX_BYTES:
+        raise ValueError("Invalid inventory size")
+    for key in lowered:
+        parts = key.split("/")
+        if any("/".join(parts[:i]) in lowered for i in range(1, len(parts))):
+            raise ValueError("Conflicting update paths")
+    return indexed
+
+
+def zip_inventory(archive: Path, version: str, variant: str, installer_manifest: dict) -> list[dict]:
+    file_digest(archive)
+    inventory = []
+    total = 0
+    with zipfile.ZipFile(archive) as z:
+        if not 0 < len(z.infolist()) <= MAX_FILES:
+            raise ValueError("Unexpected archive entry count")
+        for info in z.infolist():
+            inventory_key(info.filename)
+            mode = stat.S_IFMT(info.external_attr >> 16)
+            if info.is_dir() or mode not in (0, stat.S_IFREG) or info.flag_bits & 1:
+                raise ValueError("Archive contains nonregular or encrypted entry")
+            total += info.file_size
+            if total > MAX_BYTES:
+                raise ValueError("Archive exceeds the update payload limit")
+            with z.open(info) as stream:
+                digest = hashlib.file_digest(stream, "sha256").hexdigest()
+            inventory.append({"path": info.filename, "size": info.file_size, "sha256": digest})
+        actual = index_inventory(inventory)
+        required = {"bin/snow_shot.exe", "bin/snow-shot-updater.exe", RECORD}
+        if not required <= actual.keys() or actual[RECORD][0] > 8 * 1024**2:
+            raise ValueError("Missing required payload or oversized installation record")
+        record = json.loads(z.read(RECORD))
+        if (record.get("schema") != 1 or record.get("platform") != "windows-x64"
+                or record.get("version") != version or record.get("variant") != variant
+                or record.get("product", "snow-shot") != "snow-shot"):
+            raise ValueError("Archive installation record does not match the release")
+        owned = {k: v for k, v in actual.items() if k != RECORD}
+        if index_inventory(record["files"]) != owned:
+            raise ValueError("Archive ownership inventory does not match its bytes")
+    expected = index_inventory([{"path": entry["Path"].replace("\\", "/"),
+                                 "size": entry["Bytes"], "sha256": entry["Sha256"].lower()}
+                                for entry in installer_manifest["InstallFiles"]])
+    if actual != expected:
+        raise ValueError("Update ZIP and EXE staging inventory differ")
+    return sorted(inventory, key=lambda item: item["path"])
+
+
 def payload_for(directory: Path, version: str, published_at: str) -> bytes:
     release.release_tag(version)
-    release.verify_assets(directory, version)
-    installers = []
+    release.verify_assets(directory, version, allow_build_intermediates=True)
+    packages = []
     for variant in ("online", "offline"):
-        path = directory / f"snow-shot-{version}-windows-x64-{variant}.exe"
-        if path.is_symlink() or not 0 < path.stat().st_size <= 4 * 1024**3:
-            raise ValueError("Unsafe installer input")
-        with path.open("rb") as stream:
-            digest = hashlib.file_digest(stream, "sha256").hexdigest()
-        installers.append({"variant": variant, "name": path.name,
-                           "size": path.stat().st_size, "sha256": digest})
-    document = {"schema": 2, "product": "snow-shot-community",
+        stem = f"snow-shot-{version}-windows-x64-{variant}"
+        prefix = f"setup/snow-shot_windows-x64-{variant}"
+        exe = directory / f"{stem}.exe"
+        archive = directory / f"{stem}-update.zip"
+        manifest = json.loads((directory / f"{stem}.manifest.json").read_text(encoding="utf-8-sig"))
+        packages.append({"variant": variant, "kind": "installer", "path": prefix + ".exe",
+                         "size": exe.stat().st_size, "sha256": file_digest(exe)})
+        packages.append({"variant": variant, "kind": "update", "path": prefix + "-update.zip",
+                         "size": archive.stat().st_size, "sha256": file_digest(archive),
+                         "files": zip_inventory(archive, version, variant, manifest)})
+    document = {"schema": 3, "product": "snow-shot-community",
                 "repository": "wxyu71/snow-shot", "platform": "windows-x64",
-                "version": version, "publishedAt": published_at, "installers": installers}
+                "version": version, "publishedAt": published_at, "packages": packages}
     return json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
@@ -109,14 +197,37 @@ def selftest() -> None:
             binary.write_bytes(("fixture-" + variant).encode())
             digest = hashlib.sha256(binary.read_bytes()).hexdigest()
             (dist / f"{stem}.exe.sha256").write_text(f"{digest}  {binary.name}\n")
+            contents = {"bin/snow_shot.exe": b"app", "bin/snow-shot-updater.exe": b"helper"}
+            owned = [{"path": name, "size": len(value), "sha256": hashlib.sha256(value).hexdigest()}
+                     for name, value in contents.items()]
+            contents[RECORD] = json.dumps({"schema": 1, "platform": "windows-x64",
+                                           "version": version, "variant": variant, "files": owned}).encode()
+            with zipfile.ZipFile(dist / f"{stem}-update.zip", "w") as z:
+                for name, value in contents.items():
+                    z.writestr(name, value)
+            files = [{"Path": name, "Bytes": len(value), "Sha256": hashlib.sha256(value).hexdigest()}
+                     for name, value in contents.items()]
             (dist / f"{stem}.manifest.json").write_text(json.dumps({
                 "PackageVersion": version, "Variant": variant, "Architecture": "x64",
                 "Platform": "windows-x64", "StaticCrt": True, "StaticQt": True,
                 "NativeValidation": {"Passed": True},
                 "Installer": {"Sha256": digest, "Path": binary.name},
+                "InstallFiles": files,
             }))
         payload = payload_for(dist, version, "2026-11-24T12:00:00Z")
-        assert json.loads(payload)["installers"][1]["variant"] == "offline"
+        assert len(json.loads(payload)["packages"]) == 4
+        assert json.loads(payload)["packages"][3]["variant"] == "offline"
+        archive = dist / f"snow-shot-{version}-windows-x64-online-update.zip"
+        saved = archive.read_bytes()
+        with zipfile.ZipFile(archive, "a") as z:
+            z.writestr("../foreign.exe", b"bad")
+        try:
+            payload_for(dist, version, "2026-11-24T12:00:00Z")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Unsafe archive accepted")
+        archive.write_bytes(saved)
         key = root / "ephemeral-test.pem"
         openssl("genpkey", "-algorithm", "RSA", "-pkeyopt", "rsa_keygen_bits:3072",
                 "-pkeyopt", "rsa_keygen_pubexp:65537", "-out", str(key))

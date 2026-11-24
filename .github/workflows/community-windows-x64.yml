@@ -364,6 +364,12 @@ jobs:
             exit 1
           }
           python3 scripts/community_release.py validate-tag --tag "$(python3 scripts/community_release.py tag)"
+          # Beta 2 draft cannot publish until the signed transactional release
+          # pipeline and modern installer migration gates are wired and verified.
+          [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] || {
+            echo "::error::New release requires signed transactional update and installer acceptance gates."
+            exit 1
+          }
 
   native-smoke:
     name: native-smoke (compiled Qt/C++ before Windows)

@@ -163,7 +163,6 @@
     "snow_shot/src/network/webdavsettingssync.cpp",
     "snow_shot/tests/webdav_settings_sync_tests.cpp",
     "ci/native-smoke/CMakeLists.txt",
-    "snow_shot/rust/snow-shot-updater/src/contract/community_installer.rs",
     "snow_shot/packaging/community/*",
     "scripts/community_installer_signing.py"
   ]

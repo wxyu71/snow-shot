@@ -222,8 +222,8 @@ pub fn compiled_trusted_keys() -> &'static [u8] {
     include_bytes!(concat!(env!("OUT_DIR"), "/update-trusted-keys.json"))
 }
 
-// Both the upstream ZIP contract and the Community EXE-only contract use the
-// same embedded trust root and RSA-PSS verification. No unsigned fallback.
+// Both the upstream ZIP contract and the Community transaction contract use
+// the same embedded trust root and RSA-PSS verification. No unsigned fallback.
 fn verify_signed_payload(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result<Vec<u8>> {
     require(
         envelope.len() <= MAX_METADATA_BYTES,
@@ -299,8 +299,6 @@ fn verify_signed_payload(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result
 
     Ok(payload)
 }
-
-pub mod community_installer;
 
 pub fn verify_release(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result<UpdateRelease> {
     let release = verify_release_for_platform(envelope, trusted_keys, crate::edition::PLATFORM)?;
