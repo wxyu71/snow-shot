@@ -791,6 +791,7 @@ pub fn apply_local_installer(
     // the manually launched EXE, along with its expected digest.
     no_links(archive)?;
     let _lock = acquire_lock(root, "Another update transaction is running")?;
+    platform::require_installer_application_closed(root)?;
     let result = apply_locked(root, archive, &release, TransactionHooks::default(), Some(&variant));
     prune_finished_work(root);
     result

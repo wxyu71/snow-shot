@@ -35,6 +35,9 @@ try {
     'fn main() { std::process::exit(42); }' | Set-Content -LiteralPath "$base\bad-probe.rs"
     rustc "$base\bad-probe.rs" -o "$badStage\bin\snow_shot.exe"
     if ($LASTEXITCODE -ne 0) { throw 'Failing startup probe fixture build failed.' }
+    'fn main() { std::thread::sleep(std::time::Duration::from_secs(180)); }' | Set-Content -LiteralPath "$base\old-app.rs"
+    rustc "$base\old-app.rs" -o "$install\bin\snow_shot.exe"
+    if ($LASTEXITCODE -ne 0) { throw 'Running legacy app fixture build failed.' }
     $version = (& python scripts/community_release.py version).Trim()
     if ($LASTEXITCODE -ne 0 -or $version -notmatch '^\d+\.\d+\.\d+-beta\.\d+$') { throw 'Invalid fixture version' }
     $env:SNOW_INNO_FIXTURE = $base
@@ -52,7 +55,6 @@ def inventory(directory):
 def save(directory, v):
     (directory / record).write_text(json.dumps({"schema": 1, "product": "snow-shot",
         "platform": "windows-x64", "version": v, "variant": "online", "files": inventory(directory)}), encoding="utf-8")
-(old / "bin/snow_shot.exe").write_bytes(b"old app")
 (old / "bin/snow-shot-updater.exe").write_bytes(b"old helper")
 (old / "bin/obsolete.dll").write_bytes(b"old owned file")
 save(old, "0.0.1-beta.1")
@@ -89,6 +91,30 @@ package(root / "bad-stage", root / "bad-build")
     foreach ($file in (Get-ChildItem -LiteralPath $install -Recurse -File)) {
         $oldHashes[$file.FullName] = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
     }
+    $exe = Join-Path $output "snow-shot-$version-windows-x64-online.exe"
+    $running = Start-Process -FilePath "$install\bin\snow_shot.exe" -WindowStyle Hidden -PassThru
+    try {
+        Start-Sleep -Milliseconds 500
+        if ($running.HasExited) { throw 'Legacy app fixture exited before the test.' }
+        $blocked = Start-Process -FilePath $exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',('/LOG="' + "$base\running.log" + '"')) -Wait -PassThru
+        if ($blocked.ExitCode -eq 0 -or $running.HasExited -or
+            (Get-ItemProperty $uninstall).DisplayVersion -ne '0.0.1-beta.1' -or
+            (Test-Path -LiteralPath "$install\.snow-shot-update\journal.json")) {
+            Get-Content "$base\running.log" -ErrorAction SilentlyContinue
+            throw 'Setup must reject a running application before changing files or stopping it.'
+        }
+        foreach ($file in $oldHashes.Keys) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf) -or
+                (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $oldHashes[$file]) {
+                throw "Running application check changed original bytes: $file"
+            }
+        }
+    } finally {
+        # Only stop the test process created above; never terminate a real user app.
+        if (-not $running.HasExited) { $running.Kill(); $running.WaitForExit() }
+        $running.Dispose()
+    }
+    Write-Output 'Running legacy application blocked upgrade without being terminated.'
     $badExe = Join-Path $badOutput "snow-shot-$version-windows-x64-online.exe"
     $failed = Start-Process -FilePath $badExe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',('/LOG="' + "$base\rollback.log" + '"')) -Wait -PassThru
     if ($failed.ExitCode -eq 0) { throw 'Setup unexpectedly accepted a failing startup probe.' }
@@ -108,7 +134,6 @@ package(root / "bad-stage", root / "bad-build")
         }
     }
     Write-Output 'Failed startup probe rolled back the original files and registry version.'
-    $exe = Join-Path $output "snow-shot-$version-windows-x64-online.exe"
     $p = Start-Process -FilePath $exe -ArgumentList @('/VERYSILENT','/SUPPRESSMSGBOXES','/NORESTART','/CURRENTUSER',('/LOG="' + "$base\upgrade.log" + '"')) -Wait -PassThru
     if ($p.ExitCode -ne 0) { Get-Content "$base\upgrade.log" -ErrorAction SilentlyContinue; throw "Candidate upgrade failed: $($p.ExitCode)" }
     $record = Get-Content "$install\snow-shot-installation.json" -Raw | ConvertFrom-Json

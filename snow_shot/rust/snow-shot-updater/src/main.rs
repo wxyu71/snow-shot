@@ -183,7 +183,11 @@ fn main() {
             } else {
                 eprintln!("{} [{}]", error.message, error.code);
             }
-            std::process::exit(1);
+            std::process::exit(if error.code == "installer_application_running" {
+                10
+            } else {
+                1
+            });
         }
     }
 }

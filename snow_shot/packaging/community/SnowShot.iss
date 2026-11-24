@@ -49,7 +49,8 @@ SetupIconFile={#AppIcon}
 UninstallDisplayIcon={app}\bin\snow_shot.exe
 Uninstallable=IsFreshInstall
 CreateUninstallRegKey=IsFreshInstall
-CloseApplications=yes
+; Never let a manual upgrade send shutdown requests to a live recording/editor.
+CloseApplications=no
 RestartApplications=no
 SetupMutex=SnowShotCommunitySetup
 AllowCancelDuringInstall=no
@@ -159,17 +160,6 @@ begin
     Result := 'An upgrade must use the existing installation directory.';
 end;
 
-procedure RegisterExtraCloseApplicationsResources();
-begin
-  if not IsFreshInstall then begin
-    RegisterExtraCloseApplicationsResource(AddBackslash(ExistingRoot) + 'bin\snow_shot.exe');
-    RegisterExtraCloseApplicationsResource(AddBackslash(ExistingRoot) + 'bin\snow-shot-updater.exe');
-    RegisterExtraCloseApplicationsResource(AddBackslash(ExistingRoot) + 'bin\snow-shot-mcp.exe');
-    RegisterExtraCloseApplicationsResource(AddBackslash(ExistingRoot) + 'bin\snow-ocr-process.exe');
-    RegisterExtraCloseApplicationsResource(AddBackslash(ExistingRoot) + 'bin\crashpad_handler.exe');
-  end;
-end;
-
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   Code: Integer;
@@ -187,6 +177,8 @@ begin
       ' --manifest "' + ExpandConstant('{tmp}\community-upgrade.json') + '"' +
       ' --manifest-sha256 {#ManifestSha}', '', SW_HIDE, ewWaitUntilTerminated, Code) then
       RaiseException('The upgrade could not start. The previous installation was not removed.')
+    else if Code = 10 then
+      RaiseException('Snow Shot is running. Finish recording or editing, exit Snow Shot and its tools, then retry.')
     else if Code <> 0 then
       RaiseException('The upgrade failed. The transaction helper attempts to restore the previous installation.');
   end;
