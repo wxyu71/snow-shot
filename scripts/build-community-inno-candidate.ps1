@@ -27,6 +27,17 @@ $manifest = Join-Path $output "local-upgrade-$Variant.json"
 if (Test-Path -LiteralPath $manifest) { throw 'Use a fresh candidate output directory.' }
 & python (Join-Path $PSScriptRoot 'community_installer_signing.py') --local-variant $Variant --directory $build --output $manifest
 if ($LASTEXITCODE -ne 0) { throw 'Local update payload validation failed.' }
+$expected = @((Get-Content -LiteralPath $manifest -Raw | ConvertFrom-Json).files)
+$actual = @(Get-ChildItem -LiteralPath $stage -File -Recurse -Force)
+if ($actual.Count -ne $expected.Count) { throw 'Candidate stage inventory count mismatch.' }
+foreach ($entry in $expected) {
+    $file = Join-Path $stage $entry.path
+    if (-not (Test-Path -LiteralPath $file -PathType Leaf) -or
+        (Get-Item -LiteralPath $file).Length -ne $entry.size -or
+        (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -ne $entry.sha256) {
+        throw "Candidate stage differs from verified ZIP: $($entry.path)"
+    }
+}
 $hash = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
 $iss = Join-Path $root 'snow_shot/packaging/community/SnowShot.iss'
 $icon = Join-Path $root 'snow_shot/resources/app-icon.ico'

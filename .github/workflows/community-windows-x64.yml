@@ -526,9 +526,31 @@ jobs:
             build/ci-windows-contracts/Testing/Temporary/LastTest.log
             build/ci-windows-contracts/CMakeFiles/CMakeConfigureLog.yaml
 
+  installer-contracts:
+    name: installer-contracts (pinned Inno and Rust upgrade fixture)
+    needs: [preflight]
+    if: needs.preflight.outputs.native == 'true'
+    runs-on: windows-2022
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Bootstrap hash-pinned Inno compiler
+        shell: pwsh
+        run: ./scripts/bootstrap-community-inno.ps1
+      - name: Compile and exercise synthetic legacy upgrade
+        shell: pwsh
+        run: ./scripts/test-community-inno-candidate.ps1
+
   windows:
-    needs: [preflight, native-smoke, windows-contracts]
-    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    needs: [preflight, native-smoke, windows-contracts, installer-contracts]
+    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && needs.installer-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     permissions:
