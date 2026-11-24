@@ -93,9 +93,11 @@ jobs:
             maintenance=true
             native=false
           elif [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' && "$release" == false ]] &&
-               { [[ "$EVENT" == pull_request && "$GITHUB_HEAD_REF" == 'fix/community-actions-housekeeping' && "$PR_BASE" == '59a0ad778038fe264183240294ffeaba696d2e8b' ]] ||
-                 [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main && "$PUSH_BASE" == '59a0ad778038fe264183240294ffeaba696d2e8b' ]]; } &&
-               git diff --quiet '59a0ad778038fe264183240294ffeaba696d2e8b' "$GITHUB_SHA" -- . ':(exclude).github/workflows/community-windows-x64.yml'; then
+               { [[ "$EVENT" == pull_request && "$GITHUB_HEAD_REF" == 'fix/retire-live-ocr-ci' && "$PR_BASE" == '5e591dbb3c8cd35219cae4182aadf8d38621cb01' ]] ||
+                 [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main && "$PUSH_BASE" == '5e591dbb3c8cd35219cae4182aadf8d38621cb01' ]]; } &&
+               git diff --quiet '5e591dbb3c8cd35219cae4182aadf8d38621cb01' "$GITHUB_SHA" -- . \
+                 ':(exclude).github/workflows/community-windows-x64.yml' ':(exclude).github/workflows/community-live-paddleocr.yml' \
+                 ':(exclude).github/upstream-protection.json' ':(exclude)docs/community-windows.md' ':(exclude)scripts/paddleocr_live_e2e.py'; then
             maintenance=true
             native=false
           fi
@@ -327,6 +329,7 @@ jobs:
           python3 scripts/test-qt-cmake-contract.py
           python3 scripts/test-test-runner-policy.py
           python3 scripts/community_release.py selftest
+          python3 scripts/paddleocr_live_e2e.py --selftest
       - name: Verify rolling upstream sync PR ancestry
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/upstream-sync-')
         shell: bash
@@ -856,7 +859,7 @@ jobs:
           gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" --jq '.workflows[] | [.id,.name,.path,.state] | @tsv' > "$RUNNER_TEMP/workflows.tsv"
           while IFS=$'\t' read -r id name path state; do
             case "$name" in
-              'Community fork safety checks'|'Community quality'|'Offline Rust OCR license and dependency audit'|'Standalone Qt PaddleOCR API contract') ;;
+              'Community fork safety checks'|'Community quality'|'Offline Rust OCR license and dependency audit'|'Standalone Qt PaddleOCR API contract'|'Live Baidu AI Studio PaddleOCR E2E') ;;
               *) continue ;;
             esac
             [[ "$id" =~ ^[0-9]+$ && "$path" == .github/workflows/* ]] || exit 1
@@ -866,7 +869,19 @@ jobs:
             fi
             if [[ "$state" == active ]]; then
               gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$id/disable" >/dev/null
-              [[ "$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$id" --jq .state)" == disabled_manually ]]
+              # The registry may report a deleted/disabled state rather than
+              # disabled_manually, or take a moment to reflect the change.
+              for attempt in 1 2 3 4 5; do
+                state="$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$id" --jq .state)"
+                case "$state" in
+                  disabled_manually|disabled_inactivity|disabled_fork|deleted) break ;;
+                  *) sleep "$attempt" ;;
+                esac
+              done
+              case "$state" in
+                disabled_manually|disabled_inactivity|disabled_fork|deleted) ;;
+                *) echo "::error::Workflow $id remains $state"; exit 1 ;;
+              esac
               printf 'Disabled %s (%s)\n' "$name" "$id"
             else
               printf 'Already inactive: %s (%s)\n' "$name" "$state"
@@ -938,7 +953,7 @@ jobs:
           retire 'automation/upstream-review' '88107f99667f9cefc30fbac2c4ccaf2fdcb29e77' report-only
           retire 'review/upstream-main-4cc4dfe-20261116' "$candidate" integrated
           # Retire only merged one-time publication repairs, never newer heads.
-          for branch in 'fix/promote-accepted-214' 'fix/prerelease-tag-lookup' 'fix/community-actions-housekeeping'; do
+          for branch in 'fix/promote-accepted-214' 'fix/prerelease-tag-lookup' 'fix/community-actions-housekeeping' 'fix/retire-live-ocr-ci'; do
             repair="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --state merged --json headRefOid,mergeCommit)"
             if [[ "$(jq 'length' <<< "$repair")" == 1 ]]; then
               repair_merge="$(jq -r '.[0].mergeCommit.oid' <<< "$repair")"

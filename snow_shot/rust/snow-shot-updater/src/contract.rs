@@ -222,16 +222,9 @@ pub fn compiled_trusted_keys() -> &'static [u8] {
     include_bytes!(concat!(env!("OUT_DIR"), "/update-trusted-keys.json"))
 }
 
-pub fn verify_release(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result<UpdateRelease> {
-    verify_release_for_platform(envelope, trusted_keys, crate::edition::PLATFORM)
-}
-
-pub fn verify_release_for_platform(
-    envelope: &[u8],
-    trusted_keys: Option<&[u8]>,
-    platform: &str,
-) -> Result<UpdateRelease> {
-    crate::edition::validate_platform(platform)?;
+// Both the upstream ZIP contract and the Community EXE-only contract use the
+// same embedded trust root and RSA-PSS verification. No unsigned fallback.
+fn verify_signed_payload(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result<Vec<u8>> {
     require(
         envelope.len() <= MAX_METADATA_BYTES,
         "metadata_too_large",
@@ -303,6 +296,23 @@ pub fn verify_release_for_platform(
                 "Release signature is invalid or its signing key is not trusted",
             )
         })?;
+
+    Ok(payload)
+}
+
+pub mod community_installer;
+
+pub fn verify_release(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result<UpdateRelease> {
+    verify_release_for_platform(envelope, trusted_keys, crate::edition::PLATFORM)
+}
+
+pub fn verify_release_for_platform(
+    envelope: &[u8],
+    trusted_keys: Option<&[u8]>,
+    platform: &str,
+) -> Result<UpdateRelease> {
+    crate::edition::validate_platform(platform)?;
+    let payload = verify_signed_payload(envelope, trusted_keys)?;
 
     let signed: Value = serde_json::from_slice(&payload).map_err(|_| {
         UpdateError::new("unsupported_update_release", "Unsupported update release")
