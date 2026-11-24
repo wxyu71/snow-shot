@@ -156,6 +156,28 @@ def payload_for(directory: Path, version: str, published_at: str) -> bytes:
     return json.dumps(document, sort_keys=True, separators=(",", ":")).encode("utf-8")
 
 
+def local_installer_manifest(directory: Path, version: str, variant: str) -> bytes:
+    release.release_tag(version)
+    if variant not in ("online", "offline"):
+        raise ValueError("Invalid installer variant")
+    stem = f"snow-shot-{version}-windows-x64-{variant}"
+    archive = directory / f"{stem}-update.zip"
+    # The packaging script emits an archive manifest before either EXE exists.
+    manifest = json.loads((directory / f"{stem}-update.manifest.json").read_text(encoding="utf-8-sig"))
+    if (manifest.get("PackageVersion") != version or manifest.get("Variant") != variant
+            or manifest.get("Architecture") != "x64" or manifest.get("Platform") != "windows-x64"
+            or manifest.get("NativeValidation", {}).get("Passed") is not True):
+        raise ValueError("Update archive failed its production manifest")
+    digest = file_digest(archive)
+    if manifest.get("Archive", {}).get("Sha256", "").lower() != digest:
+        raise ValueError("Archive checksum mismatch")
+    files = zip_inventory(archive, version, variant, manifest)
+    return json.dumps({"schema": 1, "product": "snow-shot-community", "platform": "windows-x64",
+                       "version": version, "variant": variant, "size": archive.stat().st_size,
+                       "sha256": digest, "files": files},
+                      sort_keys=True, separators=(",", ":")).encode("utf-8")
+
+
 def sign(payload: bytes, private_key: Path, key_id: str, trust: Path) -> bytes:
     if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", key_id):
         raise ValueError("Invalid key identifier")
@@ -257,6 +279,7 @@ def selftest() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--selftest", action="store_true")
+    parser.add_argument("--local-variant", choices=("online", "offline"))
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--private-key", type=Path)
     parser.add_argument("--key-id")
@@ -264,6 +287,12 @@ def main() -> None:
     args = parser.parse_args()
     if args.selftest:
         selftest()
+        return
+    if args.local_variant:
+        if not args.directory or not args.output:
+            parser.error("Local installer manifest requires --directory and --output")
+        with args.output.open("xb") as stream:
+            stream.write(local_installer_manifest(args.directory, release.source_version(), args.local_variant))
         return
     if not all((args.directory, args.private_key, args.key_id, args.output)):
         parser.error("Signing requires --directory, --private-key, --key-id and --output")

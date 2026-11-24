@@ -265,17 +265,39 @@ fn registered_installation_for_key(
     }
 }
 
+fn registered_installation(root: &Path) -> Result<Option<RegisteredInstallation>> {
+    // Beta 1 changed CPack's vendor string; installations from the upstream
+    // vendor must still be recognized without writing a new registry identity.
+    if !crate::edition::MINI {
+        if let Some(registration) = registered_installation_for_key(
+            root, r"Software\Snow Shot Community\SnowShot",
+        )? {
+            return Ok(Some(registration));
+        }
+    }
+    registered_installation_for_key(root, INSTALL_KEY)
+}
+
+fn registered_uninstall_key(registration: RegisteredInstallation) -> Result<String> {
+    let inno = format!("{UNINSTALL_KEY}_is1");
+    let modern = read_registry_string(registration, &inno, "UninstallString")?.is_some();
+    let legacy = read_registry_string(registration, UNINSTALL_KEY, "UninstallString")?.is_some();
+    require(!(modern && legacy), "ambiguous_installation_registration",
+            "Multiple uninstall registrations match this installation")?;
+    Ok(if modern { inno } else { UNINSTALL_KEY.to_owned() })
+}
+
 pub fn registered_target_matches(root: &Path) -> Result<bool> {
-    registered_installation_for_key(root, INSTALL_KEY).map(|registration| registration.is_some())
+    registered_installation(root).map(|registration| registration.is_some())
 }
 
 // No registry mutation: for a missing key, check creation rights on its nearest
 // existing ancestor. A successful check is repeated in the elevated bootstrap.
 pub fn registered_version_requires_elevation(root: &Path) -> Result<bool> {
-    let Some(registration) = registered_installation_for_key(root, INSTALL_KEY)? else {
+    let Some(registration) = registered_installation(root)? else {
         return Ok(false);
     };
-    registered_version_requires_elevation_for_key(registration, UNINSTALL_KEY)
+    registered_version_requires_elevation_for_key(registration, &registered_uninstall_key(registration)?)
 }
 
 fn registered_version_requires_elevation_for_key(
@@ -314,10 +336,10 @@ fn registered_version_requires_elevation_for_key(
 }
 
 pub fn write_registered_version(root: &Path, version: &str) -> Result<()> {
-    let Some(registration) = registered_installation_for_key(root, INSTALL_KEY)? else {
+    let Some(registration) = registered_installation(root)? else {
         return Ok(());
     };
-    write_registered_version_for_key(registration, UNINSTALL_KEY, version)
+    write_registered_version_for_key(registration, &registered_uninstall_key(registration)?, version)
 }
 
 fn write_registered_version_for_key(

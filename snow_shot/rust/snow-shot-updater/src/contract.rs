@@ -774,7 +774,7 @@ pub(crate) mod tests {
         assert_eq!(accepted.update_package("offline").unwrap().kind, "update");
         assert!(accepted.update_package("portable").is_err());
         for (field, value) in [
-            ("repository", json!("mg-chao/snow-shot")),
+            ("repository", json!("foreign/project")),
             ("version", json!("1.6.3")),
             ("platform", json!("windows-arm64")),
         ] {
