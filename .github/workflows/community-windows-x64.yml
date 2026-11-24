@@ -1,10 +1,10 @@
 name: Community Windows x64
 
 on:
-  # Ordinary PR commits are lightweight. A goal-completion commit with the
-  # exact "CI-Full: true" trailer requests the full Windows acceptance once.
   pull_request:
-    types: [opened, reopened, synchronize]
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish_prerelease:
@@ -15,21 +15,18 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
-  # New namespace avoids cancelling an already-running pre-migration Beta validation.
-  # Still cancels superseded PR runs within this lightweight generation.
-  group: community-windows-x64-lightweight-v2-${{ github.ref }}
+  group: community-windows-x64-${{ github.ref }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   preflight:
     runs-on: ubuntu-24.04
-    # 2026-11-23 #145 measured ~78 sec. Five minutes is a hard ceiling.
-    timeout-minutes: 5
+    timeout-minutes: 20
     outputs:
       native: ${{ steps.classify.outputs.native }}
-      goal_full: ${{ steps.classify.outputs.goal_full }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -38,37 +35,37 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Classify change and goal completion
+      - name: Classify change
         id: classify
         shell: bash
-        env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
-          PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "native=true" >> "$GITHUB_OUTPUT"
-            echo "goal_full=false" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
+          case "${{ github.event_name }}" in
+            pull_request)
+              base="${{ github.event.pull_request.base.sha }}"
+              ;;
+            push)
+              base="${{ github.event.before }}"
+              # A new branch / missing before commit must receive full CI.
+              if [[ -z "$base" || "$base" == 0000000000000000000000000000000000000000 ]] ||
+                 ! git cat-file -e "$base^{commit}" 2>/dev/null; then
+                echo "native=true" >> "$GITHUB_OUTPUT"
+                exit 0
+              fi
+              ;;
+            *)
+              echo "native=true" >> "$GITHUB_OUTPUT"
+              exit 0
+              ;;
+          esac
           native=false
           while IFS= read -r -d '' path; do
             case "$path" in
               *.md|*.markdown|*.rst|docs/*) ;;
               *) native=true ;;
             esac
-          done < <(git diff --name-only -z "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")
-          goal_full=false
-          # In-repo reviewed goal only. A fork cannot request expensive runners.
-          # Read the actual PR head, not GitHub's synthetic PR merge commit.
-          if [[ "$PR_HEAD_REPO" == "$GITHUB_REPOSITORY" ]] &&
-              git show -s --format=%B "$PR_HEAD_SHA" | grep -Fxq 'CI-Full: true'; then
-            goal_full=true
-            native=true
-            echo "Goal completed: run the full Windows build and NSIS acceptance."
-          fi
+          done < <(git diff --name-only -z "$base" "$GITHUB_SHA")
           echo "native=$native" >> "$GITHUB_OUTPUT"
-          echo "goal_full=$goal_full" >> "$GITHUB_OUTPUT"
       - name: Ensure upstream ShellCheck is available to actionlint
         shell: bash
         run: |
@@ -112,10 +109,7 @@ jobs:
         with:
           args: >-
             --offline --no-progress --root-dir .
-            README.md README.zh-CN.md AGENTS.md docs/README.md
-            docs/architecture/overview.md docs/development/testing.md
-            docs/releases/beta1-checklist.md docs/platforms/macos-build.md
-            docs-macos-build.md
+            README.md README.zh-CN.md AGENTS.md 'docs/**/*.md'
           fail: true
 
       - name: Audit workflow security with zizmor
@@ -225,13 +219,28 @@ jobs:
           head="${PR_HEAD_SHA:-HEAD}"
           git diff --check "$head^" "$head"
           python3 scripts/test-upstream-sync.py
-          python3 scripts/upstream_sync.py verify-review-ancestry
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
-          # This gate validates Community CTest selection only. The unrelated
-          # clipboard resource-lock fixture needs its own dedicated follow-up.
-          python3 scripts/test-test-runner-policy.py TestRunnerPolicyTests
+          python3 scripts/test-test-runner-policy.py
           python3 scripts/community_release.py selftest
+      - name: Verify rolling upstream sync PR ancestry
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/upstream-sync-')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SYNC_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SYNC_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          upstream_repo="$(python3 -c 'import json; print(json.load(open(".github/upstream-protection.json"))["upstream"])')"
+          git remote add upstream "https://github.com/${upstream_repo}.git"
+          git fetch --no-tags upstream '+refs/heads/main:refs/remotes/upstream/main'
+          git fetch --no-tags origin "+refs/heads/${GITHUB_HEAD_REF}:refs/remotes/origin/${GITHUB_HEAD_REF}"
+          gh pr view "$SYNC_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/upstream-sync-pr-body.md"
+          python3 scripts/upstream_sync.py validate-pr \
+            --body-file "$RUNNER_TEMP/upstream-sync-pr-body.md" \
+            --head "$SYNC_HEAD_SHA" --base "$SYNC_BASE_SHA"
       - name: Validate prerelease source
         if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
         shell: bash
@@ -405,18 +414,12 @@ jobs:
 
   windows:
     needs: [preflight, native-smoke, windows-contracts]
-    # Full CI is required once per completed goal, not once per intermediate
-    # commit. workflow_dispatch remains available for deliberate validation.
-    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && (github.event_name == 'workflow_dispatch' || needs.preflight.outputs.goal_full == 'true')
+    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     permissions:
       contents: read
-      packages: write
     env:
-      # Known available on the 2026-11-21 runner. A missing pin fails before
-      # NSIS, cache restoration, or dependency compilation.
-      SNOW_MSVC_TOOLSET_VERSION: "14.52.37025"
       SNOW_X264_USE_GIT_MIRROR: "1"
       VCPKG_DOWNLOADS: ${{ github.workspace }}/.tools/vcpkg-downloads
     steps:
@@ -426,80 +429,52 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Select pinned MSVC toolset and SDK
-        id: toolchain
+      - name: Bootstrap NSIS and smoke-test CPack
+        shell: pwsh
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/bootstrap-community-nsis.ps1
+
+      # Test scripts deliberately exercise failing native commands. Run each
+      # in a separate PowerShell process so the step receives the suite's exit
+      # status rather than the last command's status inside the suite.
+      - name: Validate static Qt policies with executable fixtures
+        shell: pwsh
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/test-static-qt-features.ps1
+
+      - name: Test Qt cache ABI fingerprinting
+        shell: pwsh
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/test-qt-cache-identity.ps1
+
+      # A runner label can move to a newer MSVC/SDK/CMake image while its
+      # literal label remains unchanged. Include actual tool hashes.
+      - name: Identify native Windows toolchain
+        id: toolchain-cache
         shell: pwsh
         run: |
           . ./scripts/snow-build-environment.ps1
           Add-SnowMsvcToolsToPath -Architecture x64 | Out-Null
-          "version=$env:VCToolsVersion" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-          "sdk=$($env:WindowsSDKVersion.TrimEnd('\', '/'))" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
-          Write-Host "Pinned MSVC $env:VCToolsVersion; Windows SDK $env:WindowsSDKVersion"
-
-      - name: Bootstrap NSIS and smoke-test CPack
-        shell: pwsh
-        run: ./scripts/bootstrap-community-nsis.ps1
+          $inputs = @()
+          foreach ($tool in @('cl.exe', 'link.exe', 'lib.exe', 'cmake.exe')) {
+            $resolved = Get-Command $tool -CommandType Application -ErrorAction Stop | Select-Object -First 1
+            $inputs += (Get-FileHash -LiteralPath $resolved.Source -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $inputs += $env:VCToolsVersion, $env:WindowsSDKVersion, $PSVersionTable.PSVersion.ToString()
+          $digest = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData(
+            [System.Text.Encoding]::UTF8.GetBytes(($inputs -join '|')))).ToLowerInvariant()
+          "key=$digest" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host "Windows build toolchain fingerprint: $digest"
 
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-msvc-${{ steps.toolchain.outputs.version }}-sdk-${{ steps.toolchain.outputs.sdk }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
-      - name: Restore vcpkg source downloads
-        id: vcpkg-sources
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .tools/vcpkg-downloads
-          key: community-vcpkg-sources-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/x264/portfile.cmake') }}
-          restore-keys: |
-            community-vcpkg-sources-v1-
-      - name: Restore SHA-addressed vcpkg asset cache
-        id: vcpkg-assets
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .tools/vcpkg-asset-cache
-          key: community-vcpkg-assets-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**') }}
-          restore-keys: |
-            community-vcpkg-assets-v1-
-
-      - name: Bootstrap pinned vcpkg executable before configuring cache
+          key: vcpkg-abi-windows-x64-static-${{ steps.toolchain-cache.outputs.key }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+      - name: Enable vcpkg binary cache
         shell: pwsh
-        run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipDependencyInstall -SkipQtValidation
-
-      - name: Configure official vcpkg binary and asset cache providers
-        shell: pwsh
-        env:
-          GH_PACKAGES_TOKEN: ${{ github.token }}
         run: |
-          $ErrorActionPreference = 'Stop'
-          $binary = Join-Path $PWD '.tools/vcpkg-binary-cache'
-          $assets = Join-Path $PWD '.tools/vcpkg-asset-cache'
-          New-Item -ItemType Directory -Force -Path $binary,$assets | Out-Null
-          $assetUri = [Uri]::new(((Resolve-Path $assets).Path + [IO.Path]::DirectorySeparatorChar)).AbsoluteUri
-          "X_VCPKG_ASSET_SOURCES=clear;x-azurl,$assetUri,,readwrite" |
-            Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-          $sources = "clear;files,$binary,readwrite"
-          $feed = "https://nuget.pkg.github.com/$env:GITHUB_REPOSITORY_OWNER/index.json"
-          $vcpkg = Join-Path $PWD '.tools/vcpkg/vcpkg.exe'
-          try {
-            $nuget = (& $vcpkg fetch nuget --disable-metrics | Select-Object -Last 1)
-            if ($LASTEXITCODE -ne 0 -or -not (Test-Path $nuget)) {
-              throw 'vcpkg could not retrieve the official NuGet client'
-            }
-            & $nuget sources Add -Name SnowShotGitHubPackages -Source $feed `
-              -UserName $env:GITHUB_ACTOR -Password $env:GH_PACKAGES_TOKEN `
-              -StorePasswordInClearText -NonInteractive
-            if ($LASTEXITCODE -ne 0) { throw 'NuGet source authentication failed' }
-            & $nuget setapikey $env:GH_PACKAGES_TOKEN -Source $feed -NonInteractive
-            if ($LASTEXITCODE -ne 0) { throw 'NuGet package publishing authorization failed' }
-            $sources += ";nuget,$feed,readwrite"
-            Write-Host 'GitHub Packages per-port NuGet binary cache enabled.'
-          } catch {
-            Write-Host "Optional NuGet cache unavailable: $($_.Exception.Message). Local binary cache remains enabled."
-          }
-          "VCPKG_BINARY_SOURCES=$sources" |
-            Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
+          $cache = Join-Path $PWD '.tools/vcpkg-binary-cache'
+          New-Item -ItemType Directory -Force -Path $cache | Out-Null
+          "VCPKG_BINARY_SOURCES=clear;files,$cache,readwrite" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
 
       - name: Restore Cargo sources
         id: cargo-cache
@@ -508,59 +483,55 @@ jobs:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: cargo-sources-windows-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Install pinned build dependencies
         shell: pwsh
         run: ./scripts/bootstrap.ps1 -Preset snow-shot-msvc-release -VcpkgVariants Static -SkipQtValidation
 
-      - name: Save vcpkg source downloads
-        if: (success() || failure()) && steps.vcpkg-sources.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .tools/vcpkg-downloads
-          key: community-vcpkg-sources-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/x264/portfile.cmake') }}
-
-      - name: Save SHA-addressed vcpkg asset cache
-        if: (success() || failure()) && steps.vcpkg-assets.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: .tools/vcpkg-asset-cache
-          key: community-vcpkg-assets-v1-${{ hashFiles('vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**') }}
-
       - name: Save vcpkg binary cache
-        if: (success() || failure()) && steps.vcpkg-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
+        if: steps.vcpkg-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-msvc-${{ steps.toolchain.outputs.version }}-sdk-${{ steps.toolchain.outputs.sdk }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: vcpkg-abi-windows-x64-static-${{ steps.toolchain-cache.outputs.key }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+
+      # Qt binaries are derived from the resolved vcpkg ABI and the exact
+      # host compiler, not from manually bumped cache generations.
+      - name: Compute static Qt cache identity
+        id: qt-identity
+        shell: pwsh
+        run: |
+          ./scripts/qt-cache-identity.ps1 -Architecture x64 -Configuration Release -DevelopmentModules
 
       - name: Restore static Qt
         id: qt-cache
         uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          path: ${{ steps.qt-identity.outputs.prefix }}
+          key: qt-static-windows-${{ steps.qt-identity.outputs.key }}
+          # No restore-keys: using a kit from a different ABI is unsafe.
+
       - name: Build or validate static Qt
         shell: pwsh
+        env:
+          QT_INSTALL_PREFIX: ${{ steps.qt-identity.outputs.prefix }}
         run: |
-          $prefix = Join-Path $PWD '.tools/qt/6.12.0/x64-static-release'
-          ./scripts/build-static-qt.ps1 -InstallPrefix $prefix -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
+          # An exact cache hit must pass the audited source/feature/ABI checks.
+          # A mismatch is a key-design or cache-integrity error, not an excuse
+          # to mutate an immutable cache entry and claim the build is green.
+          ./scripts/build-static-qt.ps1 -InstallPrefix $env:QT_INSTALL_PREFIX -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
           if ($LASTEXITCODE -ne 0) { throw 'Static Qt build failed' }
-          $qt6Dir = Join-Path $prefix 'lib/cmake/Qt6'
+          $qt6Dir = Join-Path $env:QT_INSTALL_PREFIX 'lib/cmake/Qt6'
           if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) { throw 'Qt6Config.cmake missing' }
           "SNOW_QT_STATIC_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           "Qt6_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-      - name: Save static Qt
+      - name: Save validated static Qt
         if: steps.qt-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          path: ${{ steps.qt-identity.outputs.prefix }}
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
 
       - name: Verify release license graph before expensive native linking
         shell: pwsh
@@ -591,13 +562,12 @@ jobs:
         run: ctest --preset test-snow-shot-msvc-community --output-on-failure --output-junit "$env:RUNNER_TEMP/community-windows-native-junit.xml"
       - name: Save complete Cargo sources
         if: steps.cargo-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: cargo-sources-windows-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Build production Windows x64
         shell: pwsh

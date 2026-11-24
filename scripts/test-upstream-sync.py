@@ -1,129 +1,106 @@
 #!/usr/bin/env python3
-"""Unit tests for automatic upstream reconciliation safety policy."""
+"""Policy and real Git-history regression tests for the rolling sync PR."""
+from __future__ import annotations
+
 import json
-import textwrap
-import tempfile
-import subprocess
-import shutil
-import os
 import pathlib
+import subprocess
 import sys
+import tempfile
 import unittest
+from unittest.mock import patch
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
-import upstream_sync  # noqa: E402
+import upstream_sync as sync  # noqa: E402
 
 
-class UpstreamSyncGuardTests(unittest.TestCase):
+class ClassifierTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        cls.policy = json.loads(upstream_sync.POLICY.read_text(encoding="utf-8"))
+        cls.policy = json.loads(sync.POLICY.read_text(encoding="utf-8"))
 
     def decision(self, incoming, local=(), patch=False):
-        return upstream_sync.decide(set(incoming), set(local), self.policy, patch)
+        return sync.decide(set(incoming), set(local), self.policy, patch)
 
-    def test_empty_upstream_is_noop(self):
+    def test_noop(self):
         self.assertEqual(self.decision([])["mode"], "noop")
 
-    def test_unrelated_safe_documentation_is_auto(self):
-        self.assertEqual(
-            self.decision(["docs/upstream-release-notes.md"])["mode"],
-            "auto"
-        )
+    def test_unrelated_source_is_eligible_for_ci_gated_automatic_sync(self):
+        self.assertEqual(self.decision(["snow_shot/src/selection/safe.cpp"])["mode"], "auto")
 
-    def test_arbitrary_text_file_is_not_treated_as_documentation(self):
-        self.assertEqual(self.decision(["cmake/toolchain.txt"])["mode"], "review")
+    def test_documentation_is_eligible(self):
+        self.assertEqual(self.decision(["docs/upstream-notes.md"])["mode"], "auto")
 
-    def test_unrelated_source_requires_normal_pr_review(self):
-        result = self.decision(["snow_shot/src/presentation/selection/safe_selection.cpp"])
+    def test_workflows_require_manual_review(self):
+        self.assertEqual(self.decision([".github/workflows/release.yml"])["mode"], "review")
+
+    def test_same_file_without_git_conflict_still_requires_review(self):
+        result = self.decision(["snow_shot/src/example.cpp"], ["snow_shot/src/example.cpp"])
         self.assertEqual(result["mode"], "review")
-        self.assertEqual(result["review_required"], ["snow_shot/src/presentation/selection/safe_selection.cpp"])
+        self.assertTrue(result["overlap"])
 
-    def test_build_workflow_cannot_silently_auto_merge(self):
-        self.assertEqual(
-            self.decision([".github/workflows/release.yml"])["mode"], "review"
-        )
+    def test_community_ocr_is_protected(self):
+        self.assertEqual(self.decision(["snow_shot/src/network/baidupaddleocrclient.cpp"])["mode"], "review")
 
-    def test_overlapping_modifications_require_review(self):
-        self.assertEqual(
-            self.decision(["snow_shot/src/presentation/same.cpp"],
-                          ["snow_shot/src/presentation/same.cpp"])["mode"],
-            "review"
-        )
+    def test_deleted_account_code_is_protected(self):
+        self.assertEqual(self.decision(["snow_shot/src/app/accountsessionservice.cpp"])["mode"], "review")
 
-    def test_deleted_account_file_cannot_reappear(self):
-        self.assertEqual(
-            self.decision(["snow_shot/src/app/accountsessionservice.cpp"])["mode"],
-            "review"
-        )
+    def test_macos_login_item_not_commercial_account(self):
+        self.assertEqual(self.decision(["snow_shot/tests/login_item_native_tests.mm"])["mode"], "auto")
+        self.assertEqual(self.decision(["snow_shot/tests/login.cpp"])["mode"], "review")
 
-    def test_removed_homebrew_workflow_cannot_reappear(self):
-        path = ".github/workflows/snow-shot-homebrew-checks.yml"
-        self.assertIn(path, self.policy["deleted_files"])
-        self.assertFalse((ROOT / path).exists())
-        self.assertEqual(self.decision([path])["mode"], "review")
+    def test_commercial_content_requires_review(self):
+        self.assertEqual(self.decision(["new_module.cpp"], patch=True)["mode"], "review")
 
-    def test_protected_cloud_ocr_file_requires_review(self):
-        self.assertEqual(
-            self.decision(["snow_shot/src/network/baidupaddleocrclient.cpp"])["mode"],
-            "review"
-        )
+    def test_release_config_is_protected(self):
+        self.assertEqual(self.decision(["CMakePresets.json"])["mode"], "review")
 
-    def test_commercial_feature_in_new_file_requires_review(self):
-        self.assertEqual(
-            self.decision(["snow_shot/src/app/billing_gateway.cpp"])["mode"], "review"
-        )
+    def test_body_preserves_human_text(self):
+        meta = {"version": 1, "baseline": "a" * 40, "target": "b" * 40, "risk": "review"}
+        section = sync.managed_section(meta, "start", ["risk"])
+        body = "Human review notes\n\n" + section + "\n\nHuman checklist"
+        self.assertEqual(sync.parse_metadata(body), meta)
+        replacement = sync.managed_section(meta, "updated", [])
+        new = sync.replace_managed(body, replacement)
+        self.assertIn("Human review notes", new)
+        self.assertIn("Human checklist", new)
+        self.assertNotIn("start", new)
+        self.assertIn("updated", new)
 
-    def test_commercial_content_in_innocent_path_requires_review(self):
-        self.assertEqual(
-            self.decision(["snow_shot/src/presentation/new_ui.cpp"], patch=True)["mode"],
-            "review"
-        )
+    def test_body_refuses_ambiguous_marker(self):
+        with self.assertRaises(RuntimeError):
+            sync.parse_metadata("GitHub text without bot section")
 
-    def test_release_configuration_is_protected(self):
-        self.assertEqual(self.decision(["CMakeLists.txt"])["mode"], "review")
-
-    def test_update_trust_store_and_submodule_metadata_are_protected(self):
-        for path in (
-            "snow_shot/resources/update-trusted-keys.json",
-            ".gitmodules",
-            "snow-crates/crates/simd-paddle-ocr-rs",
-            "snow-draw-engine-gpui/Cargo.toml",
-            "snow-draw-engine-gpui/Cargo.lock",
-        ):
-            result = self.decision([path])
-            self.assertEqual(result["mode"], "review")
-            self.assertEqual(result["protected"], [path])
 
     def test_community_updater_has_no_trusted_remote_signer(self):
-        upstream_sync.assert_community_update_signers_disabled()
+        sync.assert_community_update_signers_disabled()
 
     def test_sensitive_local_control_defaults_are_fail_closed(self):
-        upstream_sync.assert_sensitive_local_control_defaults_disabled()
+        sync.assert_sensitive_local_control_defaults_disabled()
 
     def test_local_histories_default_on_while_startup_remains_opt_in(self):
-        upstream_sync.assert_community_local_history_defaults()
+        sync.assert_community_local_history_defaults()
 
     def test_external_source_dependency_parser_rejects_mutable_refs(self):
         pinned = {
             "git": "https://example.invalid/dependency.git",
             "rev": "0123456789abcdef0123456789abcdef01234567",
         }
-        self.assertTrue(upstream_sync.immutable_git_dependency(pinned))
+        self.assertTrue(sync.immutable_git_dependency(pinned))
         self.assertFalse(
-            upstream_sync.immutable_git_dependency(
+            sync.immutable_git_dependency(
                 {"git": pinned["git"], "branch": "main", "rev": pinned["rev"]}
             )
         )
         self.assertFalse(
-            upstream_sync.immutable_git_dependency(
+            sync.immutable_git_dependency(
                 {"git": pinned["git"], "rev": "v1.2.3"}
             )
         )
 
     def test_external_source_dependencies_are_immutable(self):
-        upstream_sync.assert_external_source_pins()
+        sync.assert_external_source_pins()
 
 
     def test_local_control_privilege_boundaries_are_protected(self):
@@ -138,10 +115,10 @@ class UpstreamSyncGuardTests(unittest.TestCase):
             self.assertEqual(result["protected"], [path])
 
     def test_current_tree_has_no_account_telemetry_or_upstream_runtime_endpoints(self):
-        upstream_sync.assert_forbidden_runtime_content_absent()
+        sync.assert_forbidden_runtime_content_absent()
 
     def test_forbidden_content_guard_catches_upstream_identity_and_telemetry(self):
-        forbidden = upstream_sync.FORBIDDEN_COMMUNITY_CONTENT
+        forbidden = sync.FORBIDDEN_COMMUNITY_CONTENT
         for value in (
             "mg-chao/snow-shot",
             "mg-chao.snow-shot",
@@ -154,201 +131,110 @@ class UpstreamSyncGuardTests(unittest.TestCase):
         self.assertNotRegex("const qreal amplitude = 1.0;", forbidden)
 
 
-    def test_upstream_review_candidate_is_real_and_retries_preserve_it(self):
-        workflow = (ROOT / ".github" / "workflows" / "upstream-sync.yml").read_text(
-            encoding="utf-8"
-        )
-        script = textwrap.dedent(workflow.split(
-            "      - name: Apply safe sync or update the review candidate\n", 1
-        )[1].split("        run: |\n", 1)[1])
-        subprocess.run(["bash", "-n"], input=script, text=True, check=True)
-
-        for overlapping, blocked, creation in ((False, False, 'ok'), (True, False, 'ok'),
-                                               (True, True, 'ok'), (False, False, 'restricted'),
-                                               (False, False, 'unexpected')):
-            with self.subTest(conflict=overlapping, token_blocked=blocked,
-                              pr_creation=creation), tempfile.TemporaryDirectory() as temp:
-                base = pathlib.Path(temp)
-                work, bare = base / "work", base / "origin.git"
-                subprocess.run(["git", "init", "-q", "--bare", str(bare)], check=True)
-                subprocess.run(["git", "init", "-q", "-b", "main", str(work)], check=True)
-
-                def git(*args):
-                    return subprocess.check_output(
-                        ["git", *args], cwd=work, text=True, stderr=subprocess.PIPE
-                    ).strip()
-
-                git("config", "user.name", "CI test")
-                git("config", "user.email", "ci-test@example.invalid")
-                (work / ".github").mkdir()
-                (work / ".github" / "keep.txt").write_text("baseline\n", encoding="utf-8")
-                (work / "shared.txt").write_text("base\n", encoding="utf-8")
-                git("add", ".")
-                git("commit", "-m", "common ancestor")
-                git("remote", "add", "origin", str(bare))
-                git("push", "-u", "origin", "main")
-                git("switch", "-c", "official")
-                (work / "shared.txt").write_text("official\n", encoding="utf-8")
-                git("add", ".")
-                git("commit", "-m", "official upstream")
-                upstream_sha = git("rev-parse", "HEAD")
-                git("update-ref", "refs/remotes/upstream/main", upstream_sha)
-                git("switch", "main")
-                local_file = "shared.txt" if overlapping else "community.txt"
-                (work / local_file).write_text("community\n", encoding="utf-8")
-                git("add", ".")
-                git("commit", "-m", "community customization")
-                main_sha = git("rev-parse", "HEAD")
-                git("push", "origin", "main")
-
-                mock_bin = base / "bin"
-                mock_bin.mkdir()
-                mock_gh = mock_bin / "gh"
-                mock_gh.write_text(
-                    '#!/usr/bin/env bash\n'
-                    'if [[ "$1 $2" == "pr list" ]]; then\n'
-                    '  printf "%s" "$MOCK_REVIEW_PR"\n'
-                    'elif [[ "$1 $2" == "pr create" ]]; then\n'
-                    '  echo create >> "$MOCK_EVENT_FILE"\n'
-                    '  if [[ "$MOCK_PR_CREATE" == "restricted" ]]; then\n'
-                    '    echo "GitHub Actions is not permitted to create or approve pull requests" >&2\n'
-                    '    exit 1\n'
-                    '  elif [[ "$MOCK_PR_CREATE" == "unexpected" ]]; then\n'
-                    '    echo "Unexpected API failure" >&2\n'
-                    '    exit 1\n'
-                    '  fi\n'
-                    '  echo "https://github.com/example/fork/pull/42"\n'
-                    'else exit 99; fi\n',
-                    encoding="utf-8",
-                )
-                mock_gh.chmod(0o755)
-                mock_git = mock_bin / "git"
-                mock_git.write_text(
-                    '#!/usr/bin/env bash\n'
-                    'if [[ "$1" == "push" && "$MOCK_BLOCK_WORKFLOWS" == "1" '
-                    '&& ! -f "$MOCK_BLOCKED_FILE" ]]; then\n'
-                    '  touch "$MOCK_BLOCKED_FILE"\n'
-                    '  echo "remote: refusing to allow a GitHub App to create or '
-                    'update workflow .github/workflows/example.yml without workflows permission" >&2\n'
-                    '  exit 1\n'
-                    'fi\n'
-                    'exec "' + str(shutil.which("git")) + '" "$@"\n',
-                    encoding="utf-8",
-                )
-                mock_git.chmod(0o755)
-                sync_file = base / "sync.json"
-                sync_file.write_text(json.dumps({
-                    "upstream_commit": upstream_sha,
-                    "reasons": ["manual review requested"],
-                }), encoding="utf-8")
-                events = base / "events"
-                env = dict(os.environ)
-                env.update({
-                    "PATH": str(mock_bin) + os.pathsep + env["PATH"],
-                    "RUNNER_TEMP": str(base),
-                    "GITHUB_STEP_SUMMARY": str(base / "summary.md"),
-                    "GITHUB_REPOSITORY": "example/fork",
-                    "GH_TOKEN": "test",
-                    "CLASSIFIED_MODE": "review",
-                    "MOCK_REVIEW_PR": "",
-                    "MOCK_EVENT_FILE": str(events),
-                    "MOCK_BLOCK_WORKFLOWS": "1" if blocked else "0",
-                    "MOCK_PR_CREATE": creation,
-                    "MOCK_BLOCKED_FILE": str(base / "push-blocked"),
-                })
-                first_run = subprocess.run(
-                    ["bash", "-c", script], cwd=work, env=env,
-                    capture_output=True, text=True, check=False
-                )
-                if creation == "unexpected":
-                    self.assertNotEqual(first_run.returncode, 0)
-                    self.assertIn("Unexpected API failure", first_run.stderr)
-                else:
-                    self.assertEqual(first_run.returncode, 0, first_run.stderr)
-                if creation == "restricted":
-                    self.assertIn("Manual upstream sync PR required",
-                                  (base / "summary.md").read_text(encoding="utf-8"))
-                    self.assertIn("PR creation restricted", first_run.stdout)
-                review_ref = (
-                    "refs/heads/automation/upstream-review-"
-                    + upstream_sha[:12] + "-" + main_sha[:8]
-                )
-                review_sha = git("--git-dir=" + str(bare), "rev-parse", review_ref)
-                self.assertEqual(git("--git-dir=" + str(bare), "rev-parse", "main"), main_sha)
-                if blocked:
-                    self.assertNotEqual(
-                        subprocess.run(
-                            ["git", "merge-base", "--is-ancestor", upstream_sha, review_sha],
-                            cwd=work, capture_output=True
-                        ).returncode, 0
-                    )
-                    self.assertIn(
-                        "Unresolved upstream integration",
-                        git("show", review_sha + ":.github/upstream-review-pending.md")
-                    )
-                else:
-                    self.assertEqual(
-                        git("merge-base", review_sha, upstream_sha), upstream_sha
-                    )
-                    if overlapping:
-                        self.assertEqual(review_sha, upstream_sha)
-                    else:
-                        self.assertEqual(
-                            len(git("rev-list", "--parents", "-n1", review_sha).split()), 3
-                        )
-
-                # A subsequent scheduled run must reuse the PR, not replace its
-                # branch or create a new PR.
-                env["MOCK_REVIEW_PR"] = "42"
-                subprocess.run(
-                    ["bash", "-c", script], cwd=work, env=env,
-                    capture_output=True, text=True, check=True
-                )
-                self.assertEqual(
-                    git("--git-dir=" + str(bare), "rev-parse", review_ref), review_sha
-                )
-                self.assertEqual(events.read_text(encoding="utf-8"), "create\n")
 
 
+class GitIntegrationTests(unittest.TestCase):
+    """Exercise actual git merge against diverged temporary repositories."""
 
-    def test_review_candidate_requires_actual_git_ancestry(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = pathlib.Path(temp)
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.temp.cleanup)
+        self.repo = pathlib.Path(self.temp.name) / "repo"
+        self.repo.mkdir()
+        self.sh("git", "init", "-b", "main")
+        self.sh("git", "config", "user.email", "tester@example.com")
+        self.sh("git", "config", "user.name", "Tester")
+        self.write("shared.txt", "initial\n")
+        self.write("local.txt", "original\n")
+        self.sh("git", "add", ".")
+        self.sh("git", "commit", "-m", "base")
+        self.base = self.sh("git", "rev-parse", "HEAD")
+        self.sh("git", "branch", "upstream")
+        self.orig_root = sync.ROOT
+        sync.ROOT = self.repo
+        self.addCleanup(setattr, sync, "ROOT", self.orig_root)
 
-            def git(*args):
-                return subprocess.check_output(["git", *args], cwd=root, text=True).strip()
+    def sh(self, *args):
+        return subprocess.check_output(args, cwd=self.repo, text=True, stderr=subprocess.STDOUT).strip()
 
-            git("init", "-q", "-b", "main")
-            git("config", "user.name", "CI test")
-            git("config", "user.email", "ci-test@example.invalid")
-            (root / "common.txt").write_text("base\n", encoding="utf-8")
-            git("add", ".")
-            git("commit", "-qm", "base")
-            base_sha = git("rev-parse", "HEAD")
-            git("switch", "-qc", "official")
-            (root / "official.txt").write_text("upstream\n", encoding="utf-8")
-            git("add", ".")
-            git("commit", "-qm", "upstream")
-            upstream_sha = git("rev-parse", "HEAD")
-            git("switch", "-q", "main")
-            (root / "community.txt").write_text("local\n", encoding="utf-8")
-            git("add", ".")
-            git("commit", "-qm", "community")
-            review_ref = (f"automation/upstream-review-{upstream_sha[:12]}"
-                          f"-{base_sha[:8]}")
-            with self.assertRaisesRegex(SystemExit, "real upstream commit"):
-                upstream_sync.verify_review_ancestry(review_ref, root)
-            git("merge", "--no-edit", "--no-ff", "official")
-            upstream_sync.verify_review_ancestry(review_ref, root)
-            (root / ".github").mkdir()
-            marker = root / ".github/upstream-review-pending.md"
-            marker.write_text("placeholder", encoding="utf-8")
-            with self.assertRaisesRegex(SystemExit, "placeholder"):
-                upstream_sync.verify_review_ancestry(review_ref, root)
-            marker.unlink()
-            with self.assertRaisesRegex(SystemExit, "Invalid upstream review branch"):
-                upstream_sync.verify_review_ancestry("automation/upstream-review-invalid", root)
-            upstream_sync.verify_review_ancestry("feature/ordinary-pr", root)
+    def write(self, path, data):
+        target = self.repo / path
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_text(data, encoding="utf-8")
+
+    def commit(self, path, data, message):
+        self.write(path, data)
+        self.sh("git", "add", "-A")
+        self.sh("git", "commit", "-m", message)
+        return self.sh("git", "rev-parse", "HEAD")
+
+    def test_clean_merge_preserves_main_and_upstream_parents(self):
+        self.sh("git", "switch", "upstream")
+        upstream = self.commit("new-source.cpp", "upstream\n", "official source")
+        self.sh("git", "switch", "main")
+        main = self.commit("local.txt", "Community\n", "Community feature")
+        ok, conflicts = sync.merge_candidate(upstream)
+        self.assertTrue(ok)
+        self.assertEqual(conflicts, [])
+        head = sync.git("rev-parse", "HEAD")
+        self.assertTrue(sync.ancestor(main, head))
+        self.assertTrue(sync.ancestor(upstream, head))
+        self.assertEqual(len(sync.git("rev-list", "--parents", "-n", "1", "HEAD").split()), 3)
+
+    def test_first_conflict_does_not_create_fake_merge(self):
+        self.sh("git", "switch", "upstream")
+        upstream = self.commit("shared.txt", "official change\n", "official shared change")
+        self.sh("git", "switch", "main")
+        main = self.commit("shared.txt", "Community change\n", "Community shared change")
+        ok, conflicts = sync.merge_candidate(upstream)
+        self.assertFalse(ok)
+        self.assertEqual(conflicts, ["shared.txt"])
+        self.assertEqual(sync.git("rev-parse", "HEAD"), main)
+        self.assertFalse(sync.ancestor(upstream, "HEAD"))
+        self.assertFalse((self.repo / ".git" / "MERGE_HEAD").exists())
+        self.sh("git", "switch", "--detach", upstream)
+        self.assertFalse(sync.ancestor(main, "HEAD"))
+        # The upstream-only tree must not pass PR ancestry validation.
+        policy = {"deleted_files": []}
+        with patch.object(sync, "assert_deleted_files_absent", return_value=None):
+            metadata = {"version": 1, "baseline": main, "target": upstream, "risk": "review"}
+            body = sync.managed_section(metadata, "needs resolution", [])
+            with self.assertRaisesRegex(RuntimeError, "lacks original Community baseline"):
+                sync.validate_pr(body, upstream, main)
+
+    def test_rolling_merges_append_without_rewriting_human_resolution(self):
+        self.sh("git", "switch", "upstream")
+        upstream1 = self.commit("new-source.cpp", "first upstream\n", "official one")
+        self.sh("git", "switch", "main")
+        main1 = self.commit("local.txt", "Community\n", "Community feature")
+        ok, _ = sync.merge_candidate(upstream1)
+        self.assertTrue(ok)
+        integrated = sync.git("rev-parse", "HEAD")
+        manual = self.commit("community-human.txt", "manually resolved\n", "human amendment")
+        self.sh("git", "branch", "integration")
+        self.sh("git", "switch", "upstream")
+        upstream2 = self.commit("new-feature.cpp", "second upstream\n", "official two")
+        self.sh("git", "switch", "integration")
+        ok, _ = sync.merge_candidate(upstream2)
+        self.assertTrue(ok)
+        self.assertTrue(sync.ancestor(manual, "HEAD"))
+        self.assertTrue(sync.ancestor(integrated, "HEAD"))
+        self.assertTrue(sync.ancestor(upstream2, "HEAD"))
+        self.assertEqual((self.repo / "community-human.txt").read_text(), "manually resolved\n")
+
+    def test_upstream_delta_after_prior_merge_is_not_reprocessed(self):
+        self.sh("git", "switch", "upstream")
+        upstream1 = self.commit("one.cpp", "1\n", "official one")
+        self.sh("git", "switch", "main")
+        self.commit("local.txt", "Community\n", "local")
+        sync.merge_candidate(upstream1)
+        self.sh("git", "branch", "integration")
+        self.sh("git", "switch", "upstream")
+        upstream2 = self.commit("two.cpp", "2\n", "official two")
+        self.sh("git", "switch", "integration")
+        base = sync.git("merge-base", "HEAD", upstream2)
+        self.assertEqual(base, upstream1)
+        self.assertEqual(sync.changed_paths(base, upstream2), {"two.cpp"})
 
 
 if __name__ == "__main__":

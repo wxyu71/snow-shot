@@ -16,160 +16,62 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-      - name: Fetch and classify official upstream
-        id: classify
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          upstream_repo="$(python3 -c 'import json; print(json.load(open(".github/upstream-protection.json", encoding="utf-8"))["upstream"])')"
-          git remote add upstream "https://github.com/${upstream_repo}.git"
-          git fetch --no-tags upstream main
-          python3 scripts/test-upstream-sync.py
-          python3 scripts/upstream_sync.py verify-deletions
-          python3 scripts/upstream_sync.py classify --upstream upstream/main --output "$RUNNER_TEMP/sync.json"
-          echo "mode=$(jq -r .mode "$RUNNER_TEMP/sync.json")" >> "$GITHUB_OUTPUT"
-
-      - name: Apply safe sync or update the review candidate
+      - name: Check optional GitHub App credentials
+        id: app_config
         env:
-          GH_TOKEN: ${{ github.token }}
-          CLASSIFIED_MODE: ${{ steps.classify.outputs.mode }}
+          APP_ID: ${{ secrets.UPSTREAM_SYNC_APP_ID }}
+          APP_KEY: ${{ secrets.UPSTREAM_SYNC_APP_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          upstream_sha="$(jq -r .upstream_commit "$RUNNER_TEMP/sync.json")"
-          reasons="$(jq -r '.reasons[]? | "- " + .' "$RUNNER_TEMP/sync.json")"
-
-          if [[ "$CLASSIFIED_MODE" == "noop" ]]; then
-            exit 0
-          fi
-
-          if [[ "$CLASSIFIED_MODE" == "auto" ]]; then
-            if git merge --no-commit --no-ff upstream/main; then
-              if python3 scripts/upstream_sync.py verify-deletions; then
-                git commit -m "chore(sync): integrate upstream main"
-                git push origin HEAD:main
-                exit 0
-              fi
-              git reset --hard origin/main
-            else
-              git merge --abort
-            fi
-            reasons="$(printf '%s\n- %s' "$reasons" \
-              'Automatic documentation merge could not be verified; inspect the real merge candidate.')"
-          fi
-
-          # A human-resolved upstream PR is authoritative. Never overwrite its head.
-          # Pending review is not a sync failure, even if upstream advances again.
-          existing_review="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main \
-            --state open --limit 100 --json number,headRefName \
-            --jq '[.[] | select((.headRefName | startswith("review/upstream-main-")) or
-              (.headRefName | startswith("automation/upstream-review-")) or
-              .headRefName == "automation/upstream-review") | .number] | first // empty')"
-          if [[ -n "$existing_review" ]]; then
-            {
-              echo "### Upstream integration is awaiting manual review"
-              echo "- Latest upstream: $upstream_sha"
-              echo "- Existing review: https://github.com/${GITHUB_REPOSITORY}/pull/${existing_review}"
-              echo "- **No changes were merged into main.** Update the existing PR manually."
-              echo "- Automation deliberately did not change the reviewed PR branch."
-            } >> "$GITHUB_STEP_SUMMARY"
-            echo "::warning title=Pending upstream review::Review PR #${existing_review} against upstream ${upstream_sha}; existing PR head was preserved."
-            exit 0
-          fi
-
-          base_sha="$(git rev-parse origin/main)"
-          # Deterministic per upstream/base pair: safe to retry, never force-push
-          # an existing branch, and never replace human commits.
-          branch="automation/upstream-review-${upstream_sha:0:12}-${base_sha:0:8}"
-          conflict_files=""
-          if git ls-remote --exit-code --heads origin "$branch" >/dev/null 2>&1; then
-            candidate="An existing review branch is reused unchanged. Inspect it before merging; it may contain prior manual work."
-          else
-            git switch -C "$branch" origin/main
-            if git merge --no-ff --no-edit upstream/main; then
-              candidate="This branch contains a real two-parent Git merge of upstream into Community. Review its changes and validate the normal PR checks."
-            else
-              conflict_files="$(git diff --name-only --diff-filter=U)"
-              if [[ -z "$conflict_files" ]]; then
-                echo "::error::Upstream merge failed for a reason other than file conflicts."
-                exit 1
-              fi
-              git merge --abort
-              # A report-only commit is NOT a sync candidate. Instead, push the
-              # actual upstream commit. GitHub will mark the PR as conflicting,
-              # and resolving it will preserve the real upstream ancestry.
-              git switch -C "$branch" upstream/main
-              candidate="GitHub should show a real merge conflict: this branch points at upstream/main, not a dummy report. Merge Community main INTO this review branch, resolve conflicts, test, and push. Do not merge before resolving conflicts and reviewing the Community protection policy."
-            fi
-            if ! push_output="$(git push origin "HEAD:refs/heads/$branch" 2>&1)"; then
-              # Built-in GITHUB_TOKEN cannot be granted the extra 'workflows'
-              # permission needed to push certain upstream workflow changes.
-              # Fall back ONLY for that exact GitHub policy error. Never hide
-              # branch protections, network failures, or unrelated Git errors.
-              if [[ "$push_output" == *"refusing to allow a GitHub App to create or update workflow"* ]]; then
-                git switch -C "$branch" origin/main
-                {
-                  echo "# Unresolved upstream integration: do not merge"
-                  echo
-                  echo "Upstream commit: $upstream_sha"
-                  echo "Community main at detection: $base_sha"
-                  echo
-                  echo "GitHub rejected the real upstream review branch because the"
-                  echo "default GITHUB_TOKEN lacks workflow-file update permission."
-                  echo "This commit is a tracking placeholder, NOT an upstream merge."
-                  echo
-                  echo "Resolve by fetching upstream/main and performing a real Git"
-                  echo "merge on THIS branch, preserving the Community policy, then"
-                  echo "removing this marker. CI must verify upstream ancestry."
-                  echo
-                  echo "Conflicted files (if any):"
-                  printf '%s\n' "$conflict_files"
-                } > .github/upstream-review-pending.md
-                git add .github/upstream-review-pending.md
-                git commit -m "chore(sync): require manual upstream integration"
-                git push origin "HEAD:refs/heads/$branch"
-                candidate="GitHub blocked pushing actual upstream workflow history with the built-in token. This Draft PR is a **non-mergeable tracking placeholder** containing .github/upstream-review-pending.md. Manually merge upstream/main into this branch, resolve conflicts, remove the marker, run CI, and push before merging. The upstream-ancestry regression gate rejects a report-only PR."
-                echo "::warning title=Workflow write permission::Preserved a manual integration PR branch; no changes were merged into main."
-              else
-                printf '%s\n' "$push_output" >&2
-                exit 1
-              fi
-            fi
-          fi
-
-          body="$(printf '## Upstream integration (manual review required)\n\nUpstream commit: %s\nFork main at detection: %s\nReview branch: %s\n\n%s\n\n### Policy reasons\n%s\n\n### Conflicted files (if detected this run)\n%s\n\n### Resolve locally\n\n1. Fetch the review branch and main from this fork, and upstream/main.\n2. Check out the review branch, then run git merge origin/main if it is based on upstream; resolve any conflicts carefully and commit.\n3. Run Community policy checks and native CI, then push to the SAME review branch.\n4. Merge only after reviewing protected Community OCR, account-removal, updater, version, and packaging behavior.\n\n**Never merge the initial conflict branch without resolving it. No changes were merged to main by this workflow.**\n' \
-            "$upstream_sha" "$base_sha" "$branch" "$candidate" "$reasons" "$conflict_files")"
-
-          if ! create_output="$(gh pr create --draft --repo "$GITHUB_REPOSITORY" \
-            --base main --head "$branch" \
-            --title "review(sync): integrate upstream ${upstream_sha:0:12}" --body "$body" 2>&1)"; then
-            if [[ "$create_output" == *"GitHub Actions is not permitted to create or approve pull requests"* ]]; then
-              {
-                echo "### Manual upstream sync PR required"
-                echo "- Upstream: $upstream_sha"
-                echo "- Review branch: $branch"
-                echo "- Create a draft PR: https://github.com/${GITHUB_REPOSITORY}/pull/new/${branch}"
-                echo "- **No changes were merged into main.**"
-                echo "- Enable Actions PR creation in repository settings (if disabled)."
-              } >> "$GITHUB_STEP_SUMMARY"
-              echo "::warning title=PR creation restricted::Review branch $branch was preserved; manually open a draft PR."
-              exit 0
-            fi
-            printf '%s\n' "$create_output" >&2
+          if [[ -n "$APP_ID" && -n "$APP_KEY" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$APP_ID" || -n "$APP_KEY" ]]; then
+            echo '::error::Supply BOTH UPSTREAM_SYNC_APP_ID and UPSTREAM_SYNC_APP_PRIVATE_KEY.'
             exit 1
           fi
-          {
-            echo "### Upstream integration requires review"
-            echo "- PR: $create_output"
-            echo "- Latest upstream: $upstream_sha"
-            echo "- Review branch: $branch"
-            echo "- **No changes were merged into main.**"
-            echo "- PR CI created by GITHUB_TOKEN may need a maintainer to approve workflow runs."
-          } >> "$GITHUB_STEP_SUMMARY"
-          printf '%s\n' "$create_output"
+
+      - name: Mint short-lived GitHub App token
+        id: app_token
+        if: steps.app_config.outputs.enabled == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.UPSTREAM_SYNC_APP_ID }}
+          private-key: ${{ secrets.UPSTREAM_SYNC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
+
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+
+      - name: Test sync invariants
+        run: python3 scripts/test-upstream-sync.py
+
+      - name: Update rolling upstream integration PR
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+          NON_DEFAULT_TOKEN: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          AUTO_MERGE: ${{ vars.UPSTREAM_SYNC_AUTO_MERGE || 'false' }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep the temporary token out of the checkout's persisted git config.
+          # The GitHub CLI credential helper authenticates fetch/push using GH_TOKEN.
+          gh auth setup-git --hostname github.com
+          if [[ "$AUTO_MERGE" == "true" ]]; then
+            if [[ -z "$NON_DEFAULT_TOKEN" ]]; then
+              echo '::error::Automatic merge needs an App/PAT token so PR checks actually trigger.'
+              exit 1
+            fi
+            python3 scripts/upstream_sync.py sync --auto-merge
+          else
+            python3 scripts/upstream_sync.py sync
+          fi

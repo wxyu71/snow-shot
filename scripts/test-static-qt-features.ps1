@@ -45,31 +45,26 @@ function Require-Rejected([scriptblock]$Action, [string]$Message) {
     Require $rejected $Message
 }
 
-# Execute the builder's actual configure/cache policy without starting a Qt build.
-$policyAst = [Management.Automation.Language.Parser]::ParseFile(
-    (Join-Path $PSScriptRoot "build-static-qt.ps1"), [ref]$null, [ref]$null)
-$policyText = @($policyAst.EndBlock.Statements | Where-Object {
-    ($_ -is [Management.Automation.Language.AssignmentStatementAst] -and
-        $_.Left.Extent.Text -cin @('$ltcgEnabled', '$ltcgArgument', '$ltcgState', '$systemCodecState')) -or
-    ($_.Extent.Text -cmatch '^Assert-CacheEntry .*(?:FEATURE|QT_FEATURE)_(?:ltcg|system_png|system_zlib):')
-} | ForEach-Object { $_.Extent.Text })
-Require ($policyText.Count -eq 10) 'The Qt builder must select and validate LTCG and system codecs separately.'
-$configurationPolicy = [scriptblock]::Create($policyText -join "`n")
-foreach ($Architecture in @('x64', 'arm64')) {
-    foreach ($Configuration in @('Debug', 'Release')) {
-        $expectedLtcg = $Architecture -ceq 'x64' -and $Configuration -ceq 'Release'
-        $expectedCodecs = $Configuration -ceq 'Release'
-        $cache = @(
-            "FEATURE_ltcg:BOOL=$(if ($expectedLtcg) { 'ON' } else { 'OFF' })",
-            "QT_FEATURE_ltcg:INTERNAL=$(if ($expectedLtcg) { 'ON' } else { 'OFF' })",
-            "FEATURE_system_png:BOOL=$(if ($expectedCodecs) { 'ON' } else { 'OFF' })",
-            "QT_FEATURE_system_png:INTERNAL=$(if ($expectedCodecs) { 'ON' } else { 'OFF' })",
-            "FEATURE_system_zlib:BOOL=$(if ($expectedCodecs) { 'ON' } else { 'OFF' })",
-            "QT_FEATURE_system_zlib:INTERNAL=$(if ($expectedCodecs) { 'ON' } else { 'OFF' })"
-        ) -join "`n"
-        . $configurationPolicy
-        Require ($ltcgArgument -ceq $(if ($expectedLtcg) { '-ltcg' } else { '-no-ltcg' })) (
-            'The Qt configure switch must match the target LTCG policy.')
+# Exercise the same pure policy function invoked by the actual Qt builder.
+# These assertions check behavior rather than the layout of source statements.
+foreach ($targetArchitecture in @('x64', 'arm64')) {
+    foreach ($buildConfiguration in @('Debug', 'Release')) {
+        $release = $buildConfiguration -ceq 'Release'
+        $expectedLtcg = $release -and $targetArchitecture -ceq 'x64'
+        $options = Get-SnowStaticQtBuildOptions -Configuration $buildConfiguration -Architecture $targetArchitecture
+        $expectedConfiguration = if ($release) { '-release' } else { '-debug' }
+        $expectedLtcgArgument = if ($expectedLtcg) { '-ltcg' } else { '-no-ltcg' }
+        $expectedZlib = if ($release) { '-system-zlib' } else { '-qt-zlib' }
+        $expectedPng = if ($release) { '-system-libpng' } else { '-qt-libpng' }
+        $expectedLtcgState = if ($expectedLtcg) { 'ON' } else { 'OFF' }
+        $expectedCodecState = if ($release) { 'ON' } else { 'OFF' }
+        Require ($options.ConfigurationArgument -ceq $expectedConfiguration) 'Qt must select the requested build configuration.'
+        Require ($options.LtcgEnabled -eq $expectedLtcg) 'Qt LTCG must match target architecture and configuration.'
+        Require ($options.LtcgArgument -ceq $expectedLtcgArgument) 'Qt LTCG configure switch is incorrect.'
+        Require ($options.ZlibArgument -ceq $expectedZlib) 'Qt zlib configure switch is incorrect.'
+        Require ($options.PngArgument -ceq $expectedPng) 'Qt libpng configure switch is incorrect.'
+        Require ($options.LtcgState -ceq $expectedLtcgState) 'Qt LTCG CMake state is incorrect.'
+        Require ($options.SystemCodecState -ceq $expectedCodecState) 'Qt system codec CMake state is incorrect.'
     }
 }
 
