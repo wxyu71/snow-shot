@@ -132,16 +132,10 @@ function(snow_workspace_configure_options)
             "Use the matching Snow Shot release preset for static vcpkg libraries.")
     endif()
 
+    # Community builds never synthesize an upstream Snow Shot service endpoint.
+    # Cloud OCR endpoints are configured explicitly by the user in application settings.
     if(SNOW_APPS_API_BASE_URL STREQUAL "")
-        if(CMAKE_CONFIGURATION_TYPES)
-            set(SNOW_APPS_API_BASE_URL "https://snowshot.top" CACHE STRING
-                "Default Snow Shot API base URL. Set explicitly for reproducible builds." FORCE)
-        elseif(CMAKE_BUILD_TYPE STREQUAL "Debug")
-            set(SNOW_APPS_API_BASE_URL "https://test.snowshot.top" CACHE STRING
-                "Default Snow Shot API base URL." FORCE)
-        else()
-            set(SNOW_APPS_API_BASE_URL "https://snowshot.top" CACHE STRING
-                "Default Snow Shot API base URL." FORCE)
-        endif()
+        set(SNOW_APPS_API_BASE_URL "" CACHE STRING
+            "Community build: no default Snow Shot API service." FORCE)
     endif()
 endfunction()

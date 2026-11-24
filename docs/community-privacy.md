@@ -1,18 +1,7 @@
-# Snow Shot Community — Privacy
+# Community privacy and updates
 
-This independent open-source fork has no Snow Shot account, membership, credits,
-recharge or payment service. Screenshots and the optional offline PP-OCRv6
-engine run on the local PC without remote OCR requests.
+This is a personal fork, not the upstream official account or paid-service distribution. Capture, pinned history and settings are stored locally. Startup, administrator launch and MCP are opt-in; local history is enabled by default and respects explicit user choices.
 
-**Cloud OCR is optional.** With your own Baidu AI Studio Access Token, the
-selected screenshot is uploaded **directly to the configured AI Studio API**.
-Result JSONL or Markdown is downloaded from the signed URL returned by the
-service. Baidu's terms and data-retention practices apply to that processing.
+Online OCR sends selected content to the PaddleOCR endpoint configured by the user. Use a trusted endpoint; its own privacy and retention policy applies. Do not commit credentials or personal capture data.
 
-Currently the API URL, model and token are stored under your user's Qt
-settings. **The Access Token is not encrypted at rest.** Protect your profile,
-use a scoped token, and never attach your settings file to bug reports.
-
-Optional inherited features may have separate network interactions. Review
-their settings before enabling them. This fork is not affiliated with or
-supported by the original author.
+Updates are obtained from the fixed [Community GitHub Releases](https://github.com/wxyu71/snow-shot/releases) origin. The unsigned automatic updater remains disabled: download the prerelease installer and verify its SHA-256 before installation. HTTPS and checksums help detect corruption but do not independently authenticate a compromised release account.

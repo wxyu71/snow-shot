@@ -332,62 +332,6 @@ void settingsPersistAndResetToUia(const QString& configurationPath) {
             "invalid stored API values must fall back to UIA");
 }
 
-void shutterSoundSettingsPersistAndReset(const QString& configurationPath) {
-    snow_shot::presentation::GlobalShortcutManager shortcuts;
-    settings::BuiltInSettingsBackend backend(shortcuts);
-    constexpr auto binding = settings::SettingsSwitchBinding::ScreenshotShutterSoundNotification;
-    require(backend.switchValue(binding), "shutter notification must default to enabled");
-    require(backend.applySwitchValue(binding, false) && !backend.switchValue(binding) &&
-                !storage::ScreenshotSettings().shutterSoundNotification(),
-            "shutter notification must be disabled through the settings backend");
-    require(storage::ApplicationStorage::instance().configuration().flushNow().success,
-            "shutter preference must be flushable");
-    storage::ConfigurationStore reloaded(configurationPath, true, true, 60000);
-    require(!reloaded.value(QStringLiteral("screenshot/shutter_sound_notification")).toBool(),
-            "disabled shutter preference must survive a configuration reload");
-    require(backend.resetSection(settings::SettingsSectionReset::ScreenshotCapture) &&
-                !backend.switchValue(binding),
-            "system screenshot reset must preserve the function shutter preference");
-    require(backend.resetSection(settings::SettingsSectionReset::ScreenshotSettings) &&
-                backend.switchValue(binding),
-            "function screenshot reset must restore shutter notification to enabled");
-    const auto invalid = storage::ConfigurationSchema::normalize(
-        QStringLiteral("screenshot/shutter_sound_notification"), QStringLiteral("enabled"));
-    require(!invalid.valid, "shutter preference must reject nonboolean values");
-}
-
-void screenshotSoundSettingsPersistAndReset(const QString& configurationPath) {
-    snow_shot::presentation::GlobalShortcutManager shortcuts;
-    settings::BuiltInSettingsBackend backend(shortcuts);
-    constexpr auto binding = settings::SettingsSwitchBinding::ScreenshotSoundNotification;
-    constexpr auto shutterBinding =
-        settings::SettingsSwitchBinding::ScreenshotShutterSoundNotification;
-    require(!backend.switchValue(binding) &&
-                !storage::ScreenshotSettings().screenshotSoundNotification(),
-            "screenshot sound notification must default to disabled");
-    require(backend.applySwitchValue(binding, true) && backend.switchValue(binding) &&
-                storage::ScreenshotSettings().screenshotSoundNotification() &&
-                backend.switchValue(shutterBinding),
-            "enabling screenshot sound must preserve the existing shutter preference");
-    require(backend.applySwitchValue(shutterBinding, false) && backend.switchValue(binding),
-            "disabling direct capture sound must preserve screenshot sound");
-    require(storage::ApplicationStorage::instance().configuration().flushNow().success,
-            "screenshot sound preference must be flushable");
-    storage::ConfigurationStore reloaded(configurationPath, true, true, 60000);
-    require(reloaded.value(QStringLiteral("screenshot/screenshot_sound_notification")).toBool() &&
-                !reloaded.value(QStringLiteral("screenshot/shutter_sound_notification")).toBool(),
-            "independent sound preferences must survive a configuration reload");
-    require(backend.resetSection(settings::SettingsSectionReset::ScreenshotCapture) &&
-                backend.switchValue(binding) && !backend.switchValue(shutterBinding),
-            "system screenshot reset must preserve both sound preferences");
-    require(backend.resetSection(settings::SettingsSectionReset::ScreenshotSettings) &&
-                !backend.switchValue(binding) && backend.switchValue(shutterBinding),
-            "screenshot interaction reset must restore both sound defaults");
-    const auto invalid = storage::ConfigurationSchema::normalize(
-        QStringLiteral("screenshot/screenshot_sound_notification"), QStringLiteral("enabled"));
-    require(!invalid.valid, "screenshot sound preference must reject nonboolean values");
-}
-
 void shortcutExitConfirmationSettingsPersistAndReset(const QString& configurationPath) {
     snow_shot::presentation::GlobalShortcutManager shortcuts;
     settings::BuiltInSettingsBackend backend(shortcuts);
@@ -588,11 +532,22 @@ void toolbarLayoutSectionResetsRemainIndependent() {
             "Drawing reset must restore only the drawing toolbar layout");
 }
 
-void screenshotGuideSettingsPersistAndReset() {
+void screenshotGuideSettingsPersistAndReset(const QString& configurationPath) {
     snow_shot::presentation::GlobalShortcutManager shortcuts;
     settings::BuiltInSettingsBackend backend(shortcuts);
     const storage::ScreenshotUiSettings ui;
     const storage::ScreenshotShortcutSettings shortcutSettings;
+    constexpr auto adaptiveColors = settings::SettingsSwitchBinding::AdaptiveGuideColors;
+    require(backend.switchValue(adaptiveColors) && ui.adaptiveGuideColors() &&
+                backend.applySwitchValue(adaptiveColors, false) &&
+                !backend.switchValue(adaptiveColors) && !ui.adaptiveGuideColors(),
+            "adaptive guide colors must default to enabled and save the user's choice");
+    require(storage::ApplicationStorage::instance().configuration().flushNow().success,
+            "guide preferences must be flushable");
+    const storage::ConfigurationStore reloaded(configurationPath, true, true, 60000);
+    require(reloaded.value(QStringLiteral("screenshot_ui/adaptive_guide_colors")) ==
+                QJsonValue(false),
+            "disabled adaptive guide colors must survive a configuration reload");
     require(ui.setShowGuidesByDefault(true) && ui.setCursorGuideLineColor(QColor(12, 34, 56, 78)) &&
                 ui.setSelectionCenterGuideLineColor(QColor(22, 33, 44, 55)) &&
                 ui.setMonitorCenterGuideLineColor(QColor(90, 80, 70, 60)) &&
@@ -607,7 +562,8 @@ void screenshotGuideSettingsPersistAndReset() {
             "saved guide preferences and shortcut must remain intact before reset");
 
     require(backend.resetSection(settings::SettingsSectionReset::ScreenshotInterfaceSettings) &&
-                !ui.showGuidesByDefault() && ui.cursorGuideLineColor() == QColor(0, 0, 0) &&
+                backend.switchValue(adaptiveColors) && !ui.showGuidesByDefault() &&
+                ui.cursorGuideLineColor() == QColor(0, 0, 0) &&
                 ui.selectionCenterGuideLineColor() == QColor(0x40, 0x96, 0xff) &&
                 ui.monitorCenterGuideLineColor() == QColor(255, 0, 0) &&
                 shortcutSettings.toggleGuides().first().portableText == QStringLiteral("Ctrl+G"),
@@ -1186,7 +1142,8 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--guide-settings-only"))) {
-        screenshotGuideSettingsPersistAndReset();
+        screenshotGuideSettingsPersistAndReset(
+            temporary.filePath(QStringLiteral("data/config.json")));
         applicationStorage.shutdown();
         return 0;
     }
@@ -1218,16 +1175,14 @@ int main(int argc, char** argv) {
         sessionModeChangesRetargetLookupWithoutRefreshing();
         recordingApiModePersistsAndResets(temporary.filePath(QStringLiteral("data/config.json")));
         settingsPersistAndResetToUia(temporary.filePath(QStringLiteral("data/config.json")));
-        shutterSoundSettingsPersistAndReset(temporary.filePath(QStringLiteral("data/config.json")));
-        screenshotSoundSettingsPersistAndReset(
-            temporary.filePath(QStringLiteral("data/config.json")));
         shortcutExitConfirmationSettingsPersistAndReset(
             temporary.filePath(QStringLiteral("data/config.json")));
         autoRecognizeQrCodeSettingsPersistAndReset(
             temporary.filePath(QStringLiteral("data/config.json")));
         ownUiCapturePreferencesPersistAndReset();
         toolbarLayoutSectionResetsRemainIndependent();
-        screenshotGuideSettingsPersistAndReset();
+        screenshotGuideSettingsPersistAndReset(
+            temporary.filePath(QStringLiteral("data/config.json")));
     }
 #ifndef Q_OS_MACOS
     changedApiRefreshesServiceAndRejectsOldResults();

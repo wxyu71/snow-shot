@@ -16,79 +16,52 @@ concurrency:
 jobs:
   sync:
     runs-on: ubuntu-24.04
+    timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-      - name: Fetch and classify official upstream
-        id: classify
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git remote add upstream https://github.com/mg-chao/snow-shot.git
-          git fetch --no-tags upstream main
-          python3 scripts/test-upstream-sync.py
-          python3 scripts/upstream_sync.py verify-deletions
-          python3 scripts/upstream_sync.py classify --upstream upstream/main --output "$RUNNER_TEMP/sync.json"
-          echo "mode=$(jq -r .mode "$RUNNER_TEMP/sync.json")" >> "$GITHUB_OUTPUT"
-
-      - name: Apply safe sync or update the review candidate
+      - name: Check optional GitHub App credentials
+        id: app_config
         env:
-          GH_TOKEN: ${{ github.token }}
-          CLASSIFIED_MODE: ${{ steps.classify.outputs.mode }}
+          APP_ID: ${{ secrets.UPSTREAM_SYNC_APP_ID }}
+          APP_KEY: ${{ secrets.UPSTREAM_SYNC_APP_PRIVATE_KEY }}
         shell: bash
         run: |
           set -euo pipefail
-          upstream_sha="$(jq -r .upstream_commit "$RUNNER_TEMP/sync.json")"
-          reasons="$(jq -r '.reasons[]? | "- " + .' "$RUNNER_TEMP/sync.json")"
-
-          if [[ "$CLASSIFIED_MODE" == "noop" ]]; then
-            exit 0
+          if [[ -n "$APP_ID" && -n "$APP_KEY" ]]; then
+            echo 'enabled=true' >> "$GITHUB_OUTPUT"
+          elif [[ -n "$APP_ID" || -n "$APP_KEY" ]]; then
+            echo '::error::Supply BOTH UPSTREAM_SYNC_APP_ID and UPSTREAM_SYNC_APP_PRIVATE_KEY.'
+            exit 1
           fi
 
-          if [[ "$CLASSIFIED_MODE" == "auto" ]]; then
-            if git merge --no-commit --no-ff upstream/main; then
-              if python3 scripts/upstream_sync.py verify-deletions; then
-                git commit -m "chore(sync): integrate upstream main"
-                git push origin HEAD:main
-                exit 0
-              fi
-              git reset --hard origin/main
-            else
-              git merge --abort
-            fi
-            reasons="$(printf '%s\n- %s' "$reasons" \
-              'Automatic documentation merge could not be verified; inspect the real merge candidate.')"
-          fi
+      - name: Mint short-lived GitHub App token
+        id: app_token
+        if: steps.app_config.outputs.enabled == 'true'
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          app-id: ${{ secrets.UPSTREAM_SYNC_APP_ID }}
+          private-key: ${{ secrets.UPSTREAM_SYNC_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-pull-requests: write
+          permission-workflows: write
 
-          branch="automation/upstream-review"
-          git switch -C "$branch" origin/main
-          if git merge --no-ff --no-edit upstream/main; then
-            candidate="The branch contains the actual upstream merge candidate. Review it and let the normal PR CI validate the integrated tree."
-            rm -f .github/upstream-review-pending.md
-          else
-            git merge --abort
-            candidate="The upstream merge has conflicts. This branch contains only the conflict report; resolve the upstream merge manually before merging the PR."
-            printf '%s\n\n%s\n\n%s\n' \
-              '# Upstream synchronization requires conflict resolution' \
-              "Upstream commit: $upstream_sha" \
-              "$reasons" > .github/upstream-review-pending.md
-            git add .github/upstream-review-pending.md
-            git commit -m "chore(sync): report upstream merge conflict"
-          fi
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+          token: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN || github.token }}
 
-          git push --force origin "$branch"
-          body="$(printf 'Upstream commit: %s\n\n%s\n\nReasons reported by the fork policy:\n%s' \
-            "$upstream_sha" "$candidate" "$reasons")"
+      - name: Test sync invariants
+        run: python3 scripts/test-upstream-sync.py
 
-          number="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --base main \
-            --state open --json number --jq '.[0].number // empty')"
-          if [[ -n "$number" ]]; then
-            gh pr edit "$number" --repo "$GITHUB_REPOSITORY" \
-              --title "review(sync): integrate upstream main" --body "$body"
-          else
-            gh pr create --draft --repo "$GITHUB_REPOSITORY" --base main --head "$branch" \
-              --title "review(sync): integrate upstream main" --body "$body"
-          fi
+      - name: Update rolling upstream integration PR
+        env:
+          GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN || github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Keep the temporary token out of the checkout's persisted git config.
+          # The GitHub CLI credential helper authenticates fetch/push using GH_TOKEN.
+          gh auth setup-git --hostname github.com
+          python3 scripts/upstream_sync.py sync

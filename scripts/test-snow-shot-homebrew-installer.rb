@@ -6,7 +6,7 @@ require "shellwords"
 require "tmpdir"
 
 wrapper = Pathname(ARGV.fetch(0)).realpath
-fixtures = ARGV[1] ? Pathname(ARGV[1]) : Tap.fetch("mg-chao/preflight").path/"Casks"
+fixtures = ARGV[1] ? Pathname(ARGV[1]) : Tap.fetch("wxyu71/preflight").path/"Casks"
 
 Dir.mktmpdir("snow-homebrew-installer-") do |directory|
   temporary = Pathname(directory)
@@ -15,17 +15,23 @@ Dir.mktmpdir("snow-homebrew-installer-") do |directory|
   state.write("persistent identity")
 
   %w[snow-shot snow-shot@beta snow-shot-mini snow-shot-mini@beta].each do |token|
-    # Isolate Caskroom metadata as well as the configured app directory. Only the
-    # fixture token changes; Homebrew evaluates and executes the generated DSL.
+    edition = token.start_with?("snow-shot-mini") ? "mini" : "full"
+    bundle_id = edition == "mini" ? "com.snowshot.snow_shot_mini" : "com.snowshot.snow_shot"
+    # Keep fixture metadata and quit events away from real Snow Shot installations.
     fixture_token = "#{token.tr('@', '-')}-installer-fixture-#{Process.pid}"
+    fixture_bundle_id = "com.snowshot.#{fixture_token}"
     source = (fixtures/"#{token}.rb").read.sub("cask \"#{token}\"", "cask \"#{fixture_token}\"")
+    source.sub!(/^(  uninstall quit:\s+")([^"]+)"/) do
+      raise "Wrong quit target for #{token}" unless Regexp.last_match(2) == bundle_id
+
+      "#{Regexp.last_match(1)}#{fixture_bundle_id}\""
+    end
     load_cask = ->(content) { Cask::CaskLoader::FromContentLoader.new(content).load(config: config) }
     cask = load_cask.call(source)
     root = cask.caskroom_path
     raise "Refusing to overwrite an existing Caskroom fixture" if root.exist? || root.symlink?
 
     begin
-      edition = token.start_with?("snow-shot-mini") ? "mini" : "full"
       slug = edition == "mini" ? "snow-shot-mini" : "snow-shot"
       name = edition == "mini" ? "Snow Shot Mini" : "Snow Shot"
 
@@ -42,6 +48,10 @@ Dir.mktmpdir("snow-homebrew-installer-") do |directory|
         (stage/"install-snow-shot-macos.sh").write(<<~BASH)
           #!/bin/bash
           set -eu
+          if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
+            verify_project_application() { codesign --verify --deep --strict "$1"; }
+            return 0
+          fi
           test "$HOME" = #{Shellwords.escape(Dir.home)}
           test "$1" = --edition
           test "$2" = #{edition}
@@ -56,7 +66,7 @@ Dir.mktmpdir("snow-homebrew-installer-") do |directory|
           <?xml version="1.0" encoding="UTF-8"?>
           <plist version="1.0"><dict>
           <key>CFBundleExecutable</key><string>fixture</string>
-          <key>CFBundleIdentifier</key><string>com.snowshot.installer-fixture</string>
+          <key>CFBundleIdentifier</key><string>#{fixture_bundle_id}</string>
           <key>CFBundlePackageType</key><string>APPL</string>
           <key>CFBundleVersion</key><string>1</string>
           </dict></plist>
@@ -70,7 +80,16 @@ Dir.mktmpdir("snow-homebrew-installer-") do |directory|
       artifacts = cask.artifacts.to_a
       installer = artifacts.find { |artifact| artifact.is_a?(Cask::Artifact::Installer) }
       app = artifacts.find { |artifact| artifact.is_a?(Cask::Artifact::App) }
+      uninstalls = artifacts.grep(Cask::Artifact::Uninstall)
       raise "Missing vendor installer or app artifact" unless installer && app
+      unless uninstalls.one? && uninstalls.first.directives[:quit] == fixture_bundle_id &&
+             uninstalls.first.directives.dig(:script, :executable) == "/bin/rm"
+        raise "Expected the fixture quit and cleanup directives in one uninstall stanza"
+      end
+      receipt_uninstall = Cask::Tab.create(cask).uninstall_artifacts.find { |artifact| artifact.key?(:uninstall) }
+      unless receipt_uninstall&.dig(:uninstall, 0, :quit) == fixture_bundle_id
+        raise "Homebrew receipt did not record the quit directive"
+      end
       raise "Preparation must precede app installation" unless artifacts.index(installer) < artifacts.index(app)
       raise "Preparation must fail on errors without sudo" if !installer.args[:must_succeed] || installer.requires_sudo?
       if artifacts.any? { |artifact| artifact.is_a?(Cask::Artifact::AbstractFlightBlock) }
@@ -97,9 +116,8 @@ Dir.mktmpdir("snow-homebrew-installer-") do |directory|
       engine.purge_backed_up_versioned_files
       raise "Upgrade did not install the new version" unless installed_version.read.strip == upgraded.version.to_s
 
-      # Both the failed successor and the backed-up signing installer reject
-      # signing. Restoration must verify/reuse the already signed backup.
-      (upgraded.staged_path/"install-snow-shot-macos.sh").write("#!/bin/bash\nexit 23\n")
+      # Failed successor preparation must restore the verified predecessor.
+      # Signature identity itself is covered by the native signing fixture.
       successor = load_cask.call(source.sub(/^  version .+$/, '  version "2096.0.2"'))
       successor_engine = Cask::Installer.new(successor)
       upgraded_engine.start_upgrade(successor: successor)

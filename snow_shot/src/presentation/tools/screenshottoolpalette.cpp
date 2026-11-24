@@ -1,4 +1,6 @@
 #include "snow_shot/shortcuts/shortcutbinding.h"
+#include "snow_shot/presentation/components/windowconfirmation.h"
+#include "snow_shot/shortcuts/annotationoptionshortcut.h"
 #include "snow_shot/presentation/screenshottoolpalette.h"
 #include "snow_shot/presentation/components/pointerhoverevents.h"
 #include "snow_shot/ocrtextoptions.h"
@@ -316,6 +318,7 @@ bool toolUsesActionToolbar(ScreenshotToolPalette::Tool tool, bool moveOptionsToo
            tool == ScreenshotToolPalette::Tool::Ocr ||
            tool == ScreenshotToolPalette::Tool::TextTranslation ||
            tool == ScreenshotToolPalette::Tool::Qr || tool == ScreenshotToolPalette::Tool::Table ||
+           tool == ScreenshotToolPalette::Tool::Document ||
            tool == ScreenshotToolPalette::Tool::Latex ||
            tool == ScreenshotToolPalette::Tool::Markdown ||
            tool == ScreenshotToolPalette::Tool::Html ||
@@ -335,6 +338,7 @@ actionFamilyForTool(ScreenshotToolPalette::Tool tool) {
     case ScreenshotToolPalette::Tool::Ocr:
     case ScreenshotToolPalette::Tool::TextTranslation:
         return ScreenshotToolPalette::ActionFamily::TextRecognition;
+    case ScreenshotToolPalette::Tool::Document:
     case ScreenshotToolPalette::Tool::Table:
     case ScreenshotToolPalette::Tool::Latex:
     case ScreenshotToolPalette::Tool::Qr:
@@ -374,6 +378,7 @@ bool toolUsesStandardStyleToolbar(ScreenshotToolPalette::Tool tool) {
     case ScreenshotToolPalette::Tool::Select:
     case ScreenshotToolPalette::Tool::Ocr:
     case ScreenshotToolPalette::Tool::TextTranslation:
+    case ScreenshotToolPalette::Tool::Document:
     case ScreenshotToolPalette::Tool::Table:
     case ScreenshotToolPalette::Tool::Latex:
     case ScreenshotToolPalette::Tool::Qr:
@@ -503,6 +508,8 @@ std::optional<ScreenshotToolPalette::Tool> actionTool(const QString& itemId) {
     if (itemId == QStringLiteral("barcode-recognition")) {
         return ScreenshotToolPalette::Tool::Qr;
     }
+    if (itemId == QStringLiteral("document-recognition"))
+        return ScreenshotToolPalette::Tool::Document;
     if (itemId == QStringLiteral("table-recognition")) {
         return ScreenshotToolPalette::Tool::Table;
     }
@@ -528,6 +535,8 @@ QString actionToolItemId(ScreenshotToolPalette::Tool tool) {
         return QStringLiteral("convert-to-html");
     case ScreenshotToolPalette::Tool::Qr:
         return QStringLiteral("barcode-recognition");
+    case ScreenshotToolPalette::Tool::Document:
+        return QStringLiteral("document-recognition");
     case ScreenshotToolPalette::Tool::Table:
         return QStringLiteral("table-recognition");
     case ScreenshotToolPalette::Tool::Ocr:
@@ -1002,8 +1011,9 @@ ScreenshotToolPalette::ScreenshotToolPalette(const Options& options, QWidget* pa
       m_toolbarLayout(initialToolbarLayout(options)),
       m_actionToolsLayout(initialActionToolsLayout(options)),
       m_actionToolsLayoutExplicit(options.actionToolsLayout.has_value()) {
-    m_tableRecognitionModelState.selection = screenshotDedicatedRecognitionModelId();
-    m_latexRecognitionModelState.selection = screenshotDedicatedRecognitionModelId();
+    m_documentRecognitionModelState.selection = screenshotDedicatedRecognitionModelId();
+    m_tableRecognitionModelState.selection = screenshotDefaultVisionRecognitionModelId();
+    m_latexRecognitionModelState.selection = screenshotDefaultVisionRecognitionModelId();
     const toolbar_settings::ScreenshotToolbarSettings settings;
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION || SNOW_SHOT_ENABLE_QR_RECOGNITION
     m_tableQrEntryTool = tableQrToolFromSetting(settings.tableQrTool());
@@ -1085,6 +1095,7 @@ ScreenshotToolPalette::ScreenshotToolPalette(const Options& options, QWidget* pa
                             ? SnowCanvasStyleEditTarget::Selection
                             : SnowCanvasStyleEditTarget::Creation}));
                 },
+                options.dialogModality,
             },
             m_styleDefaults, options.watermarkTemplateClock);
     }
@@ -1620,6 +1631,7 @@ bool ScreenshotToolPalette::setSecondaryToolbarVisibility(bool actionToolbarVisi
 
     const bool ocrVisible = m_activeTool == Tool::Ocr || m_activeTool == Tool::TextTranslation;
     const bool targetLanguageVisible = m_activeTool == Tool::TextTranslation;
+    const bool documentVisible = m_activeTool == Tool::Document;
     const bool tableVisible = m_activeTool == Tool::Table;
     const bool qrVisible = m_activeTool == Tool::Qr || m_activeTool == Tool::Latex;
     const bool conversionVisible = m_activeTool == Tool::Markdown || m_activeTool == Tool::Html;
@@ -1627,14 +1639,13 @@ bool ScreenshotToolPalette::setSecondaryToolbarVisibility(bool actionToolbarVisi
     const bool originalVisible = ocrVisible || tableVisible || qrVisible || conversionVisible;
     const bool scrollingVisible = m_activeTool == Tool::ScrollingScreenshot;
     const bool moveVisible = m_activeTool == Tool::Move && m_moveOptionsToolbarVisible;
-    const bool recognitionActionVisible = ocrVisible || tableVisible || qrVisible ||
-                                          scrollingVisible || conversionVisible || moveVisible;
+    const bool recognitionActionVisible = documentVisible || ocrVisible || tableVisible ||
+                                          qrVisible || scrollingVisible || conversionVisible ||
+                                          moveVisible;
     const bool recognitionControlsMatch =
         (m_showOriginalImageButton == nullptr ||
          m_showOriginalImageButton->isHidden() == !originalVisible) &&
         (m_moveActionControls == nullptr || m_moveActionControls->isHidden() == !moveVisible) &&
-        (m_conversionSettingsButton == nullptr ||
-         m_conversionSettingsButton->isHidden() == !conversionVisible) &&
         (m_textEditButton == nullptr || m_textEditButton->isHidden() == !ocrVisible) &&
         (m_textTargetLanguageSelect == nullptr ||
          m_textTargetLanguageSelect->isHidden() == !targetLanguageVisible) &&
@@ -1643,6 +1654,8 @@ bool ScreenshotToolPalette::setSecondaryToolbarVisibility(bool actionToolbarVisi
         (m_jumpToTranslationPageButton == nullptr ||
          m_jumpToTranslationPageButton->isHidden() ==
              !(ocrVisible && m_jumpToTranslationPageVisible)) &&
+        (m_openDocumentFileButton == nullptr ||
+         m_openDocumentFileButton->isHidden() == !documentVisible) &&
         (m_tableMergeButton == nullptr || m_tableMergeButton->isHidden() == !tableVisible) &&
         (m_openSpreadsheetFileButton == nullptr ||
          m_openSpreadsheetFileButton->isHidden() == !tableVisible) &&
@@ -1663,9 +1676,6 @@ bool ScreenshotToolPalette::setSecondaryToolbarVisibility(bool actionToolbarVisi
     m_styleToolbarTargetVisible = styleToolbarVisible;
     if (m_moveActionControls != nullptr) {
         m_moveActionControls->setVisible(moveVisible);
-    }
-    if (m_conversionSettingsButton != nullptr) {
-        m_conversionSettingsButton->setVisible(conversionVisible);
     }
     for (QWidget* widget : std::as_const(m_selectionActionControls)) {
         if (widget != nullptr) {
@@ -1710,6 +1720,8 @@ bool ScreenshotToolPalette::setSecondaryToolbarVisibility(bool actionToolbarVisi
     if (m_tableResetButton != nullptr) {
         m_tableResetButton->setVisible(tableVisible);
     }
+    if (m_openDocumentFileButton != nullptr)
+        m_openDocumentFileButton->setVisible(documentVisible);
     if (m_openSpreadsheetFileButton != nullptr)
         m_openSpreadsheetFileButton->setVisible(tableVisible);
     if (m_recognitionModelSelect != nullptr) {
@@ -1734,9 +1746,11 @@ bool ScreenshotToolPalette::setSecondaryToolbarVisibility(bool actionToolbarVisi
     setSpacersVisible(m_selectionActionSpacers, !recognitionActionVisible);
     setSpacersVisible(m_textActionSpacers, ocrVisible);
     setSpacersVisible(m_tableActionSpacers, tableVisible);
+    setSpacersVisible(m_documentActionSpacers, documentVisible);
     for (QFrame* separator : std::as_const(m_styleSeparatorFrames)) {
         if (separator != nullptr && separator->parentWidget() == m_selectActionPanel) {
-            separator->setVisible(separator == m_openSpreadsheetFileSeparator
+            separator->setVisible(separator == m_openDocumentFileSeparator ? documentVisible
+                                  : separator == m_openSpreadsheetFileSeparator
                                       ? tableVisible
                                       : !recognitionActionVisible);
         }
@@ -2097,6 +2111,7 @@ void ScreenshotToolPalette::setActiveTool(Tool tool) {
     case Tool::TextTranslation:
         activeButton = actionToolEntryButton(QStringLiteral("text-translation"));
         break;
+    case Tool::Document:
     case Tool::Latex:
     case Tool::Markdown:
     case Tool::Html:
@@ -5270,6 +5285,11 @@ void ScreenshotToolPalette::activateDrawingTool(Tool tool) {
         emit textTranslationRequested();
 #endif
         break;
+    case Tool::Document:
+#if SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION
+        emit documentRequested();
+#endif
+        break;
     case Tool::Table:
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION
         emit tableRequested();
@@ -5414,6 +5434,7 @@ adqt::widgets::AdButton* ScreenshotToolPalette::toolEntryButton(Tool tool) const
     case Tool::TextTranslation:
         requestedButton = actionToolEntryButton(QStringLiteral("text-translation"));
         break;
+    case Tool::Document:
     case Tool::Latex:
     case Tool::Markdown:
     case Tool::Html:
@@ -5495,7 +5516,8 @@ bool ScreenshotToolPalette::historyActionEnabled(const QString& itemId) const {
     const bool undo = itemId == QStringLiteral("undo");
     if (m_activeTool == Tool::Latex)
         return m_latexEditingAvailable && (undo ? m_latexCanUndo : m_latexCanRedo);
-    if (m_activeTool == Tool::Qr || m_activeTool == Tool::Markdown || m_activeTool == Tool::Html) {
+    if (m_activeTool == Tool::Document || m_activeTool == Tool::Qr ||
+        m_activeTool == Tool::Markdown || m_activeTool == Tool::Html) {
         return false;
     }
     if (m_activeTool == Tool::Table) {
@@ -5697,6 +5719,8 @@ ScreenshotToolPalette::actionToolSourceButton(const QString& itemId) const {
     if (m_options.showRecordingControls) {
         return recordingActionSourceButton(itemId);
     }
+    if (itemId == QStringLiteral("document-recognition"))
+        return m_documentButton;
     if (itemId == QStringLiteral("latex-recognition"))
         return m_latexButton;
     if (itemId == QStringLiteral("convert-to-markdown")) {
@@ -5776,6 +5800,8 @@ bool ScreenshotToolPalette::actionToolAvailable(const QString& itemId) const {
 
 ScreenshotToolPalette::ActionToolState
 ScreenshotToolPalette::actionToolState(const QString& itemId) const {
+    if (itemId == QStringLiteral("document-recognition"))
+        return {m_tableEnabled, m_documentRecognitionModelState.loading};
     if (itemId == QStringLiteral("table-recognition")) {
         return {m_tableEnabled, m_tableBusy};
     }
@@ -5822,6 +5848,8 @@ bool ScreenshotToolPalette::activateActionTool(const QString& itemId, bool toggl
     } else if (itemId == QStringLiteral("table-recognition")) {
         setTableQrEntryTool(Tool::Table);
         return activateTableQrTool(Tool::Table, toggleVisibleButton);
+    } else if (itemId == QStringLiteral("document-recognition")) {
+        return activateToolFromToolbar(Tool::Document, toggleVisibleButton);
     } else if (itemId == QStringLiteral("record-screen")) {
         emit screenRecordRequested();
     } else if (itemId == QStringLiteral("pin-to-screen")) {
@@ -6840,9 +6868,10 @@ bool ScreenshotToolPalette::addMainSecondaryButtons(const Options& options, QBox
     }
 
     if (options.showImageConversionTools && snow_shot::app::edition::imageConversion) {
-        // Community cloud OCR is a single direct action, not a five-item hover menu.
+        // Preserve the upstream "convert-to-markdown" id as the stable compatibility entry.
+        // Community settings decide which online engine/output this single button dispatches.
         m_markdownButton =
-            addToolButton(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Convert to Markdown"),
+            addToolButton(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Online OCR"),
                           custom_outlined_icons::Markdown());
         m_markdownButton->setObjectName(QStringLiteral("screenshotConvertToMarkdownButton"));
         m_markdownButton->setBusyIndicatorPresentation(
@@ -7010,7 +7039,28 @@ ScreenshotToolPalette::drawingShortcutTool(const QString& toolId) const {
     return tool;
 }
 
+bool ScreenshotToolPalette::annotationOptionsActive() const {
+    return m_activeTool && m_activeTool == m_activeStyleTool && m_styleToolbarTargetVisible &&
+           m_activeStyleControlsWidget && !m_recordTrimPanel && !m_recordingFollowMouseEnabled;
+}
+
+QAbstractButton* ScreenshotToolPalette::nextAnnotationOptionButton() const {
+    const auto* group = m_activeStyleControlsWidget->findChild<adqt::widgets::AdRadioButtonGroup*>(
+        QStringLiteral("screenshotAnnotationOptionGroup"));
+    const auto options = screenshotToolPaletteRadioOptions(group);
+    if (options.size() < 2)
+        return nullptr;
+
+    const qsizetype current = options.indexOf(group->checkedButton());
+    return options.at((current + 1) % options.size());
+}
+
 bool ScreenshotToolPalette::canActivateDrawingShortcut(const QString& toolId) const {
+    if (toolId == snow_shot::shortcuts::kCycleAnnotationToolOptions) {
+        return annotationOptionsActive() &&
+               (m_activeTool == Tool::Distance ? m_styleControls->canCycleDistanceUnit()
+                                               : nextAnnotationOptionButton() != nullptr);
+    }
     if (toolId == QStringLiteral("reset_canvas")) {
         return canActivateToolShortcut(Tool::Eraser);
     }
@@ -7019,6 +7069,17 @@ bool ScreenshotToolPalette::canActivateDrawingShortcut(const QString& toolId) co
 }
 
 bool ScreenshotToolPalette::activateDrawingShortcut(const QString& toolId) {
+    if (toolId == snow_shot::shortcuts::kCycleAnnotationToolOptions) {
+        if (!annotationOptionsActive())
+            return false;
+        if (m_activeTool == Tool::Distance)
+            return m_styleControls->cycleDistanceUnit();
+        if (auto* option = nextAnnotationOptionButton()) {
+            option->click();
+            return true;
+        }
+        return false;
+    }
     if (toolId == QStringLiteral("reset_canvas")) {
         if (!canActivateDrawingShortcut(toolId)) {
             return false;
@@ -7333,6 +7394,7 @@ QWidget* ScreenshotToolPalette::createStyleModeSelector(
     ScreenshotToolPaletteRadioEditorConfig config;
     config.objectName = objectName;
     config.initialId = static_cast<int>(initialTool);
+    config.cycleWithAnnotationShortcut = true;
     for (const StyleModeOption& option : options) {
         config.options.push_back({
             static_cast<int>(option.tool),
@@ -7862,8 +7924,6 @@ void ScreenshotToolPalette::createRecordingExportSettingsToolbar() {
         if (!ensureRecordingEffectSettingsModal()) {
             return;
         }
-        m_recordSettingsModal->setOwnerWindow(
-            m_recordSettingsOwnerWindow ? m_recordSettingsOwnerWindow.data() : window());
         m_recordSettingsModal->open();
     });
     m_recordPreferencesButton = createScreenshotToolPaletteStyleActionButton(
@@ -7929,17 +7989,13 @@ bool ScreenshotToolPalette::ensureRecordingEffectSettingsModal() {
     }
     SNOW_SHOT_TOOLBAR_PERF_SCOPE("palette.hydrate.recording_effect_settings");
 
-    auto* modal = new adqt::widgets::AdModal(this);
+    auto* modal = snow_shot::presentation::modal_window::create(
+        this, m_recordSettingsOwnerWindow ? m_recordSettingsOwnerWindow.data() : window());
     // Publish the modal before building its content so a re-entrant call takes
     // the early return above instead of building a second dialog.
     m_recordSettingsModal = modal;
     modal->setObjectName(QStringLiteral("screenRecordingEffectSettingsModal"));
-    modal->setMode(adqt::widgets::AdModal::Mode::Window);
-    modal->setWindowModality(Qt::ApplicationModal);
-    modal->setCentered(true);
     modal->setPreferredWidth(kRecordingSettingsModalWidth);
-    modal->setMaskVisible(false);
-    modal->setCloseOnMaskClick(false);
     modal->setStandardButtons(adqt::widgets::AdModal::StandardButton::Ok);
     connect(modal, &adqt::widgets::AdModal::finished, this,
             [this, modal](adqt::widgets::AdModal::DialogCode) {
@@ -8506,12 +8562,14 @@ void ScreenshotToolPalette::clearSecondaryResourceBindings() {
     m_jumpToTranslationPageLeadingSpacer = nullptr;
     m_textResetButton = nullptr;
     m_textSettingsButton = nullptr;
-    m_conversionSettingsButton = nullptr;
     m_tableMergeButton = nullptr;
     m_tableSplitButton = nullptr;
     m_tableResetButton = nullptr;
     m_openSpreadsheetFileButton = nullptr;
     m_openSpreadsheetFileSeparator = nullptr;
+    m_openDocumentFileButton = nullptr;
+    m_openDocumentFileSeparator = nullptr;
+    m_documentActionSpacers.clear();
     m_recognitionModelSelect = nullptr;
     m_recognitionModelSpacer = nullptr;
     m_textFormattingSelect = nullptr;
@@ -8912,7 +8970,7 @@ bool ScreenshotToolPalette::ensureActionFamily(ActionFamily family) {
         break;
     case ActionFamily::ImageConversion:
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-        createImageConversionActionFamily();
+        createRecognitionModelSelect();
 #else
         return false;
 #endif
@@ -9198,17 +9256,13 @@ void ScreenshotToolPalette::openCreateDrawTemplateModal() {
     }
     alert->hide();
 
-    auto* modal = new adqt::widgets::AdModal(m_drawTemplateSelect);
+    auto* modal = snow_shot::presentation::modal_window::create(
+        m_drawTemplateSelect,
+        m_watermarkTemplateModalOwnerWindow != nullptr ? m_watermarkTemplateModalOwnerWindow.data()
+                                                       : m_drawTemplateSelect->window(),
+        {.windowModality = m_options.dialogModality});
     modal->setObjectName(QStringLiteral("screenshotDrawTemplateCreateModal"));
-    modal->setOwnerWindow(m_watermarkTemplateModalOwnerWindow != nullptr
-                              ? m_watermarkTemplateModalOwnerWindow.data()
-                              : m_drawTemplateSelect->window());
-    modal->setMode(adqt::widgets::AdModal::Mode::Window);
-    modal->setWindowModality(Qt::ApplicationModal);
-    modal->setCentered(true);
     modal->setPreferredWidth(400);
-    modal->setMaskVisible(false);
-    modal->setCloseOnMaskClick(false);
     modal->setClosePolicy(adqt::widgets::AdModal::ClosePolicy::Manual);
     modal->setStandardButtons(adqt::widgets::AdModal::StandardButton::Ok |
                               adqt::widgets::AdModal::StandardButton::Cancel);
@@ -9271,22 +9325,16 @@ void ScreenshotToolPalette::openDeleteDrawTemplateModal(int index) {
     }
     const snow_shot::storage::DrawTemplate target = m_drawTemplates.at(index);
     m_deleteDrawTemplateName = target.name;
-    auto* modal = new adqt::widgets::AdModal(m_drawTemplateSelect);
+    auto* modal = snow_shot::presentation::modal_window::createConfirmation(
+        m_drawTemplateSelect,
+        m_watermarkTemplateModalOwnerWindow != nullptr ? m_watermarkTemplateModalOwnerWindow.data()
+                                                       : m_drawTemplateSelect->window(),
+        {.windowModality = m_options.dialogModality});
     modal->setObjectName(QStringLiteral("screenshotDrawTemplateDeleteModal"));
-    modal->setOwnerWindow(m_watermarkTemplateModalOwnerWindow != nullptr
-                              ? m_watermarkTemplateModalOwnerWindow.data()
-                              : m_drawTemplateSelect->window());
-    modal->setMode(adqt::widgets::AdModal::Mode::Window);
-    modal->setWindowModality(Qt::ApplicationModal);
-    modal->setCentered(true);
     modal->setPreferredWidth(400);
-    modal->setMaskVisible(false);
-    modal->setCloseOnMaskClick(false);
     modal->setClosePolicy(adqt::widgets::AdModal::ClosePolicy::Manual);
-    modal->setPreset(adqt::widgets::AdModal::Preset::Confirm);
+
     modal->setAcceptAccentRole(adqt::widgets::AdButton::AccentRole::Danger);
-    modal->setStandardButtons(adqt::widgets::AdModal::StandardButton::Ok |
-                              adqt::widgets::AdModal::StandardButton::Cancel);
     m_deleteDrawTemplateModal = modal;
     retranslateDrawTemplateUi();
     connect(modal, &adqt::widgets::AdModal::closeRequested, modal,
@@ -9315,7 +9363,6 @@ void ScreenshotToolPalette::openDeleteDrawTemplateModal(int index) {
                     m_deleteDrawTemplateModal = nullptr;
                     m_deleteDrawTemplateName.clear();
                 }
-                modal->deleteLater();
             });
     modal->open();
 }
@@ -9588,11 +9635,13 @@ void ScreenshotToolPalette::setTextTargetLanguage(const QString& language) {
 
 void ScreenshotToolPalette::setImageConversionEnabled(bool enabled) {
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    for (auto* button : {m_markdownButton, m_htmlButton}) {
-        if (button != nullptr) {
-            button->setEnabled(enabled);
-        }
+    if (m_markdownButton != nullptr) {
+        // The Community Online OCR action only invokes user-configured
+        // PaddleOCR; it does not depend on upstream image-conversion models.
+        m_markdownButton->setEnabled(true);
     }
+    if (m_htmlButton != nullptr)
+        m_htmlButton->setEnabled(enabled);
     refreshActionToolGroups();
 #else
     Q_UNUSED(enabled);
@@ -9601,9 +9650,8 @@ void ScreenshotToolPalette::setImageConversionEnabled(bool enabled) {
 
 void ScreenshotToolPalette::setImageConversionBusy(bool markdownBusy, bool htmlBusy) {
 #if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-    if (m_markdownButton != nullptr) {
+    if (m_markdownButton != nullptr)
         m_markdownButton->setBusy(markdownBusy);
-    }
     if (m_htmlButton != nullptr) {
         m_htmlButton->setBusy(htmlBusy);
     }
@@ -9613,15 +9661,6 @@ void ScreenshotToolPalette::setImageConversionBusy(bool markdownBusy, bool htmlB
     Q_UNUSED(htmlBusy);
 #endif
 }
-
-#if SNOW_SHOT_ENABLE_IMAGE_CONVERSION
-void ScreenshotToolPalette::createImageConversionActionFamily() {
-    // Cloud OCR credentials/model are configured in Settings > Text recognition.
-    // Keep the original-image preview, but do not show a per-screenshot model
-    // selector or settings button that interrupts the async Markdown action.
-}
-
-#endif
 
 #if SNOW_SHOT_ENABLE_TABLE_RECOGNITION
 void ScreenshotToolPalette::createTableRecognitionActionFamily() {
@@ -9659,6 +9698,19 @@ void ScreenshotToolPalette::createTableRecognitionActionFamily() {
     m_openSpreadsheetFileButton =
         add("Open spreadsheet file", custom_outlined_icons::OpenSpreadsheetFile(),
             QStringLiteral("screenshotOpenSpreadsheetFileButton"));
+    m_documentActionSpacers.push_back(
+        addStyleToolbarSpacing(m_selectActionLayout, STYLE_GROUP_SPACING * 2));
+    m_openDocumentFileSeparator = createStyleToolbarSeparator(m_selectActionPanel);
+    m_openDocumentFileSeparator->setObjectName(
+        QStringLiteral("screenshotOpenDocumentFileSeparator"));
+    m_selectActionLayout->addWidget(m_openDocumentFileSeparator);
+    m_documentActionSpacers.push_back(
+        addStyleToolbarSpacing(m_selectActionLayout, STYLE_GROUP_SPACING * 2));
+    m_openDocumentFileButton = add(QT_TRANSLATE_NOOP("ScreenshotToolPalette", "Open document file"),
+                                   custom_outlined_icons::OpenDocumentFile(),
+                                   QStringLiteral("screenshotOpenDocumentFileButton"));
+    connect(m_openDocumentFileButton, &adqt::widgets::AdButton::clicked, this,
+            &ScreenshotToolPalette::openDocumentFileRequested);
     connect(m_openSpreadsheetFileButton, &adqt::widgets::AdButton::clicked, this,
             &ScreenshotToolPalette::openSpreadsheetFileRequested);
     connect(m_tableMergeButton, &adqt::widgets::AdButton::clicked, this,
@@ -9708,6 +9760,8 @@ void ScreenshotToolPalette::createRecognitionModelSelect() {
 
 ScreenshotRecognitionModelState* ScreenshotToolPalette::recognitionModelStateForTool(Tool tool) {
     switch (tool) {
+    case Tool::Document:
+        return &m_documentRecognitionModelState;
     case Tool::Table:
         return &m_tableRecognitionModelState;
     case Tool::Latex:
@@ -9728,11 +9782,20 @@ void ScreenshotToolPalette::setRecognitionModelState(Tool tool,
     }
     auto normalized = state;
     if (normalized.selection.isEmpty() && stored != &m_conversionModelState) {
-        normalized.selection = screenshotDedicatedRecognitionModelId();
+        normalized.selection = tool == Tool::Document ? screenshotDedicatedRecognitionModelId()
+                                                      : screenshotDefaultVisionRecognitionModelId();
     }
     if (*stored == normalized)
         return;
     *stored = std::move(normalized);
+    if (tool == Tool::Document) {
+        if (m_documentButton)
+            m_documentButton->setBusy(stored->loading);
+        if (m_openDocumentFileButton)
+            m_openDocumentFileButton->setEnabled(!stored->loading &&
+                                                 !stored->effectiveModel.isEmpty());
+        refreshActionToolGroups();
+    }
     if (m_activeTool && recognitionModelStateForTool(*m_activeTool) == stored) {
         refreshRecognitionModelSelect();
     }
@@ -9747,17 +9810,13 @@ void ScreenshotToolPalette::refreshRecognitionModelSelect() {
     const auto& state = *modelState;
     QVector<AdSelect::Option> options;
     options.reserve(state.models.size() + 1);
-    if (modelState != &m_conversionModelState) {
-        options.push_back(
-            {screenshotDedicatedRecognitionModelId(),
-             m_activeTool == Tool::Table ? tr("Table-specific model") : tr("LaTeX-specific model"),
-             false, tr("Dedicated model")});
-    }
     QSet<QString> modelIds{screenshotDedicatedRecognitionModelId(),
                            screenshotDefaultVisionRecognitionModelId()};
     modelIds.reserve(state.models.size() + 2);
     QString builtInDefault;
     for (const auto& model : state.models) {
+        if (m_activeTool == Tool::Document)
+            break;
         if (!model.supportsVision || model.id.isEmpty()) {
             continue;
         }
@@ -9771,6 +9830,16 @@ void ScreenshotToolPalette::refreshRecognitionModelSelect() {
         }
         options.push_back(
             {model.id, model.name.isEmpty() ? model.id : model.name, false, tr("Vision model")});
+    }
+    const bool hasDedicatedModel = modelState != &m_conversionModelState;
+    if (hasDedicatedModel) {
+        options.push_back(
+            {screenshotDedicatedRecognitionModelId(),
+             m_activeTool == Tool::Document ? tr("Document Recognition Model")
+             : m_activeTool == Tool::Table  ? tr("Table-specific model")
+                                            : tr("LaTeX-specific model"),
+             false,
+             m_activeTool == Tool::Document ? tr("Dedicated Models") : tr("Dedicated model")});
     }
     // Keep the semantic default in preferences while displaying its catalog name and identity.
     // Explicit catalog choices remain distinct from that default as the server order changes.
@@ -9790,7 +9859,8 @@ void ScreenshotToolPalette::refreshRecognitionModelSelect() {
         selectedLabel = selection == screenshotDefaultVisionRecognitionModelId()
                             ? tr("Snow Shot visual understanding")
                             : tr("Selected model (%1)").arg(selection);
-        options.push_back({selection, selectedLabel, true, tr("Vision model")});
+        options.insert(options.size() - int(hasDedicatedModel),
+                       {selection, selectedLabel, true, tr("Vision model")});
     } else if (!unavailable) {
         selectedLabel = selected->label;
     }
@@ -10148,18 +10218,14 @@ void ScreenshotToolPalette::openScrollingSettings() {
         m_scrollingSettingsModal->present();
         return;
     }
-    auto* modal = new adqt::widgets::AdModal(this);
+    auto* modal = snow_shot::presentation::modal_window::create(
+        this,
+        m_scrollingSettingsOwnerWindow != nullptr ? m_scrollingSettingsOwnerWindow.data()
+                                                  : window(),
+        {.windowModality = m_options.dialogModality});
     m_scrollingSettingsModal = modal;
     modal->setObjectName(QStringLiteral("screenshotScrollingSettingsModal"));
-    modal->setOwnerWindow(m_scrollingSettingsOwnerWindow != nullptr
-                              ? m_scrollingSettingsOwnerWindow.data()
-                              : window());
-    modal->setMode(adqt::widgets::AdModal::Mode::Window);
-    modal->setWindowModality(Qt::ApplicationModal);
-    modal->setCentered(true);
     modal->setPreferredWidth(440);
-    modal->setMaskVisible(false);
-    modal->setCloseOnMaskClick(false);
     modal->setClosePolicy(adqt::widgets::AdModal::ClosePolicy::Manual);
     modal->setStandardButtons(
         adqt::widgets::AdModal::StandardButtons(adqt::widgets::AdModal::StandardButton::Ok) |

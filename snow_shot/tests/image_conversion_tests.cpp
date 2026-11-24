@@ -1,6 +1,7 @@
 #include "snow_shot/presentation/screenshotimageconversioncontroller.h"
 #include "snow_shot/network/communitycloudocrsettings.h"
 #include "snow_shot/presentation/languagemanager.h"
+#include "snow_shot/presentation/canvasstatusreadout.h"
 #include "snow_shot/presentation/screenshotimageconversionpersistence.h"
 #include "snow_shot/presentation/screenshotimageconversionview.h"
 #include "snow_shot/presentation/screenshottoolbarlayoutmodel.h"
@@ -338,14 +339,8 @@ void expertConversionRequiresAnExplicitSelection() {
     using Controller = ScreenshotImageConversionController;
     using Format = SnowShotImageConversionFormat;
     const snow_shot::storage::ScreenshotImageConversionSettings settings;
-    auto& language = snow_shot::presentation::LanguageManager::instance();
-    const QString previousLocale = language.currentLocale().name();
     const QString previousModel = settings.visionModel();
-    const auto restore = qScopeGuard([&] {
-        settings.setVisionModel(previousModel);
-        static_cast<void>(language.setLanguage(previousLocale));
-    });
-    require(language.setLanguage(QStringLiteral("en_US")), "load English settings labels");
+    const auto restore = qScopeGuard([&] { settings.setVisionModel(previousModel); });
     require(settings.setVisionModel({}), "clear the saved model");
 
     ConversionServer server;
@@ -375,32 +370,7 @@ void expertConversionRequiresAnExplicitSelection() {
                 api.fallbackModel(true).isEmpty() && api.builtInVisionModel().isEmpty(),
             "an Expert-only catalog does not submit a conversion or resolve an implicit default");
 
-    QWidget owner;
-    owner.show();
-    controller.openSettings(&owner);
-    auto* modal = controller.findChild<adqt::widgets::AdModal*>();
-    require(modal && modal->acceptButton(), "conversion settings opens with an OK button");
-    auto* select = modal->contentWidget()->findChild<adqt::widgets::AdSelect*>(
-        QStringLiteral("screenshotVisionModel"));
-    auto* alert =
-        modal->contentWidget()->findChild<QWidget*>(QStringLiteral("screenshotVisionModelsError"));
-    require(select && alert && select->isEnabled() && select->options().size() == 1 &&
-                select->options().first().label == QStringLiteral("Expert Model") &&
-                !select->currentValue().isValid() && !modal->acceptButton()->isEnabled(),
-            "the settings show the catalog name for Expert and require a choice");
-
-    server.models = {};
-    require(language.setLanguage(QStringLiteral("zh_CN")), "switch the open settings to Chinese");
-    until([&] { return alert->isVisible(); }, "the language change's catalog refresh fails");
-    require(select->options().size() == 1 &&
-                select->options().first().label == QStringLiteral("Expert Model") &&
-                !select->currentValue().isValid(),
-            "the cached Expert option keeps its catalog name after a failed language refresh");
-
-    server.models = QJsonArray{expertEntry};
-    select->setCurrentValue(expert);
-    require(modal->acceptButton()->isEnabled(), "choosing Expert enables OK");
-    modal->closeRequested(adqt::widgets::AdModal::CloseReason::OkAction);
+    controller.selectVisionModel(expert);
     until([&] { return controller.state() == Controller::State::Completed; });
     require(settings.visionModel() == expert && server.requests.size() == 2 &&
                 server.requests.last().value(QStringLiteral("model")) == expert,
@@ -543,25 +513,16 @@ void conversionProviderReplacementKeepsOnlyCurrentBindings() {
     const auto restoreModel = qScopeGuard([&] { settings.setVisionModel(previousModel); });
     require(settings.setVisionModel(QStringLiteral("vision-a")),
             "select the provider replacement model");
-    for (bool replaceFromModal : {false, true}) {
+    {
         ConversionServer server;
         auto original = std::make_unique<SnowShotApiClient>(server.url());
         auto replacement = std::make_unique<SnowShotApiClient>(server.url());
         Controller controller;
         bool replaced = false;
-        const auto replace = [&] {
+        QObject::connect(&controller, &Controller::resultsChanged, &controller, [&] {
             if (!std::exchange(replaced, true))
                 controller.setProvider(replacement.get());
-        };
-        QWidget owner;
-        if (replaceFromModal) {
-            controller.openSettings(&owner);
-            auto* modal = controller.findChild<adqt::widgets::AdModal*>();
-            require(modal, "provider replacement owns an open settings modal");
-            QObject::connect(modal, &adqt::widgets::AdModal::finished, &controller, replace);
-        } else {
-            QObject::connect(&controller, &Controller::resultsChanged, &controller, replace);
-        }
+        });
         controller.setProvider(original.get());
         require(replaced, "a nested provider replacement is accepted");
         original.reset();
@@ -571,29 +532,6 @@ void conversionProviderReplacementKeepsOnlyCurrentBindings() {
         replacement.reset();
         require(controller.state() == Controller::State::Failed && !controller.busy(),
                 "only the latest binding supplies provider retirement notifications");
-    }
-
-    {
-        ConversionServer server;
-        auto original = std::make_unique<SnowShotApiClient>(server.url());
-        auto replacement = std::make_unique<SnowShotApiClient>(server.url());
-        Controller controller;
-        controller.setProvider(original.get());
-        QWidget owner;
-        controller.openSettings(&owner);
-        auto* modal = controller.findChild<adqt::widgets::AdModal*>();
-        require(modal, "retiring a bound provider owns an open settings modal");
-        QObject::connect(modal, &adqt::widgets::AdModal::finished, &controller,
-                         [&] { original.reset(); });
-        controller.setProvider(replacement.get());
-        require(!original, "closing settings retires the preceding provider");
-        controller.activate(QStringLiteral("modal-provider-retirement"), sampleImage(),
-                            Format::Markdown);
-        require(controller.state() == Controller::State::LoadingModels,
-                "retiring the old provider cannot cancel its pending replacement binding");
-        replacement.reset();
-        require(controller.state() == Controller::State::Failed && !controller.busy(),
-                "the replacement retains its destruction subscription after modal reentry");
     }
 
     ConversionServer server;
@@ -608,78 +546,6 @@ void conversionProviderReplacementKeepsOnlyCurrentBindings() {
     controller.setProvider(api.get());
     require(!api && controller.state() == Controller::State::Completed && !controller.busy(),
             "cached-result publication safely permits bound-provider destruction");
-}
-
-void settingsIgnoreRetiredProviderCallbacks() {
-    using adqt::widgets::AdButton;
-    using adqt::widgets::AdModal;
-    using adqt::widgets::AdSelect;
-    for (const bool destroyOriginal : {false, true}) {
-        ConversionServer originalServer;
-        ConversionServer replacementServer;
-        auto original = std::make_unique<SnowShotApiClient>(originalServer.url());
-        SnowShotApiClient replacement(replacementServer.url());
-        ScreenshotImageConversionController controller;
-        QWidget owner;
-        controller.setProvider(original.get());
-        controller.openSettings(&owner);
-        const QPointer<AdModal> retired(controller.findChild<AdModal*>());
-        require(retired, "original settings modal exists");
-        controller.setProvider(&replacement);
-        require(retired, "retired modal remains alive until deferred deletion");
-        controller.openSettings(&owner);
-        AdModal* current = nullptr;
-        for (auto* candidate : controller.findChildren<AdModal*>()) {
-            if (candidate != retired) {
-                current = candidate;
-            }
-        }
-        require(current, "replacement settings modal exists");
-        auto* retry = current->contentWidget()->findChild<AdButton*>(
-            QStringLiteral("screenshotVisionModelsRetry"));
-        auto* select =
-            current->contentWidget()->findChild<AdSelect*>(QStringLiteral("screenshotVisionModel"));
-        require(retry && select && retry->busy(), "current settings starts loading models");
-        if (destroyOriginal) {
-            original.reset();
-        } else {
-            require(original->setBaseUrl(QStringLiteral("http://127.0.0.1:1")),
-                    "retired provider changes its URL");
-        }
-        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-        require(!retired, "retired settings modal is deleted");
-        bool catalogLoaded = false;
-        const auto token = replacement.ensureChatModels(
-            snow_shot::presentation::LanguageManager::instance().currentLocale().name(),
-            &controller, [&catalogLoaded](SnowShotChatModelsResult result) {
-                catalogLoaded = result.succeeded();
-            });
-        require(token != 0, "replacement catalog request starts");
-        until([&]() { return catalogLoaded; });
-        require(select->isEnabled() && !retry->busy(),
-                "retired provider callbacks preserve the current settings subscription");
-        current->reject();
-        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    }
-
-    ConversionServer server;
-    auto api = std::make_unique<SnowShotApiClient>(server.url());
-    ScreenshotImageConversionController controller;
-    QWidget owner;
-    controller.setProvider(api.get());
-    controller.openSettings(&owner);
-    auto* modal = controller.findChild<AdModal*>();
-    require(modal, "current-provider retirement settings modal exists");
-    auto* retry =
-        modal->contentWidget()->findChild<AdButton*>(QStringLiteral("screenshotVisionModelsRetry"));
-    auto* select =
-        modal->contentWidget()->findChild<AdSelect*>(QStringLiteral("screenshotVisionModel"));
-    require(retry && select && retry->busy(), "current provider starts settings discovery");
-    api.reset();
-    require(!retry->busy() && !select->loading(),
-            "current-provider destruction still settles the current settings window");
-    modal->reject();
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
 }
 
 void sessionNotificationsAllowOwnerDeletion() {
@@ -1156,27 +1022,6 @@ void synchronousRecognitionCompletionAllowsOwnerDeletion() {
     }
 }
 
-void settingsInitialAvailability() {
-    ConversionServer server;
-    SnowShotApiClient api(server.url());
-    QWidget owner;
-    owner.resize(640, 480);
-    owner.show();
-    for (auto* provider : {&api, static_cast<SnowShotApiClient*>(nullptr)}) {
-        ScreenshotImageConversionController controller;
-        controller.setProvider(provider);
-        controller.openSettings(&owner);
-        auto* modal = controller.findChild<adqt::widgets::AdModal*>();
-        require(modal && modal->acceptButton() && !modal->acceptButton()->isEnabled(),
-                "loading and unavailable providers disable OK on first display");
-        auto* select = modal->contentWidget()->findChild<adqt::widgets::AdSelect*>();
-        require(select && !select->isEnabled(),
-                "model selection is disabled until models are available");
-        modal->reject();
-        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    }
-}
-
 void conversionCacheUsesRecognitionKeys() {
     using Controller = ScreenshotImageConversionController;
     using Format = SnowShotImageConversionFormat;
@@ -1220,7 +1065,7 @@ void conversionCacheUsesRecognitionKeys() {
     }
 }
 
-void conversionLifecycleAndSettings() {
+void conversionLifecycleAndModelSelection() {
     using Controller = ScreenshotImageConversionController;
     using Format = SnowShotImageConversionFormat;
     const snow_shot::storage::ScreenshotImageConversionSettings settings;
@@ -1239,61 +1084,15 @@ void conversionLifecycleAndSettings() {
     controller.activate(QStringLiteral("image-one"), sampleImage(), Format::Markdown);
     require(controller.state() == Controller::State::Completed && server.requests.size() == 1,
             "matching completed conversion is reused without a request");
-    QWidget owner;
-    owner.resize(640, 480);
-    owner.show();
-    controller.openSettings(&owner);
-    auto* modal = controller.findChild<adqt::widgets::AdModal*>();
-    require(modal != nullptr, "conversion settings opens a modal");
-    const QRect initialGeometry = modal->contentWidget()->window()->geometry();
-    const QRect initialBodyGeometry = modal->contentWidget()->geometry();
-    require(modal->contentWidget()->height() == modal->contentWidget()->sizeHint().height(),
-            "settings opens with content-sized height without unused alert space");
-    QCoreApplication::processEvents();
-    require(modal->contentWidget()->window()->geometry() == initialGeometry,
-            "settings geometry is stable after first display");
-    require(modal->contentWidget()->geometry() == initialBodyGeometry,
-            "settings content geometry is stable after first display");
-    require(modal->acceptButton()->isEnabled(), "cached vision models enable OK on first display");
-    auto* select = modal->contentWidget()->findChild<adqt::widgets::AdSelect*>(
-        QStringLiteral("screenshotVisionModel"));
-    require(select && select->options().size() == 2 &&
-                select->options().first().value == QStringLiteral("vision-a") &&
-                select->popupLayerMode() == adqt::widgets::AdSelect::PopupLayerMode::QtTool,
-            "settings offers only vision models in server order using a tool popup");
-    const QString snapshots = qEnvironmentVariable("SNOW_SHOT_CONVERSION_SNAPSHOTS");
-    if (!snapshots.isEmpty()) {
-        require(QDir().mkpath(snapshots), "create settings snapshot directory");
-        QCoreApplication::processEvents();
-        require(modal->contentWidget()->window()->grab().save(
-                    QDir(snapshots).filePath(QStringLiteral("vision-settings.png"))),
-                "save settings snapshot");
-    }
-    select->setCurrentValue(QStringLiteral("vision-b"));
-    modal->closeRequested(adqt::widgets::AdModal::CloseReason::CancelAction);
-    require(settings.visionModel() == QStringLiteral("vision-a") && server.requests.size() == 1,
-            "cancel does not save settings or rerun conversion");
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    controller.openSettings(&owner);
-    modal = controller.findChild<adqt::widgets::AdModal*>();
-    select = modal->contentWidget()->findChild<adqt::widgets::AdSelect*>(
-        QStringLiteral("screenshotVisionModel"));
-    select->setCurrentValue(QStringLiteral("vision-b"));
-    modal->closeRequested(adqt::widgets::AdModal::CloseReason::OkAction);
+    controller.selectVisionModel(QStringLiteral("vision-b"));
     until([&]() { return controller.state() == Controller::State::Completed; });
     require(settings.visionModel() == QStringLiteral("vision-b") && server.requests.size() == 2 &&
                 server.requests.last().value(QStringLiteral("model")) == QStringLiteral("vision-b"),
-            "accept persists the shared model and reruns only the active window");
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    controller.openSettings(&owner);
-    modal = controller.findChild<adqt::widgets::AdModal*>();
-    select = modal->contentWidget()->findChild<adqt::widgets::AdSelect*>(
-        QStringLiteral("screenshotVisionModel"));
-    select->setCurrentValue(QStringLiteral("vision-a"));
-    modal->closeRequested(adqt::widgets::AdModal::CloseReason::OkAction);
+            "selecting another model persists the preference and reruns the conversion");
+    controller.selectVisionModel(QStringLiteral("vision-a"));
     require(controller.state() == Controller::State::Completed && server.requests.size() == 2 &&
                 controller.source() == saved.first().source,
-            "changing settings back to a completed model restores its result without uploading");
+            "selecting a completed model restores its result without uploading");
     settings.setVisionModel(QStringLiteral("vision-b"));
     server.source = QStringLiteral("```html\n<h1>Hello</h1>\n```");
     controller.activate(QStringLiteral("image-one"), sampleImage(), Format::Html);
@@ -1330,11 +1129,6 @@ void conversionLifecycleAndSettings() {
     until([&]() { return controller.state() == Controller::State::Failed; });
     require(controller.error().contains(QStringLiteral("No vision models")),
             "empty vision catalog has a distinct error");
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
-    controller.openSettings(&owner);
-    modal = controller.findChild<adqt::widgets::AdModal*>();
-    require(modal && modal->acceptButton() && !modal->acceptButton()->isEnabled(),
-            "settings cannot accept an empty vision catalog");
     controller.deactivate();
 }
 
@@ -1570,19 +1364,11 @@ void customModelWorkflows() {
     QWidget owner;
     owner.resize(800, 700);
     owner.show();
-    controller.openSettings(&owner);
-    auto* modal = controller.findChild<adqt::widgets::AdModal*>();
-    auto* select = modal->contentWidget()->findChild<adqt::widgets::AdSelect*>(
-        QStringLiteral("screenshotVisionModel"));
-    require(select && select->isEnabled() && select->options().size() == 2,
-            "custom conversion choices available while builtin catalog loads");
     model.supportsVision = false;
     require(apiSettings.setCustomModels({model, second}),
             "update shared custom model capabilities");
-    require(select->options().size() == 1 && settings.visionModel() == second.selectionId(),
-            "vision removal updates open selector and shared fallback");
-    modal->reject();
-    QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+    require(settings.visionModel() == second.selectionId(),
+            "vision removal updates the shared fallback model");
     ScreenshotRecognitionSessionActions actions;
     actions.translationSettingsOwner = [&]() { return &owner; };
     ScreenshotRecognitionSessionController session(nullptr, nullptr, &api, actions);
@@ -1832,7 +1618,10 @@ void conversionSessionSwitchesVisionModels() {
     auto modelMode = Mode::Text;
     ScreenshotRecognitionSessionActions actions;
     actions.setRecognitionModelState = [&](int mode, const ScreenshotRecognitionModelState& state) {
-        modelMode = static_cast<Mode>(mode);
+        const auto publishedMode = static_cast<Mode>(mode);
+        if (publishedMode != Mode::Markdown && publishedMode != Mode::Html)
+            return;
+        modelMode = publishedMode;
         modelState = state;
     };
     ScreenshotRecognitionSessionController session(nullptr, nullptr, &api, actions);
@@ -1873,6 +1662,59 @@ void conversionSessionSwitchesVisionModels() {
     require(session.recognitionResultsSnapshot().visibleConversion.has_value() &&
                 modelState.selection == secondModel && server.requests.size() == 4,
             "switching back reuses the result for that format and model");
+}
+
+void conversionThinkingReadoutFollowsReasoningPhase() {
+    using Mode = ScreenshotRecognitionSessionController::Mode;
+    const snow_shot::storage::ScreenshotImageConversionSettings settings;
+    const QString previousModel = settings.visionModel();
+    const auto restore = qScopeGuard([&] { settings.setVisionModel(previousModel); });
+    require(settings.setVisionModel(QStringLiteral("vision")),
+            "select a streaming conversion model");
+
+    translation_tests::Server server;
+    SnowShotApiClient api(server.url());
+    ScreenshotRecognitionWindow window({});
+    const QRectF selection(0, 0, 240, 120);
+    require(window.present(
+                {QGuiApplication::primaryScreen(), nullptr, QRect(300, 180, 400, 160), selection}),
+            "present the conversion thinking fixture");
+    ScreenshotRecognitionSessionActions actions;
+    actions.ensureContent = [&] { return &window; };
+    ScreenshotRecognitionSessionController session(nullptr, nullptr, &api, actions);
+    session.setTarget({QStringLiteral("thinking-conversion"), sampleImage(), selection});
+    const auto readout = [&] {
+        return window.findChild<CanvasStatusReadout*>(
+            QStringLiteral("screenshotModelThinkingReadout"));
+    };
+    const auto showsThinking = [&] { return readout() && readout()->isVisible(); };
+    const auto startReasoning = [&](int index) {
+        until([&] { return server.streams.size() == index + 1; }, "conversion stream starts");
+        require(!showsThinking(),
+                "conversion waits for a reasoning delta before showing the readout");
+        server.reasoning(index, QStringLiteral("model reasoning"));
+        until(showsThinking, "conversion displays the shared thinking readout");
+    };
+
+    session.activate(Mode::Markdown);
+    startReasoning(0);
+    server.delta(0, QStringLiteral("# Markdown"));
+    until([&] { return readout()->isHidden(); }, "Markdown output dismisses the thinking readout");
+    require(session.busy(Mode::Markdown), "Markdown remains busy until the stream finishes");
+    server.finish(0);
+    until([&] { return !session.busy(Mode::Markdown); }, "Markdown conversion finishes");
+
+    session.activate(Mode::Html);
+    startReasoning(1);
+    server.fail(1);
+    until([&] { return !session.busy(Mode::Html); }, "HTML conversion reports the stream error");
+    require(readout()->isHidden(), "an error during HTML reasoning dismisses the readout");
+
+    session.activate(Mode::Html);
+    startReasoning(2);
+    session.activate(Mode::Markdown);
+    require(readout()->isHidden(), "switching to the cached Markdown result clears HTML thinking");
+    until([&] { return server.disconnected(2); }, "switching formats cancels the HTML stream");
 }
 
 void conversionSessionRoutesSourceAndClearsOldViews() {
@@ -2236,126 +2078,94 @@ void previewThemesAndLongDocuments() {
 void conversionToolbarMigration() {
     namespace storage = snow_shot::storage;
     namespace layout = snow_shot::presentation::toolbar_layout;
-    const storage::ScreenshotToolbarLayout original{
-        {{QStringLiteral("text-recognition")},
-         {QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition")}},
-        {QStringLiteral("save-as-file")}};
-    const auto migrated =
-        layout::normalizedLayout(original, storage::ScreenshotToolbarLayoutKind::ActionTools);
-    require(migrated.positions.at(0) == original.positions.at(0) &&
-                migrated.positions.at(1) == QStringList{QStringLiteral("barcode-recognition"),
-                                                        QStringLiteral("table-recognition"),
-                                                        QStringLiteral("convert-to-markdown"),
-                                                        QStringLiteral("latex-recognition"),
-                                                        QStringLiteral("convert-to-html")} &&
-                // Upload, quick-save, and print inherit the manual save action's visibility.
-                migrated.hidden ==
-                    QStringList{QStringLiteral("save-as-file"), QStringLiteral("upload-to-cloud"),
-                                QStringLiteral("quick-save"), QStringLiteral("print")},
-            "older layouts gain conversions inside recognition without rearranging other tools");
-    const storage::ScreenshotToolbarSettings settings;
-    settings.setLayout(storage::ScreenshotToolbarLayoutKind::ActionTools, original);
-    const auto persisted = settings.layout(storage::ScreenshotToolbarLayoutKind::ActionTools);
-    require(persisted.positions == migrated.positions && persisted.hidden == migrated.hidden,
-            "storage and presentation apply identical layout migration");
-    auto hidden = migrated;
-    hidden.positions[1].removeAll(QStringLiteral("convert-to-markdown"));
-    hidden.hidden.push_back(QStringLiteral("convert-to-markdown"));
-    const auto retained =
-        layout::normalizedLayout(hidden, storage::ScreenshotToolbarLayoutKind::ActionTools);
-    require(retained.hidden.contains(QStringLiteral("convert-to-markdown")),
-            "explicitly hidden conversion actions stay hidden");
 
-    const auto verify = [&](const storage::ScreenshotToolbarLayout& input,
-                            const storage::ScreenshotToolbarLayout& expected) {
-        const auto result =
-            layout::normalizedLayout(input, storage::ScreenshotToolbarLayoutKind::ActionTools);
-        require(result == expected, "recognition group migration matches the expected layout");
-        require(layout::normalizedLayout(
-                    result, storage::ScreenshotToolbarLayoutKind::ActionTools) == result,
-                "recognition group migration is idempotent");
-        settings.setLayout(storage::ScreenshotToolbarLayoutKind::ActionTools, input);
-        require(settings.layout(storage::ScreenshotToolbarLayoutKind::ActionTools) == result,
-                "storage and presentation agree on every migration branch");
+    const QString canonical = QStringLiteral("convert-to-markdown");
+    const QStringList retiredOnlineOcrIds{
+        QStringLiteral("table-recognition"),
+        QStringLiteral("document-recognition"),
+        QStringLiteral("latex-recognition"),
+        QStringLiteral("convert-to-html"),
     };
+    const auto assertSingleOnlineOcr = [&](const storage::ScreenshotToolbarLayout& value,
+                                           const char* message) {
+        int count = 0;
+        for (const QStringList& position : value.positions) {
+            count += static_cast<int>(position.count(canonical));
+            for (const QString& retired : retiredOnlineOcrIds)
+                require(!position.contains(retired), message);
+            require(!position.contains(QStringLiteral("barcode-recognition")), message);
+        }
+        count += static_cast<int>(value.hidden.count(canonical));
+        for (const QString& retired : retiredOnlineOcrIds)
+            require(!value.hidden.contains(retired), message);
+        require(!value.hidden.contains(QStringLiteral("barcode-recognition")), message);
+        require(count == 1, message);
+    };
+
+    const storage::ScreenshotToolbarLayout legacy{
+        {{QStringLiteral("text-recognition")},
+         {QStringLiteral("barcode-recognition"),
+          QStringLiteral("table-recognition"),
+          QStringLiteral("document-recognition"),
+          QStringLiteral("convert-to-markdown"),
+          QStringLiteral("latex-recognition"),
+          QStringLiteral("convert-to-html")},
+         {QStringLiteral("save-as-file")}},
+        {}};
+
+    const storage::ScreenshotToolbarSettings settings;
     for (const auto kind : {storage::ScreenshotToolbarLayoutKind::ActionTools,
                             storage::ScreenshotToolbarLayoutKind::PinnedActionTools}) {
-        for (bool hideSave : {false, true}) {
-            storage::ScreenshotToolbarLayout saveLayout;
-            if (hideSave)
-                saveLayout.hidden = {QStringLiteral("save-as-file")};
-            else
-                saveLayout.positions = {{QStringLiteral("save-as-file")}};
-            const auto result = layout::normalizedLayout(saveLayout, kind);
-            if (hideSave) {
-                require(result.hidden == QStringList{QStringLiteral("save-as-file"),
-                                                     QStringLiteral("upload-to-cloud"),
-                                                     QStringLiteral("quick-save"),
-                                                     QStringLiteral("print")},
-                        "print inherits hidden save visibility for both action toolbars");
-            } else {
-                require(result.positions.front() == QStringList{QStringLiteral("upload-to-cloud"),
-                                                                QStringLiteral("print"),
-                                                                QStringLiteral("quick-save"),
-                                                                QStringLiteral("save-as-file")},
-                        "print joins the saved manual save stack for both action toolbars");
-            }
-            require(settings.setLayout(kind, saveLayout) && settings.layout(kind) == result,
-                    "storage preserves print's inherited save placement and visibility");
+        const auto migrated = layout::normalizedLayout(legacy, kind);
+        assertSingleOnlineOcr(migrated,
+                              "legacy online OCR actions collapse to one community action");
+        require(layout::normalizedLayout(migrated, kind) == migrated,
+                "single Online OCR toolbar migration is idempotent");
+        require(settings.setLayout(kind, legacy) && settings.layout(kind) == migrated,
+                "persisted legacy toolbar layouts collapse to one Online OCR action");
+
+        storage::ScreenshotToolbarLayout aliasesOnly;
+        aliasesOnly.positions = {{QStringLiteral("document-recognition"),
+                                  QStringLiteral("latex-recognition"),
+                                  QStringLiteral("convert-to-html"),
+                                  QStringLiteral("table-recognition")}};
+        const auto collapsed = layout::normalizedLayout(aliasesOnly, kind);
+        assertSingleOnlineOcr(collapsed,
+                              "legacy provider-format actions map to the canonical Online OCR id");
+
+        storage::ScreenshotToolbarLayout hidden;
+        hidden.positions = {{QStringLiteral("text-recognition")}};
+        hidden.hidden = {canonical, QStringLiteral("latex-recognition"),
+                         QStringLiteral("convert-to-html")};
+        const auto hiddenResult = layout::normalizedLayout(hidden, kind);
+        require(hiddenResult.hidden.count(canonical) == 1,
+                "explicitly hidden Online OCR remains hidden after alias cleanup");
+        assertSingleOnlineOcr(hiddenResult,
+                              "hidden legacy aliases collapse without resurrecting extra actions");
+
+        const auto defaults = layout::defaultPositions(kind);
+        int defaultOnlineOcrCount = 0;
+        for (const QStringList& position : defaults) {
+            defaultOnlineOcrCount += static_cast<int>(position.count(canonical));
+            for (const QString& retired : retiredOnlineOcrIds)
+                require(!position.contains(retired),
+                        "community defaults never expose retired Online OCR variants");
         }
+        require(defaultOnlineOcrCount == 1,
+                "community defaults expose exactly one configurable Online OCR action");
     }
-    verify(hidden, retained);
-    storage::ScreenshotToolbarLayout defaults{layout::actionDefaultPositions(), {}};
-    const QVector<QStringList> formerFixedPositions{
-        {QStringLiteral("separator")}, {QStringLiteral("cancel")}, {QStringLiteral("copy")}};
-    auto historicalDefaults = defaults;
-    historicalDefaults.positions.removeIf(
-        [&](const QStringList& position) { return formerFixedPositions.contains(position); });
-    auto previousDefault = historicalDefaults;
-    previousDefault.positions[0] = {QStringLiteral("barcode-recognition"),
-                                    QStringLiteral("table-recognition")};
-    previousDefault.positions.insert(1, QStringList{QStringLiteral("convert-to-markdown")});
-    previousDefault.positions.insert(2, QStringList{QStringLiteral("convert-to-html")});
-    verify(previousDefault, defaults);
-    auto previousGroupedDefault = historicalDefaults;
-    previousGroupedDefault.positions[0] = {
-        QStringLiteral("table-recognition"), QStringLiteral("barcode-recognition"),
-        QStringLiteral("convert-to-markdown"), QStringLiteral("convert-to-html")};
-    verify(previousGroupedDefault, defaults);
-    auto customGrouped = previousGroupedDefault;
-    customGrouped.positions.move(0, 1);
-    auto expectedCustomGrouped = customGrouped;
-    expectedCustomGrouped.positions[1].insert(3, QStringLiteral("latex-recognition"));
-    expectedCustomGrouped.positions += formerFixedPositions;
-    verify(customGrouped, expectedCustomGrouped);
-    verify({}, defaults);
-    auto customized = previousDefault;
-    customized.positions.move(1, customized.positions.size() - 1);
-    auto expectedCustomized = customized;
-    expectedCustomized.positions.last().append(QStringLiteral("latex-recognition"));
-    expectedCustomized.positions += formerFixedPositions;
-    verify(customized, expectedCustomized);
-    auto qrHidden = original;
-    qrHidden.positions[1].removeAll(QStringLiteral("barcode-recognition"));
-    qrHidden.hidden.push_back(QStringLiteral("barcode-recognition"));
-    auto tableGroup = migrated;
-    tableGroup.positions[1].removeAll(QStringLiteral("barcode-recognition"));
-    // Recognition keeps its input position before the inherited hidden save companions.
-    tableGroup.hidden.insert(1, QStringLiteral("barcode-recognition"));
-    verify(qrHidden, tableGroup);
-    auto recognitionHidden = defaults;
-    recognitionHidden.positions.removeFirst();
-    recognitionHidden.hidden = {QStringLiteral("barcode-recognition"),
-                                QStringLiteral("table-recognition")};
-    auto conversionsOnly = recognitionHidden;
-    conversionsOnly.positions.push_back({QStringLiteral("convert-to-html"),
-                                         QStringLiteral("convert-to-markdown"),
-                                         QStringLiteral("latex-recognition")});
-    verify(recognitionHidden, conversionsOnly);
 }
 } // namespace
 
 namespace {
+void selectVisionOnlineOcrForImageConversionTests() {
+    auto settings = snow_shot::network::readCommunityCloudOcrSettings();
+    settings.engine = QStringLiteral("vision");
+    settings.outputFormat = QStringLiteral("markdown");
+    require(snow_shot::network::writeCommunityCloudOcrSettings(settings),
+            "select large-model OCR for upstream image-conversion fixtures");
+}
+
 void initializeRecognitionTestFonts() {
 #if defined(Q_OS_WIN)
     require(QFontDatabase::addApplicationFont(QStringLiteral("C:/Windows/Fonts/segoeui.ttf")) >= 0,
@@ -2477,14 +2287,13 @@ void runCommunityCloudOcrTests() {
 }
 
 void runImageConversionNetworkTests() {
+    selectVisionOnlineOcrForImageConversionTests();
     initializeRecognitionTestFonts();
     for (const auto& legacy : {QStringLiteral("qwen3.8-flash"), QStringLiteral("qwen-mt-flash")})
         conversionAiModelMigrationPreservesHistoricalOutput(legacy);
     expertConversionRequiresAnExplicitSelection();
-    settingsInitialAvailability();
-    settingsIgnoreRetiredProviderCallbacks();
     conversionCacheUsesRecognitionKeys();
-    conversionLifecycleAndSettings();
+    conversionLifecycleAndModelSelection();
     conversionServerAndProviderIdentity();
     conversionCacheBoundsAndSeededModels();
     conversionDiscoveryJoinsPendingRefresh();
@@ -2494,6 +2303,7 @@ void runImageConversionNetworkTests() {
 }
 
 void runRecognitionNotificationLifetimeTests() {
+    selectVisionOnlineOcrForImageConversionTests();
     conversionNotificationsAllowOwnerDeletion();
     conversionProviderBindingsSurviveNotificationReentry();
     conversionProviderReplacementKeepsOnlyCurrentBindings();
@@ -2510,6 +2320,7 @@ void runRecognitionNotificationLifetimeTests() {
 void runImageConversionTests() {
     runImageConversionNetworkTests();
     conversionSessionSwitchesVisionModels();
+    conversionThinkingReadoutFollowsReasoningPhase();
     conversionClipboardPreservesFormats();
     conversionSessionRoutesSourceAndClearsOldViews();
     recognitionFileSnapshotTracksPartialConversionAndQrValues();
@@ -2680,7 +2491,15 @@ void latexVisionPublishesProvisionalSourceBeforeCompletion() {
     session.activate(Mode::Latex);
     translation_tests::waitUntil([&] { return server.streams.size() == 1; },
                                  "formula session starts a streaming vision request");
+    const auto readout = [&] {
+        return window.findChild<CanvasStatusReadout*>(
+            QStringLiteral("screenshotModelThinkingReadout"));
+    };
+    server.reasoning(0, QStringLiteral("formula reasoning"));
+    until([&] { return readout() && !readout()->isHidden(); },
+          "formula reasoning shows the shared thinking readout");
     server.delta(0, QStringLiteral("`"));
+    until([&] { return readout()->isHidden(); }, "the first formula delta hides the readout");
     server.delta(0, QStringLiteral("``la"));
     server.delta(0, QStringLiteral("tex\r\nx"));
     const auto editor = [&] {
@@ -2741,6 +2560,15 @@ void latexVisionRetiresProvisionalOutput() {
         session->activate(Mode::Latex);
         translation_tests::waitUntil([&] { return server.streams.size() == 1; },
                                      "retirement fixture starts a formula stream");
+        const auto readout = [&] {
+            return window.findChild<CanvasStatusReadout*>(
+                QStringLiteral("screenshotModelThinkingReadout"));
+        };
+        if (variant == 6) {
+            server.reasoning(0, QStringLiteral("formula reasoning"));
+            until([&] { return readout() && !readout()->isHidden(); },
+                  "formula reasoning is visible before deactivation");
+        }
         server.delta(0, QStringLiteral("x+\\frac{a}{"));
         if (variant != 6) {
             until(
@@ -2767,8 +2595,10 @@ void latexVisionRetiresProvisionalOutput() {
             api.reset();
         else if (variant == 5)
             session.reset();
-        else
-            session->deactivate(); // Retire a source flush that may still be queued.
+        else {
+            session->deactivate();
+            require(readout()->isHidden(), "deactivating formula recognition clears thinking");
+        }
         translation_tests::waitUntil([&] { return server.disconnected(0); },
                                      "retiring formula progress cancels its transport");
         // The peer can disconnect before the client handles finished, and preview widgets
@@ -3195,8 +3025,6 @@ void runLatexRecognitionTests() {
     latexVisionPublishesProvisionalSourceBeforeCompletion();
     latexVisionRetiresProvisionalOutput();
     using Mode = ScreenshotRecognitionSessionController::Mode;
-    namespace layout = snow_shot::presentation::toolbar_layout;
-    using Kind = snow_shot::storage::ScreenshotToolbarLayoutKind;
     const QString source = QStringLiteral("\\frac{a_b}{c^2} <x> & \\alpha\n+1");
     ScreenshotRecognitionWindow window(ScreenshotRecognitionWindowActions{});
     ScreenshotRecognitionSessionActions actions;
@@ -3284,26 +3112,4 @@ void runLatexRecognitionTests() {
             "reset restores recognized LaTeX exactly");
     session.setTarget({QStringLiteral("other"), sampleImage(), QRectF(0, 0, 240, 120)});
     require(!session.cachedRecognitionResults().latex, "another target cannot reuse this formula");
-    for (const auto kind : {Kind::ActionTools, Kind::PinnedActionTools}) {
-        snow_shot::storage::ScreenshotToolbarLayout old;
-        old.positions = {{QStringLiteral("convert-to-html"), QStringLiteral("convert-to-markdown"),
-                          QStringLiteral("barcode-recognition")}};
-        const auto migrated = layout::normalizedLayout(old, kind);
-        require(migrated.positions.front().at(2) == QStringLiteral("latex-recognition"),
-                "migration inserts LaTeX immediately after Markdown");
-        snow_shot::storage::ScreenshotToolbarLayout previousDefault;
-        previousDefault.positions = {
-            {QStringLiteral("convert-to-html"), QStringLiteral("latex-recognition"),
-             QStringLiteral("convert-to-markdown"), QStringLiteral("barcode-recognition"),
-             QStringLiteral("table-recognition")}};
-        const auto updated = layout::normalizedLayout(previousDefault, kind);
-        require(updated.positions.front().at(1) == QStringLiteral("convert-to-markdown") &&
-                    updated.positions.front().at(2) == QStringLiteral("latex-recognition"),
-                "previous default moves LaTeX to Markdown's left in the reversed popup");
-        old.hidden = {QStringLiteral("latex-recognition")};
-        const auto hidden = layout::normalizedLayout(old, kind);
-        require(hidden.hidden.contains(QStringLiteral("latex-recognition")) &&
-                    !hidden.positions.front().contains(QStringLiteral("latex-recognition")),
-                "explicitly hidden LaTeX stays hidden");
-    }
 }

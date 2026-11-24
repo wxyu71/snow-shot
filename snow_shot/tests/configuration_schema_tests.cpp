@@ -6,6 +6,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QJsonObject>
 #include <QSet>
 #include <QStandardPaths>
 
@@ -65,7 +66,75 @@ QJsonArray metadata() {
     return result;
 }
 
+
+#ifdef Q_OS_WIN
+// The original author baseline is intentionally immutable. Only the five
+// reviewed Community-disabled toolbar actions may disappear from three
+// affected Full-edition layouts. Compare all remaining data exactly.
+QJsonObject communityToolbarBaseline(QJsonObject entry) {
+    if (snow_shot::app::edition::isMini)
+        return entry;
+
+    const QString key = entry.value(QStringLiteral("key")).toString();
+    const QString floating = QStringLiteral("floating_toolbar/layout");
+    const QString pinned = QStringLiteral("pin_to_screen/action_tools_layout");
+    const QString screenshot = QStringLiteral("screenshot_toolbar/action_tools_layout");
+    if (key != floating && key != pinned && key != screenshot)
+        return entry;
+
+    const QSet<QString> unavailable{
+        QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition"),
+        QStringLiteral("latex-recognition"), QStringLiteral("document-recognition"),
+        QStringLiteral("convert-to-html")};
+    QSet<QString> expectedRemoved = unavailable;
+    if (key == floating)
+        expectedRemoved.remove(QStringLiteral("document-recognition"));
+
+    QJsonObject layout = entry.value(QStringLiteral("defaultValue")).toObject();
+    require(layout.value(QStringLiteral("positions")).isArray() &&
+                layout.value(QStringLiteral("hidden")).isArray(),
+            "frozen original toolbar layout must contain positions and hidden arrays");
+    QSet<QString> removed;
+    const auto withoutUnavailable = [&unavailable, &removed](const QJsonArray& original) {
+        QJsonArray retained;
+        for (const auto& item : original) {
+            if (unavailable.contains(item.toString()))
+                removed.insert(item.toString());
+            else
+                retained.append(item);
+        }
+        return retained;
+    };
+    QJsonArray positions;
+    for (const auto& group : layout.value(QStringLiteral("positions")).toArray()) {
+        require(group.isArray(), "frozen toolbar positions must be arrays");
+        const QJsonArray retained = withoutUnavailable(group.toArray());
+        if (!retained.isEmpty())
+            positions.append(retained);
+    }
+    layout.insert(QStringLiteral("positions"), positions);
+    layout.insert(QStringLiteral("hidden"),
+                  withoutUnavailable(layout.value(QStringLiteral("hidden")).toArray()));
+    require(removed == expectedRemoved,
+            "frozen toolbar baseline must retain exactly the reviewed disabled Community actions");
+    entry.insert(QStringLiteral("defaultValue"), layout);
+    return entry;
+}
+#endif
+
 void publicMetadataMatchesOriginal(const QJsonArray& actual) {
+    // The Community safety policy makes startup registration opt-in on every
+    // platform, including Windows. The original-author fixtures stay frozen.
+    require(
+        !ConfigurationSchema::defaultValue(QStringLiteral("system/auto_start_at_boot")).toBool(),
+        "Community auto-start must default off in both editions on all platforms");
+    require(ConfigurationSchema::defaultValue(QStringLiteral("system/launch_as_administrator")) == QJsonValue(false) &&
+                ConfigurationSchema::defaultValue(QStringLiteral("mcp/enabled")) == QJsonValue(false),
+            "Local administrator launch and MCP must require explicit opt-in");
+    require(ConfigurationSchema::defaultValue(QStringLiteral("capture_history/retention_mode")) == QJsonValue(QStringLiteral("full")) &&
+                ConfigurationSchema::defaultValue(QStringLiteral("pinned_history/enabled")) == QJsonValue(true),
+            "Local screenshot and pinned histories default on; explicit user settings remain editable");
+
 #ifdef Q_OS_WIN
     QFile file(QString::fromUtf8(SNOW_SCHEMA_BASELINE_JSON));
     require(file.open(QIODevice::ReadOnly), "the original schema metadata fixture must open");
@@ -81,6 +150,32 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
                 (snow_shot::app::edition::isMini ? QStringLiteral("mini") : QStringLiteral("full")),
             "the reference must match the linked storage edition");
     const auto expected = fixture.value(QStringLiteral("entries")).toArray();
+    // Both frozen Windows fixtures already contain the annotation cycle shortcut.
+    // Validate its runtime contract independently and compare every baseline row.
+    const QString communityKey =
+        QStringLiteral("drawing_shortcuts/cycle_annotation_tool_options");
+    bool foundCommunityKey = false;
+    for (const auto& value : actual) {
+        const auto entry = value.toObject();
+        if (entry.value(QStringLiteral("key")).toString() != communityKey)
+            continue;
+        require(!foundCommunityKey, "Community shortcut schema key must be unique");
+        foundCommunityKey = true;
+        // The raw descriptor stores "Tab" as a StringList, but buildEntries()
+        // materializes all drawing shortcuts as typed ShortcutList objects.
+        // Validate the runtime contract rather than the intermediate descriptor.
+        const QJsonValue storedDefault = entry.value(QStringLiteral("defaultValue"));
+        const auto bindings = snow_shot::shortcuts::shortcutBindingsFromJson(storedDefault, false);
+        const auto normalized = ConfigurationSchema::normalize(communityKey, storedDefault);
+        require(
+            entry.value(QStringLiteral("valueKind")).toString() == QStringLiteral("ShortcutList") &&
+                bindings == snow_shot::shortcuts::ShortcutBindingList{QStringLiteral("Tab")} &&
+                storedDefault == snow_shot::shortcuts::shortcutBindingsToJson(bindings) &&
+                normalized.valid && !normalized.changed && normalized.value == storedDefault &&
+                entry.value(QStringLiteral("maximumListItems")).toInt() == 2,
+            "Community annotation cycle shortcut must retain its typed Tab default");
+    }
+    require(foundCommunityKey, "Community annotation cycle shortcut must be present");
     if (actual.size() != expected.size()) {
         std::cerr << "schema entries: actual=" << actual.size() << " expected=" << expected.size()
                   << '\n';
@@ -97,17 +192,39 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
         for (const auto& key : expectedKeys - actualKeys)
             std::cerr << "unexpected fixture key: " << key.toStdString() << '\n';
     }
-    require(actual.size() == expected.size(), "schema entry counts must match the original");
+    require(actual.size() == expected.size(),
+            "original schema entry counts must match");
+    int changedEntries = 0;
     for (qsizetype i = 0; i < expected.size(); ++i) {
-        if (actual.at(i) != expected.at(i)) {
-            std::cerr
-                << "schema metadata changed at entry " << i << ": "
-                << actual.at(i).toObject().value(QStringLiteral("key")).toString().toStdString()
-                << "\nactual: " << QJsonDocument(actual.at(i).toObject()).toJson().constData()
-                << "expected: " << QJsonDocument(expected.at(i).toObject()).toJson().constData();
-            std::exit(1);
+        QJsonObject expectedEntry = communityToolbarBaseline(expected.at(i).toObject());
+        const auto key = expectedEntry.value(QStringLiteral("key")).toString();
+        // Keep the original-author fixture unchanged for regression provenance.
+        // Preserve original enabled local histories. Review only Community's
+        // opt-in startup, manual unsigned-release updates and toolbar filtering.
+        if (key == QStringLiteral("system/auto_start_at_boot")) {
+            require(expectedEntry.value(QStringLiteral("defaultValue")).toBool(),
+                    "the upstream startup default must remain enabled");
+            expectedEntry.insert(QStringLiteral("defaultValue"), false);
+        }
+        if (key == QStringLiteral("updates/mode")) {
+            require(expectedEntry.value(QStringLiteral("defaultValue")) == QStringLiteral("next_launch"),
+                    "the upstream update default must remain next_launch");
+            expectedEntry.insert(QStringLiteral("defaultValue"), QStringLiteral("manual"));
+        }
+        if (actual.at(i).toObject() != expectedEntry) {
+            ++changedEntries;
+            // Show multiple independent schema mismatches in a single native CI
+            // run instead of iterating through one failing fixture row per run.
+            if (changedEntries <= 12) {
+                std::cerr << "schema metadata changed at entry " << i << ": "
+                          << key.toStdString() << "\nactual: "
+                          << QJsonDocument(actual.at(i).toObject()).toJson().constData()
+                          << "expected: " << QJsonDocument(expectedEntry).toJson().constData();
+            }
         }
     }
+    require(changedEntries == 0,
+            "unreviewed original schema metadata differences remain (see all listed keys)");
 #else
     // The frozen field-by-field references are native Windows Full/Mini runs.
     // Other hosts still exercise the common contracts and native defaults below.
@@ -183,9 +300,13 @@ void nativeDefaultsRemainIntact(const QString& movies, const QString& pictures) 
                 QStringLiteral("pin_to_screen/automatic_text_recognition")) ==
                 QJsonValue(!snow_shot::app::edition::isMini),
         "edition-specific default booleans must remain intact");
+#ifdef Q_OS_WIN
+    require(ConfigurationSchema::defaultValue(QStringLiteral("updates/mode")) == QStringLiteral("manual"),
+            "Community Windows must not schedule unsigned automatic updates");
+#endif
 #ifdef Q_OS_MACOS
     require(ConfigurationSchema::defaultValue(QStringLiteral("updates/mode")) ==
-                    QStringLiteral("check") &&
+                    QStringLiteral("next_launch") &&
                 ConfigurationSchema::defaultValue(QStringLiteral(
                     "screenshot_ui/selection_display_unit")) == QStringLiteral("logical_pixels"),
             "native macOS update and coordinate defaults must remain intact");

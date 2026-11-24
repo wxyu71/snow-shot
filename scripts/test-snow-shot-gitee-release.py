@@ -95,7 +95,7 @@ class PublisherTests(unittest.TestCase):
         record = json.loads(publisher.run('git', '-C', str(remote), 'show', f'{TAG}:release.json'))
         self.assertEqual(record['sourceCommit'], 'a' * 40)
         self.assertEqual(record['tag'], TAG)
-        self.assertEqual(record['sourceRepository'], 'https://github.com/mg-chao/snow-shot')
+        self.assertEqual(record['sourceRepository'], 'https://github.com/wxyu71/snow-shot')
 
     def test_legacy_source_tags_are_preserved_without_another_push(self):
         with patch.object(publisher, 'git_with_gitee_auth', return_value=f"{'a' * 40}\trefs/tags/{TAG}") as git, \
@@ -124,7 +124,7 @@ class PublisherTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 publisher.checked_tag(bad)
         name = "latest-version.json"
-        good = f"https://gitee.com/mg-chao/snow-apps/releases/download/{TAG}/{name}"
+        good = f"https://gitee.com/wxyu71/snow-shot/releases/download/{TAG}/{name}"
         self.assertEqual(publisher.asset_url({"name": name, "browser_download_url": good}, TAG, name), good)
         for bad in (good.replace("gitee.com", "example.com"), good + "?token=secret",
                     good.replace(TAG, "v9.9.9_snow-shot")):
@@ -230,7 +230,7 @@ class PublisherTests(unittest.TestCase):
         local = publisher.local_assets(self.release)
         remote = {'id': 7, 'tag_name': TAG, 'name': self.release['title'], 'body': self.release['body']}
         files = [{'id': index, 'name': name, 'size': path.stat().st_size,
-                  'browser_download_url': f'https://gitee.com/mg-chao/snow-apps/releases/download/{TAG}/{name}'}
+                  'browser_download_url': f'https://gitee.com/wxyu71/snow-shot/releases/download/{TAG}/{name}'}
                  for index, (name, path) in enumerate(local.items(), 1)]
         events = []
         def delete(command, **kwargs):
@@ -263,7 +263,7 @@ class PublisherTests(unittest.TestCase):
         local = publisher.local_assets(self.release)
         selected = publisher.gitee_assets(self.release, local)
         valid = {'id': 1, 'name': extra.name, 'size': extra.stat().st_size,
-                 'browser_download_url': f'https://gitee.com/mg-chao/snow-apps/releases/download/{TAG}/{extra.name}'}
+                 'browser_download_url': f'https://gitee.com/wxyu71/snow-shot/releases/download/{TAG}/{extra.name}'}
         for changes in ({'id': False}, {'size': 1}, {'browser_download_url': 'https://example.test/archive'}):
             with self.subTest(changes=changes), patch.object(publisher.subprocess, 'check_output') as delete:
                 with self.assertRaises(ValueError):
@@ -393,7 +393,7 @@ class PublisherTests(unittest.TestCase):
         local = publisher.local_assets(self.release)
         remote = {'id': 7, 'tag_name': TAG, 'name': self.release['title'], 'body': self.release['body']}
         files = [{'id': 3, 'name': extra.name, 'size': extra.stat().st_size,
-                  'browser_download_url': f'https://gitee.com/mg-chao/snow-apps/releases/download/{TAG}/{extra.name}'}]
+                  'browser_download_url': f'https://gitee.com/wxyu71/snow-shot/releases/download/{TAG}/{extra.name}'}]
         attempts = []
         def upload(url, fields, token, file=None):
             attempts.append(file.name)

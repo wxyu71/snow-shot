@@ -6,18 +6,10 @@
 - `snow-crates/crates/*` – Rust workspace (`snow-capture`, `snow-ocr-process`, …); `snow_rust_ffi/` bundles the C FFI static library consumed by CMake.
 - `cmake/` – shared modules, `vcpkg-overlay-ports/`, `vcpkg-overlay-triplets/`, `test-support/`. `scripts/` – PowerShell entry points. `build/<preset>/` and `.tools/vcpkg/` are generated; never commit them.
 
-## Build, Test, and Development Commands
-- Toolchain: VS 2026 x64 or ARM64 developer tools, CMake 4.2+, MSVC 14.51, Rust 1.97.1, repository-managed vcpkg/Qt. Windows ARM64 requires the ARM64 compiler/SDK and host-matching Qt tools/libclang; see `docs-windows-arm64-build.md`.
-- `scripts/bootstrap.ps1` – installs vcpkg deps and validates Qt/MSVC once per machine.
-- `scripts/build.ps1 -Preset windows-msvc-debug [-Target snow_shot] [-Clean]` – configure + build (`snow-all` by default). Presets: `windows-msvc-debug`, `windows-msvc-performance`, `snow-shot-msvc-release`, `snow-shot-msvc-fast`.
-- `ctest --preset test-windows-msvc-debug -R <regex>` – run only matching tests after a change. Do not run unfiltered `ctest --preset …` (full suite) unless the user explicitly asks.
-- Performance benchmarks: build **Release** with `windows-msvc-performance` (e.g. `cmake --build --preset build-windows-msvc-performance --target <benchmark>`, or an existing `**/scripts/run-*-perf.ps1`). Do not use Debug, `snow-shot-msvc-release`, or `snow-shot-msvc-fast` (`SNOW_APPS_BUILD_BENCHMARKS=OFF`).
-- `scripts/run-snow-shot.ps1` / `scripts/run-snow-image-viewer.ps1` – launch from the build tree.
-- `scripts/check-cpp-format.ps1 [-Fix]`, `scripts/check-rust.ps1 [-Fix]` – format and lint (also CMake targets `snow-format`, `snow-lint`).
-- `scripts/package-snow-shot.ps1` – NSIS installer (`snow-shot-msvc-release`).
-- Windows ARM64: use `snow-shot-msvc-arm64-{debug|performance|release|fast}` and `-Architecture arm64` for bootstrap/Qt/package scripts. ARM64 benchmarks require `snow-shot-msvc-arm64-performance`. Cross builds require native ARM64 validation before production publication.
-- macOS: see `docs-macos-build.md`. Use `scripts/bootstrap-macos.sh`, `scripts/build.sh`, `scripts/run-snow-shot.sh`, and `scripts/package-snow-shot.sh`; presets are `snow-shot-macos-{arm64|x64}-{debug|performance|release|fast}`. macOS requires 15+, Xcode tools and shared Qt 6.12.0. Use only the `performance` preset for benchmarks.
-- macOS script regression checks: `python3 scripts/test-macos-build-support.py`. Native deployment fixture: `SNOW_TEST_MACOS_BUNDLE=1 python3 scripts/test-macos-build-support.py MacOSBundle` after provisioning Qt/FFmpeg and putting the build tools on PATH.
+## Build and test
+- Community production: Windows x64 full edition only. Use the pinned toolchain, presets and packaging instructions in `docs/community-windows.md`.
+- Use `scripts/bootstrap.ps1`, `scripts/build.ps1`, and focused CTest/Cargo tests. Benchmarks require the Release performance preset.
+- Preserve other platform sources for upstream compatibility, not Community distribution.
 
 ## Coding Style & Naming Conventions
 - C++: `.clang-format` (LLVM base, 4 spaces, 100 columns, attached braces, `T* ptr`, includes unsorted). Strict warnings are on; `.clang-tidy` is enforced when `SNOW_APPS_ENABLE_CLANG_TIDY=ON`.
@@ -34,12 +26,19 @@
 
 ## Testing Guidelines
 - After any code change, run **only** the tests that cover those changes. Running the full suite is **strictly prohibited** unless the user explicitly asks.
-- Tests are plain executables using a `require(condition, message)` helper (no external framework). snow_shot registers them as `add_test(NAME snow-shot-<feature>-tests …)` in `snow_shot/CMakeLists.txt`; other projects use their own prefixes (`adqt-*`, `snow-canvas-*`, `snow_image_viewer_*`).
+- Legacy tests are plain executables with a `require(condition, message)` helper; **new native smoke contracts use Qt Test** (QCOMPARE/QVERIFY) and real production C++ sources, registered through CMake/CTest. The focused independent `ci/native-smoke/` project uses system Qt to catch logic/overload errors rapidly; it does not replace Windows production ABI validation. Existing native tests retain their target-specific CTest names.
 - Name files `<feature>_tests.cpp`; benchmarks `<feature>_performance_benchmark.cpp` or `<feature>_benchmark.cpp`; UI Automation runs `<feature>_uia_e2e_test.cpp`.
 - CTest labels: `unit` (default), `interactive`/`e2e`, `benchmark`, `windows`. Default presets exclude interactive, e2e, and benchmark labels.
 - When running performance benchmarks, compile with **Release** via `windows-msvc-performance`. Debug and packaging presets do not build benchmark targets. Still run only the related benchmark, not the full performance suite.
 - Rust tests are mostly inline `#[cfg(test)]` modules (a few crates also have `tests/` integration tests). After a crate change, run `cargo test -p <crate>` (optionally `-- <test_name>`) inside `snow-crates/`. Do not run `cargo test --workspace` unless the user explicitly asks.
 - Cover every behavioral change with a deterministic, offscreen-capable test.
+
+## CI and release
+- Draft PRs run fast checks; mark ready for full Windows acceptance. Merge only the tested integrated head and retain Git ancestry. Do not use commit trailers, empty commits or suppressed errors to trigger or bypass gates.
+- Prefer established linters and real native tests. Require full Windows build, CTest, NSIS packaging, checksums and installer smoke before releasing.
+- Main version changes request a prerelease. Only the reviewed main SHA may publish after successful acceptance; do not overwrite published releases.
+- Use exact toolchain/dependency ABI keys and validated immutable caches. Investigate failures at their source.
+- Keep docs under `docs/`; use the canonical navigation and avoid duplicate runbooks.
 
 ## Commit & Pull Request Guidelines
 - Conventional Commits, lowercase imperative: `fix(screenshot): stop cursor flicker during smart frame selection`. Types in use: `feat`, `fix`, `refactor`, `perf`, `test`, `style`, `build`. Scopes mirror features (`recording`, `pinned`, `dpi`, `ocr`, `toolbar`).
@@ -47,4 +46,4 @@
 
 ## Licensing & Configuration
 - Multi-license repo: keep Apache-2.0 code in `ant_design_qt/`, `snow_draw_engine_qt/`, and `snow_memory/`; keep GPL-3.0-or-later code in `snow_shot/`, `snow_image/`, `snow_image_viewer/`, `snow-crates/`, and `snow_rust_ffi/`. The independent `snow-crates/crates/simd-paddle-ocr-rs/` submodule retains Apache-2.0. After adding a dependency, run `scripts/collect-third-party-licenses.ps1` and update the project's `THIRD_PARTY_NOTICES.md` (`snow_shot/`, `ant_design_qt/`).
-- `SNOW_APPS_API_BASE_URL` is set per preset; never hard-code endpoints or secrets.
+- `SNOW_APPS_API_BASE_URL` is set per preset; never commit secrets; retain the fixed Community release origin.

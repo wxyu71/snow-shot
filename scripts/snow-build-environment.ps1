@@ -261,6 +261,26 @@ function Get-SnowStaticQtLtcgEnabled {
     return $Configuration -ceq "Release" -and $Architecture -ceq "x64"
 }
 
+function Get-SnowStaticQtBuildOptions {
+    param(
+        [ValidateSet("Debug", "Release")][string]$Configuration = "Release",
+        [ValidateSet("x64", "arm64")][string]$Architecture = "x64"
+    )
+    # One semantic policy shared by the actual Qt builder and its tests.
+    # The PowerShell/CMake cache validation intentionally stays fail-closed.
+    $ltcg = Get-SnowStaticQtLtcgEnabled -Configuration $Configuration -Architecture $Architecture
+    $release = $Configuration -ceq "Release"
+    return [pscustomobject]@{
+        ConfigurationArgument = $(if ($release) { "-release" } else { "-debug" })
+        LtcgEnabled = $ltcg
+        LtcgArgument = $(if ($ltcg) { "-ltcg" } else { "-no-ltcg" })
+        ZlibArgument = $(if ($release) { "-system-zlib" } else { "-qt-zlib" })
+        PngArgument = $(if ($release) { "-system-libpng" } else { "-qt-libpng" })
+        LtcgState = $(if ($ltcg) { "ON" } else { "OFF" })
+        SystemCodecState = $(if ($release) { "ON" } else { "OFF" })
+    }
+}
+
 function Test-SnowStaticQtStamp {
     param(
         [Parameter(Mandatory = $true)][object]$Stamp,
@@ -575,13 +595,28 @@ function Add-SnowMsvcToolsToPath {
 
     $env:VSINSTALLDIR = [System.IO.Path]::GetFullPath($visualStudioRoot)
     $env:VCINSTALLDIR = Join-Path $env:VSINSTALLDIR "VC"
-    $msvcTools = Get-ChildItem -LiteralPath (Join-Path $env:VCINSTALLDIR "Tools\MSVC") -Directory |
+    $availableMsvcTools = @(Get-ChildItem -LiteralPath (Join-Path $env:VCINSTALLDIR "Tools\MSVC") -Directory |
         Where-Object { $_.Name -match '^\d+\.\d+\.\d+$' -and
             [version]$_.Name -ge $script:SnowMsvcMinimum } |
-        Sort-Object { [version]$_.Name } -Descending |
-        Select-Object -First 1
-    if (-not $msvcTools) {
-        throw "MSVC toolset $script:SnowMsvcMinimum or newer was not found under $env:VCINSTALLDIR."
+        Sort-Object { [version]$_.Name } -Descending)
+    $pinnedToolset = $env:SNOW_MSVC_TOOLSET_VERSION
+    if (-not [string]::IsNullOrWhiteSpace($pinnedToolset)) {
+        if ($pinnedToolset -notmatch '^\d+\.\d+\.\d+$') {
+            throw "SNOW_MSVC_TOOLSET_VERSION must be an exact MSVC directory version (for example 14.52.37025): '$pinnedToolset'."
+        }
+        $msvcTools = $availableMsvcTools | Where-Object { $_.Name -ceq $pinnedToolset } |
+            Select-Object -First 1
+        if (-not $msvcTools) {
+            $availableVersions = (@($availableMsvcTools | ForEach-Object { $_.Name }) -join ', ')
+            if (-not $availableVersions) { $availableVersions = '(none)' }
+            throw "Pinned MSVC toolset $pinnedToolset is not installed under $env:VCINSTALLDIR. Available supported versions: $availableVersions. Do not silently upgrade the compiler; update the CI pin after validating its ABI and source caches."
+        }
+    }
+    else {
+        $msvcTools = $availableMsvcTools | Select-Object -First 1
+        if (-not $msvcTools) {
+            throw "MSVC toolset $script:SnowMsvcMinimum or newer was not found under $env:VCINSTALLDIR."
+        }
     }
 
     $env:VCToolsInstallDir = "$($msvcTools.FullName)\"

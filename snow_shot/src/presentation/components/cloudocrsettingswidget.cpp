@@ -1,4 +1,5 @@
 #include "snow_shot/presentation/components/cloudocrsettingswidget.h"
+#include "snow_shot/presentation/components/cloudocrenginechoices.h"
 #include "snow_shot/network/communitycloudocrsettings.h"
 
 #include <QComboBox>
@@ -9,6 +10,7 @@
 #include <QLineEdit>
 #include <QPainter>
 #include <QPushButton>
+#include <QSignalBlocker>
 #include <QUrl>
 #include <QVBoxLayout>
 
@@ -34,6 +36,20 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     outer->addWidget(m_explanation);
 
     auto* form = new QFormLayout;
+    m_engine = new QComboBox(this);
+    m_engine->setObjectName(QStringLiteral("onlineOcrEngine"));
+    // Use the text + userData overload, not the QIcon + text overload.
+    // An empty braced first argument would silently discard the engine ID.
+    // This exact production option population is compiled in fast native Qt tests.
+    snow_shot::presentation::components::populateCloudOcrEngineChoices(*m_engine, false);
+    m_engineLabel = new QLabel(this);
+    form->addRow(m_engineLabel, m_engine);
+
+    m_output = new QComboBox(this);
+    m_output->setObjectName(QStringLiteral("onlineOcrOutputFormat"));
+    m_outputLabel = new QLabel(this);
+    form->addRow(m_outputLabel, m_output);
+
     m_endpoint = new QLineEdit(this);
     m_endpoint->setObjectName(QStringLiteral("paddleOcrApiUrl"));
     m_endpointLabel = new QLabel(this);
@@ -45,11 +61,11 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     form->addRow(m_tokenLabel, m_token);
     m_model = new QComboBox(this);
     m_model->setObjectName(QStringLiteral("paddleOcrModel"));
-    m_model->addItems({QStringLiteral("PaddleOCR-VL-1.6"),
-                       QStringLiteral("PP-StructureV3"),
+    m_model->addItems({QStringLiteral("PaddleOCR-VL-1.6"), QStringLiteral("PP-StructureV3"),
                        QStringLiteral("PP-OCRv6")});
     m_modelLabel = new QLabel(this);
     form->addRow(m_modelLabel, m_model);
+
     outer->addLayout(form);
 
     auto* actions = new QHBoxLayout;
@@ -69,13 +85,17 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     const auto settings = snow_shot::network::readCommunityCloudOcrSettings();
     m_endpoint->setText(settings.apiUrl);
     m_token->setText(settings.accessToken);
-    const QString model = settings.model;
-    if (m_model->findText(model) >= 0)
-        m_model->setCurrentText(model);
+    if (m_model->findText(settings.model) >= 0)
+        m_model->setCurrentText(settings.model);
+    const int engineIndex = m_engine->findData(settings.engine);
+    if (engineIndex >= 0)
+        m_engine->setCurrentIndex(engineIndex);
+    rebuildOutputFormats();
 
     connect(m_save, &QPushButton::clicked, this, [this] { save(); });
     connect(m_test, &QPushButton::clicked, this, [this] { testConnection(); });
     retranslateUi();
+    updateEngineUi();
 }
 
 CloudOcrSettingsWidget::~CloudOcrSettingsWidget() {
@@ -87,21 +107,48 @@ void CloudOcrSettingsWidget::applyTheme(
     const snow_shot::presentation::styles::ThemeColorScheme& scheme) {
     const int spacing = scheme.metricAlias.paddingSM;
     layout()->setSpacing(spacing);
-    m_endpoint->setMinimumHeight(scheme.metricAlias.controlHeight);
-    m_token->setMinimumHeight(scheme.metricAlias.controlHeight);
-    m_model->setMinimumHeight(scheme.metricAlias.controlHeight);
+    for (auto* control : {static_cast<QWidget*>(m_engine), static_cast<QWidget*>(m_output),
+                          static_cast<QWidget*>(m_endpoint), static_cast<QWidget*>(m_token),
+                          static_cast<QWidget*>(m_model)})
+        control->setMinimumHeight(scheme.metricAlias.controlHeight);
 }
 
 void CloudOcrSettingsWidget::retranslateUi() {
-    m_explanation->setText(tr("Configure cloud document recognition once. Ctrl+D and local "
-                              "text recognition continue to run offline."));
+    m_explanation->setText(
+        tr("Online OCR uses only the PaddleOCR AI Studio API configured here. "
+           "Images are sent to that service only when you explicitly run Online OCR. "
+           "The result is Markdown with formulas preserved as LaTeX. "
+           "Local text recognition remains offline."));
+    m_engineLabel->setText(tr("OCR engine"));
+    m_outputLabel->setText(tr("Output format"));
     m_endpointLabel->setText(tr("PaddleOCR AI Studio API URL"));
     m_tokenLabel->setText(tr("Access Token"));
-    m_modelLabel->setText(tr("Recognition model"));
+    m_modelLabel->setText(tr("PaddleOCR model"));
     m_save->setText(tr("Save"));
-    m_test->setText(tr("Test connection"));
-    m_test->setToolTip(tr("Sends a small OCR sample to the selected provider; "
+    m_test->setText(tr("Test PaddleOCR connection"));
+    m_test->setToolTip(tr("Sends a small OCR sample directly to the selected PaddleOCR provider; "
                          "this can consume API quota."));
+
+    m_engine->setItemText(0, tr("Baidu PaddleOCR (AI Studio)"));
+    m_output->setItemText(0, tr("Markdown (formulas preserved as LaTeX)"));
+}
+
+void CloudOcrSettingsWidget::rebuildOutputFormats() {
+    const QSignalBlocker blocker(m_output);
+    m_output->clear();
+    m_output->addItem(tr("Markdown (formulas preserved as LaTeX)"),
+                      QStringLiteral("markdown"));
+}
+
+void CloudOcrSettingsWidget::updateEngineUi() {
+    m_endpoint->setEnabled(!m_testing);
+    m_token->setEnabled(!m_testing);
+    m_model->setEnabled(!m_testing);
+    m_test->setEnabled(!m_testing);
+    m_save->setEnabled(!m_testing);
+    // These controls document the fixed provider/output, not configurable routes.
+    m_engine->setEnabled(false);
+    m_output->setEnabled(false);
 }
 
 snow_shot::network::BaiduPaddleOcrClient::Options CloudOcrSettingsWidget::currentOptions() const {
@@ -115,7 +162,7 @@ snow_shot::network::BaiduPaddleOcrClient::Options CloudOcrSettingsWidget::curren
 void CloudOcrSettingsWidget::save() {
     const auto options = currentOptions();
     if (!validCloudOcrEndpoint(options.apiUrl) || options.accessToken.isEmpty()) {
-        m_status->setText(tr("Enter a valid HTTPS URL and Access Token."));
+        m_status->setText(tr("Enter a valid HTTPS URL and Access Token for PaddleOCR."));
         return;
     }
     if (m_probe) {
@@ -124,15 +171,16 @@ void CloudOcrSettingsWidget::save() {
         m_probe = nullptr;
         setTesting(false);
     }
-    const bool saved = snow_shot::network::writeCommunityCloudOcrSettings(
-        {options.apiUrl, options.accessToken, options.model});
+    snow_shot::network::CommunityCloudOcrSettings settings{
+        options.apiUrl, options.accessToken, options.model};
+    const bool saved = snow_shot::network::writeCommunityCloudOcrSettings(settings);
     m_status->setText(saved ? tr("PaddleOCR configuration saved.")
                             : tr("Could not securely save PaddleOCR configuration."));
 }
 
 void CloudOcrSettingsWidget::setTesting(bool busy) {
-    m_test->setEnabled(!busy);
-    m_save->setEnabled(!busy);
+    m_testing = busy;
+    updateEngineUi();
 }
 
 void CloudOcrSettingsWidget::testConnection() {
@@ -148,9 +196,6 @@ void CloudOcrSettingsWidget::testConnection() {
     m_probe = new snow_shot::network::BaiduPaddleOcrClient(this);
     setTesting(true);
     m_status->setText(tr("Testing the OCR service..."));
-
-    // Exercise the same authenticated asynchronous API used by the Markdown tool.
-    // A GET /health request would not verify AI Studio OCR authorization.
     QImage sample(480, 120, QImage::Format_RGB32);
     sample.fill(Qt::white);
     {
@@ -169,13 +214,11 @@ void CloudOcrSettingsWidget::testConnection() {
         m_probe = nullptr;
         probe->deleteLater();
         setTesting(false);
-        if (!error.isEmpty()) {
+        if (!error.isEmpty())
             m_status->setText(tr("Connection failed: %1").arg(error));
-        } else if (result.trimmed().isEmpty()) {
+        else if (result.trimmed().isEmpty())
             m_status->setText(tr("The OCR service returned an empty result."));
-        } else {
-            m_status->setText(tr("Connection successful. Cloud OCR returned recognized text."));
-        }
+        else
+            m_status->setText(tr("Connection successful. PaddleOCR returned recognized text."));
     });
 }
-

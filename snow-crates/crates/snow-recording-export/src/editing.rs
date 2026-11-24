@@ -44,7 +44,7 @@ use crate::streaming::{StreamingAudioConfig, StreamingEncoder, StreamingEncoderC
 const VIDEO_INDEX_MAGIC: &[u8] = b"SVIDX\0\0";
 
 #[derive(Clone, Debug, Default)]
-struct ExportCodecTelemetry {
+struct ExportCodecStatistics {
     video_decoder: Option<String>,
     video_encoder: Option<String>,
     audio_encoder: Option<String>,
@@ -460,7 +460,7 @@ impl EditingSession {
 
         if !needs_overlay || source_hdr {
             emit_progress(progress_tx, ExportStage::Decode, 20.0, 0.0, None);
-            let telemetry = match export_video_generated_from_source(
+            let statistics = match export_video_generated_from_source(
                 &self.artifact.local_paths.video_intermediate_path,
                 &output_path,
                 &retime,
@@ -480,7 +480,7 @@ impl EditingSession {
                 Some(cancellation),
                 progress_tx,
             ) {
-                Ok(telemetry) => telemetry,
+                Ok(statistics) => statistics,
                 Err(err) => {
                     if matches!(err, ScreenRecorderError::ExportCanceled) {
                         let _ = fs::remove_file(&output_path);
@@ -489,7 +489,7 @@ impl EditingSession {
                 }
             };
             runtime_report.path = ExportPathKind::FullTranscode;
-            apply_codec_telemetry(&mut runtime_report, telemetry);
+            apply_codec_statistics(&mut runtime_report, statistics);
             emit_progress(progress_tx, ExportStage::Finalize, 98.0, 0.0, Some(0));
             return Ok(ExportResult {
                 output_path,
@@ -520,9 +520,9 @@ impl EditingSession {
             Some(cancellation),
             progress_tx,
         ) {
-            Ok(telemetry) => {
+            Ok(statistics) => {
                 runtime_report.path = ExportPathKind::FullTranscode;
-                apply_codec_telemetry(&mut runtime_report, telemetry);
+                apply_codec_statistics(&mut runtime_report, statistics);
                 emit_progress(progress_tx, ExportStage::Finalize, 98.0, 0.0, Some(0));
                 return Ok(ExportResult {
                     output_path,
@@ -571,7 +571,7 @@ impl EditingSession {
             RasterBuffer::new()
         };
 
-        let telemetry = match export_video_generated(
+        let statistics = match export_video_generated(
             &output_path,
             output_w,
             output_h,
@@ -621,7 +621,7 @@ impl EditingSession {
                 Ok(())
             },
         ) {
-            Ok(telemetry) => telemetry,
+            Ok(statistics) => statistics,
             Err(err) => {
                 if matches!(err, ScreenRecorderError::ExportCanceled) {
                     let _ = fs::remove_file(&output_path);
@@ -630,7 +630,7 @@ impl EditingSession {
             }
         };
         runtime_report.path = ExportPathKind::FullTranscode;
-        apply_codec_telemetry(&mut runtime_report, telemetry);
+        apply_codec_statistics(&mut runtime_report, statistics);
         emit_progress(progress_tx, ExportStage::Finalize, 98.0, 0.0, Some(0));
 
         Ok(ExportResult {
@@ -680,14 +680,14 @@ fn requested_recorded_audio_tracks<'a>(
         .collect()
 }
 
-fn apply_codec_telemetry(report: &mut ExportRuntimeReport, telemetry: ExportCodecTelemetry) {
-    report.video_decoder = telemetry.video_decoder;
-    report.video_encoder = telemetry.video_encoder;
-    report.audio_encoder = telemetry.audio_encoder;
-    report.used_hardware_decode = telemetry.used_hardware_decode;
-    report.used_hardware_encode = telemetry.used_hardware_encode;
+fn apply_codec_statistics(report: &mut ExportRuntimeReport, statistics: ExportCodecStatistics) {
+    report.video_decoder = statistics.video_decoder;
+    report.video_encoder = statistics.video_encoder;
+    report.audio_encoder = statistics.audio_encoder;
+    report.used_hardware_decode = statistics.used_hardware_decode;
+    report.used_hardware_encode = statistics.used_hardware_encode;
     report.used_hardware_compose = false;
-    report.stage_durations_ms = telemetry.stage_durations_ms;
+    report.stage_durations_ms = statistics.stage_durations_ms;
 }
 
 fn choose_export_fps(record_fps: u32, format: ExportFormat, requested_fps: Option<u32>) -> u32 {
@@ -5175,7 +5175,7 @@ impl<'a> EditingVideoEncoder<'a> {
         );
     }
 
-    fn finish(mut self, duration_ms: u64) -> Result<ExportCodecTelemetry> {
+    fn finish(mut self, duration_ms: u64) -> Result<ExportCodecStatistics> {
         check_canceled(self.cancel)?;
         self.flush_prepared_frame()?;
         // Audio is rendered only on demand up to the exact retimed endpoint;
@@ -5195,7 +5195,7 @@ impl<'a> EditingVideoEncoder<'a> {
             self.encoder.finish_at_duration_ms(duration_ms.max(1))?
         };
         check_canceled(self.cancel)?;
-        Ok(ExportCodecTelemetry {
+        Ok(ExportCodecStatistics {
             video_encoder: Some(report.video_encoder),
             audio_encoder: report.audio_encoder,
             used_hardware_encode: report.used_hardware_video_encoder,
@@ -5205,7 +5205,7 @@ impl<'a> EditingVideoEncoder<'a> {
                 mux: mux_started.elapsed().as_millis().min(u128::from(u64::MAX)) as u64,
                 ..ExportStageDurationsMs::default()
             },
-            ..ExportCodecTelemetry::default()
+            ..ExportCodecStatistics::default()
         })
     }
 }
@@ -5226,7 +5226,7 @@ fn export_video_generated<F>(
     cancellation: Option<&CancellationToken>,
     progress_tx: &Option<Arc<ProgressReporter>>,
     mut rgba_provider: F,
-) -> Result<ExportCodecTelemetry>
+) -> Result<ExportCodecStatistics>
 where
     F: FnMut(usize, &mut [u8]) -> Result<()>,
 {
@@ -5296,7 +5296,7 @@ fn export_video_generated_from_source(
     cancel_flag: &Arc<AtomicBool>,
     cancellation: Option<&CancellationToken>,
     progress_tx: &Option<Arc<ProgressReporter>>,
-) -> Result<ExportCodecTelemetry> {
+) -> Result<ExportCodecStatistics> {
     ensure_ffmpeg_initialized()?;
     let output_hdr = crate::preserves_hdr_output(source_hdr, format, requested_codec);
     validate_export_dimensions(width, height, format.requires_even_dimensions())?;
@@ -5620,10 +5620,10 @@ fn export_video_generated_from_source(
         )));
     }
 
-    let mut telemetry = encoder.finish(retime.output_duration_ms())?;
-    telemetry.video_decoder = Some(video_decoder);
-    telemetry.used_hardware_decode = used_hardware_decode;
-    Ok(telemetry)
+    let mut statistics = encoder.finish(retime.output_duration_ms())?;
+    statistics.video_decoder = Some(video_decoder);
+    statistics.used_hardware_decode = used_hardware_decode;
+    Ok(statistics)
 }
 
 fn export_video_generated_from_source_with_overlay(
@@ -5645,7 +5645,7 @@ fn export_video_generated_from_source_with_overlay(
     cancel_flag: &Arc<AtomicBool>,
     cancellation: Option<&CancellationToken>,
     progress_tx: &Option<Arc<ProgressReporter>>,
-) -> Result<ExportCodecTelemetry> {
+) -> Result<ExportCodecStatistics> {
     ensure_ffmpeg_initialized()?;
     validate_export_dimensions(width, height, format.requires_even_dimensions())?;
 
@@ -6089,10 +6089,10 @@ fn export_video_generated_from_source_with_overlay(
         )));
     }
 
-    let mut telemetry = encoder.finish(retime.output_duration_ms())?;
-    telemetry.video_decoder = Some(video_decoder);
-    telemetry.used_hardware_decode = used_hardware_decode;
-    Ok(telemetry)
+    let mut statistics = encoder.finish(retime.output_duration_ms())?;
+    statistics.video_decoder = Some(video_decoder);
+    statistics.used_hardware_decode = used_hardware_decode;
+    Ok(statistics)
 }
 
 fn decode_frame_to_output_rgba(
@@ -7905,8 +7905,8 @@ mod tests {
             assert!(encoder.audio_samples.len() <= 4096 * 2);
         }
         assert_eq!(encoder.audio_cursor, 44_100);
-        let telemetry = encoder.finish(1000).unwrap();
-        assert_eq!(telemetry.audio_encoder.as_deref(), Some("aac"));
+        let statistics = encoder.finish(1000).unwrap();
+        assert_eq!(statistics.audio_encoder.as_deref(), Some("aac"));
         let input = ffmpeg::format::input(&path).unwrap();
         let audio = input.streams().best(ffmpeg::media::Type::Audio).unwrap();
         use ffmpeg::Rescale;

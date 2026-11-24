@@ -1,40 +1,16 @@
-# Community fork: upstream synchronization
+# Upstream synchronization
 
-The official upstream is `mg-chao/snow-shot` (`main`).
-`.github/workflows/upstream-sync.yml` checks upstream daily or on demand.
+The scheduled workflow fetches official upstream and maintains at most one rolling Community review PR. It merges actual Git history rather than copying files or creating report-only branches.
 
-A change is auto-merged **only** when the incoming paths do not overlap the
-fork's changes since the shared merge base, do not touch protected or deleted
-files, and do not contain newly added known commercial account/payment code.
-The available sync runner currently runs the policy and source-contract tests,
-not the full Qt/Windows test suite. Therefore, it **auto-merges documentation-only
-changes** when those checks pass; executable code, workflows, resource manifests,
-build files, and installers are always routed to a draft review PR until native
-regression tests can run as a mandatory gate. This conservative restriction
-prevents silently merging untested binaries or reintroducing commercial code.
-After a clean documentation merge, the deletion guard and policy tests run again.
-Any conflict or failed guard aborts the merge.
+- A clean integration is committed to the review branch; an unresolved merge is reported without pretending it succeeded.
+- Review protected Community paths, runtime behavior, OCR and update origins before marking the PR ready.
+- Ready PRs are frozen for acceptance. Merge only the tested head, preserving merge ancestry.
+- The sync job never pushes to main or merges PRs. All new integration PRs are Draft; even documentation-only changes require a PR. A sole maintainer marks Ready, waits for acceptance, and merges the tested SHA. No automatic merge is attempted on an unprotected main.
+- Conflict findings live only in the PR description and Actions summary. Initial conflicts use the real upstream commit as a Draft head; no report-only commit is created. If workflow permissions block the push, fail explicitly.
+- GitHub must permit Actions to create PRs, or a maintainer must open the reported review branch manually. A separately authorized GitHub App can supply permissions where needed.
 
-Protected changes produce a **draft review PR containing a pending report**,
-not a speculative merge that may overwrite community-specific functionality.
-Maintainers must review and manually apply the relevant upstream changes.
-The workflow never uses `--force` to push to `main`.
+After merging, delete integrated review branches. Subsequent synchronization starts from main and its actual upstream ancestor.
 
-The protected file and deletion policy lives in `.github/upstream-protection.json`.
-When removing new commercial modules, add each path to `deleted_files`.
-Do not weaken protection to make an upstream sync pass.
+See [Windows release policy](community-windows.md) for production acceptance.
 
-## Local checks
-
-```sh
-python3 scripts/test-upstream-sync.py
-python3 scripts/upstream_sync.py verify-deletions
-git remote add upstream https://github.com/mg-chao/snow-shot.git
-git fetch upstream main
-python3 scripts/upstream_sync.py classify --upstream upstream/main
-```
-
-Required repository settings: allow GitHub Actions to create PRs and write
-contents, and permit the workflow's non-force merge push if auto-sync is desired.
-A protected branch that blocks the action's push will cause the job to fail,
-rather than bypass protection.
+Keep the Community documentation index concise. Do not reintroduce retired release guides, historical reports or duplicate changelogs during synchronization; retain required build inputs, protocol references and legal notices.

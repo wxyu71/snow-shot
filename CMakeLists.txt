@@ -18,7 +18,7 @@ snow_require_msvc_version()
 include("${CMAKE_CURRENT_SOURCE_DIR}/cmake/SnowWindowsArchitecture.cmake")
 snow_configure_windows_architecture()
 
-set(SNOW_SHOT_VERSION "1.5.8-beta.1")
+set(SNOW_SHOT_VERSION "1.6.3-beta.1")
 if(NOT SNOW_SHOT_VERSION MATCHES "^([0-9]+\\.[0-9]+\\.[0-9]+)(-[0-9A-Za-z.-]+)?$")
     message(FATAL_ERROR "SNOW_SHOT_VERSION must be a semantic version such as 0.8.0-dev")
 endif()
@@ -79,11 +79,8 @@ option(SNOW_APPS_BUILD_DRAW_ENGINE "Build the Snow Draw Engine Qt library." ON)
 option(SNOW_APPS_BUILD_DRAW_ENGINE_DEMO "Build the Snow Draw Engine Qt demo." OFF)
 option(SNOW_APPS_BUILD_IMAGE_VIEWER "Build Snow Image Viewer." ON)
 option(SNOW_APPS_BUILD_SNOW_SHOT "Build Snow Shot." ON)
-set(_snow_mini_default ${SNOW_APPS_BUILD_SNOW_SHOT})
-if(APPLE AND NOT CMAKE_OSX_ARCHITECTURES STREQUAL "arm64")
-    set(_snow_mini_default OFF)
-endif()
-option(SNOW_APPS_BUILD_SNOW_SHOT_MINI "Build Snow Shot Mini alongside Snow Shot." ${_snow_mini_default})
+# Community releases ship one product; retain opt-in upstream Mini sources for simple merges.
+option(SNOW_APPS_BUILD_SNOW_SHOT_MINI "Opt in to the upstream Mini compatibility target." OFF)
 if(SNOW_SHOT_DISTRIBUTION_CHANNEL STREQUAL "store" AND SNOW_APPS_BUILD_SNOW_SHOT_MINI)
     message(FATAL_ERROR "The Store channel supports Snow Shot Full only; disable SNOW_APPS_BUILD_SNOW_SHOT_MINI")
 endif()
@@ -404,20 +401,8 @@ if(NOT TARGET snow-all)
     unset(_snow_workspace_targets)
 endif()
 
-if(NOT TARGET snow-tests)
-    set(_snow_deterministic_test_exclude "interactive|e2e|benchmark")
-    add_custom_target(snow-tests
-        COMMAND ${CMAKE_CTEST_COMMAND}
-            --test-dir "${CMAKE_BINARY_DIR}"
-            -C "$<CONFIG>"
-            -LE ${_snow_deterministic_test_exclude}
-            --output-on-failure
-        USES_TERMINAL
-        VERBATIM
-    )
-    add_dependencies(snow-tests snow-all)
-    unset(_snow_deterministic_test_exclude)
-endif()
+include(cmake/SnowTestRunner.cmake)
+snow_add_deterministic_test_runner()
 
 if(NOT TARGET snow-benchmarks)
     add_custom_target(snow-benchmarks)

@@ -7,6 +7,7 @@ import hashlib
 import json
 import re
 import sys
+import subprocess
 import tempfile
 from pathlib import Path
 
@@ -15,11 +16,23 @@ BETA_VERSION = re.compile(r"^[0-9]+\.[0-9]+\.[0-9]+-beta\.[0-9]+$")
 VERSION_LINE = re.compile(r'^\s*set\(SNOW_SHOT_VERSION\s+"([^"]+)"\)', re.MULTILINE)
 
 
-def source_version(root: Path = ROOT) -> str:
-    match = VERSION_LINE.search((root / "CMakeLists.txt").read_text(encoding="utf-8"))
+def parse_source_version(content: str) -> str:
+    match = VERSION_LINE.search(content)
     if not match or not BETA_VERSION.fullmatch(match.group(1)):
         raise ValueError("Expected a prerelease beta version in CMakeLists.txt")
     return match.group(1)
+
+
+def source_version(root: Path = ROOT, ref: str | None = None) -> str:
+    if ref is not None:
+        if not re.fullmatch(r"[0-9a-f]{40}", ref):
+            raise ValueError("Expected a full Git commit SHA")
+        content = subprocess.check_output(
+            ["git", "show", f"{ref}:CMakeLists.txt"], cwd=root, text=True,
+        )
+    else:
+        content = (root / "CMakeLists.txt").read_text(encoding="utf-8")
+    return parse_source_version(content)
 
 
 def release_tag(version: str) -> str:
@@ -65,7 +78,7 @@ def verify_assets(directory: Path, version: str, *, allow_build_intermediates: b
     else:
         found = actual
     if found != expected:
-        raise ValueError(f"Release assets differ from the x64 Full allowlist: missing={sorted(expected-found)}, unexpected={sorted(found-expected)}")
+        raise ValueError(f"Release assets differ from the sole Community x64 allowlist: missing={sorted(expected-found)}, unexpected={sorted(found-expected)}")
     for variant in ("online", "offline"):
         stem = f"snow-shot-{version}-windows-x64-{variant}"
         binary = directory / f"{stem}.exe"
@@ -160,6 +173,7 @@ def main() -> int:
         choices=["version", "tag", "validate-tag", "verify-assets", "render-notes", "selftest"],
     )
     parser.add_argument("--tag", default="")
+    parser.add_argument("--ref", help="Read the version at a full Git commit SHA")
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--output", type=Path)
     parser.add_argument("--allow-build-intermediates", action="store_true")
@@ -168,7 +182,7 @@ def main() -> int:
         if args.command == "selftest":
             selftest()
         elif args.command == "version":
-            print(source_version())
+            print(source_version(ref=args.ref))
         elif args.command == "tag":
             print(release_tag(source_version()))
         elif args.command == "validate-tag":
@@ -182,7 +196,7 @@ def main() -> int:
                 parser.error("--directory is required for verify-assets")
             verify_assets(args.directory, source_version(),
                           allow_build_intermediates=args.allow_build_intermediates)
-    except (OSError, ValueError, AssertionError, KeyError) as error:
+    except (OSError, ValueError, AssertionError, KeyError, subprocess.CalledProcessError) as error:
         print(f"Community release policy failed: {error}", file=sys.stderr)
         return 1
     return 0

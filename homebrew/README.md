@@ -27,20 +27,28 @@ brew upgrade --cask snow-shot@beta
 Both channels install `Snow Shot.app`. Quit the app and uninstall the current
 cask before switching channels; uninstall preserves user data and signing state.
 
-Homebrew manages the app; installation reuses Snow Shot's local signing identity.
-The first installation may request Keychain access and macOS privacy permissions.
-Keep `~/Library/Application Support/Snow Shot/Installer` and the original Keychain
-identity across upgrades and reinstalls. Uninstall retains these and your user data.
-Local signing is not Apple notarization; macOS may request permission again.
+Project-signed releases after 1.5.8 keep the same publisher identity across DMG,
+script, and Homebrew installation. Homebrew verifies the pinned project signature
+and copies the bundle unchanged; it needs no user signing key or Keychain access.
+First installation or migration from an ad-hoc/local signature may require privacy
+consent again. Use the current installer: historical scripts still re-sign apps.
+Self-signing does not provide Apple notarization. Legacy installer state and keys
+are left untouched for rollback, and uninstall preserves user data.
 
 For an existing manual installation, quit Snow Shot and move `Snow Shot.app` (or
 legacy `snow_shot.app`) out of Applications to a backup folder before installing.
-Keep its signing state and Keychain identity. Do not use `--force` to overwrite it.
+Keep legacy signing state and keys if rollback is needed. Do not use `--force` to overwrite it.
 Delete the backup only after confirming the Homebrew installation works.
 
 Use `brew install --cask --appdir="$HOME/Applications" mg-chao/tap/snow-shot` for
 another application directory (create it first). Use the same desktop account for
-upgrades. Quit Snow Shot and finish recordings before upgrading or uninstalling.
+upgrades. Finish captures and recordings before upgrading or uninstalling.
+
+When the installed cask includes `quit:`, Homebrew asks a running Snow Shot to
+quit and reopens it after a successful upgrade if it was able to quit the app.
+For the first upgrade from a cask without `quit:`, quit Snow Shot before upgrading
+and open it afterward. If Homebrew reports a quit failure during an upgrade,
+quit and reopen the app manually.
 
 Release and recovery details: [Snow Shot macOS documentation](https://github.com/mg-chao/snow-shot/blob/main/docs-macos-build.md).
 

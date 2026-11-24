@@ -1,6 +1,7 @@
 #ifndef SNOW_SHOT_STORAGE_SETTINGSADAPTERS_H
 #define SNOW_SHOT_STORAGE_SETTINGSADAPTERS_H
 
+#include "snow_shot/storage/exporttasks.h"
 #include "snow_shot/app/edition.h"
 #include "snow_shot/clouduploadconfiguration.h"
 #if SNOW_SHOT_ENABLE_API_CONFIGURATION
@@ -210,6 +211,8 @@ class ShortcutSettings final {
     bool setSplitSelectedImages(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList editSelectedImages() const;
     bool setEditSelectedImages(const shortcuts::ShortcutBindingList& bindings) const;
+    [[nodiscard]] shortcuts::ShortcutBindingList compressSelectedImages() const;
+    bool setCompressSelectedImages(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList openPinToScreenManagement() const;
     bool setOpenPinToScreenManagement(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList openSettings() const;
@@ -232,6 +235,8 @@ class ShortcutSettings final {
     setToggleWindowUnderCursorAlwaysOnTop(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList toggleGlobalShortcuts() const;
     bool setToggleGlobalShortcuts(const shortcuts::ShortcutBindingList& bindings) const;
+    [[nodiscard]] shortcuts::ShortcutBindingList toggleGlobalMouse() const;
+    bool setToggleGlobalMouse(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList toggleDisableOnFocusedFullscreenWindow() const;
     bool
     setToggleDisableOnFocusedFullscreenWindow(const shortcuts::ShortcutBindingList& bindings) const;
@@ -243,14 +248,14 @@ class GlobalShortcutSettings final {
     bool setDisableOnFocusedFullscreenWindow(bool disabled) const;
     [[nodiscard]] QString fullscreenWindowFilter() const;
     bool setFullscreenWindowFilter(const QString& filter) const;
+    [[nodiscard]] QStringList fullscreenDisableScope() const;
+    bool setFullscreenDisableScope(const QStringList& scope) const;
 };
 
 class ScreenshotSettings final {
   public:
-    [[nodiscard]] bool shutterSoundNotification() const;
-    bool setShutterSoundNotification(bool enabled) const;
-    [[nodiscard]] bool screenshotSoundNotification() const;
-    bool setScreenshotSoundNotification(bool enabled) const;
+    [[nodiscard]] QStringList shutterSoundTargets() const;
+    bool setShutterSoundTargets(const QStringList& targets) const;
 #if SNOW_SHOT_ENABLE_QR_RECOGNITION
     [[nodiscard]] bool autoRecognizeQrCode() const;
     bool setAutoRecognizeQrCode(bool enabled) const;
@@ -283,13 +288,10 @@ class ScreenshotSettings final {
     bool setHiDpiImageScaling(const QString& mode) const;
     [[nodiscard]] QString selectionResizeMode() const;
     bool setSelectionResizeMode(const QString& mode) const;
-    [[nodiscard]] QStringList autoSaveAfterExecutionActions() const;
-    bool setAutoSaveAfterExecutionActions(const QStringList& actions) const;
-    [[nodiscard]] bool autoSaveAfterExecution(const QString& action) const;
+    [[nodiscard]] ExportTasks exportTasks(ExportTrigger trigger) const;
+    bool setExportTasks(ExportTrigger trigger, ExportTasks tasks) const;
     [[nodiscard]] bool copyImageFileToClipboard() const;
     bool setCopyImageFileToClipboard(bool enabled) const;
-    [[nodiscard]] bool copyAfterPinningToScreen() const;
-    bool setCopyAfterPinningToScreen(bool enabled) const;
     [[nodiscard]] bool keepAnnotationsEditableAfterPinningToScreen() const;
     bool setKeepAnnotationsEditableAfterPinningToScreen(bool enabled) const;
     [[nodiscard]] QString imageSaveDirectory() const;
@@ -381,6 +383,7 @@ class ScreenshotShortcutSettings final {
     [[nodiscard]] shortcuts::ShortcutBindingList shortcuts(const QString& actionId) const;
     bool setShortcuts(const QString& actionId,
                       const shortcuts::ShortcutBindingList& bindings) const;
+    [[nodiscard]] shortcuts::ShortcutBindingMap activeShortcuts() const;
     [[nodiscard]] shortcuts::ShortcutBindingMap allShortcuts() const;
     bool setAllShortcutsAtomic(const shortcuts::ShortcutBindingMap& shortcutsByAction) const;
 };
@@ -507,6 +510,8 @@ class ScreenshotUiSettings final {
     bool setScreenshotAreaTypeHintEnabled(bool enabled) const;
     [[nodiscard]] bool showGuidesByDefault() const;
     bool setShowGuidesByDefault(bool enabled) const;
+    [[nodiscard]] bool adaptiveGuideColors() const;
+    bool setAdaptiveGuideColors(bool enabled) const;
     [[nodiscard]] QColor cursorGuideLineColor() const;
     bool setCursorGuideLineColor(const QColor& color) const;
     [[nodiscard]] QColor selectionCenterGuideLineColor() const;

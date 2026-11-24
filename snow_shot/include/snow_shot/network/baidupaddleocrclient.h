@@ -14,7 +14,7 @@
 
 namespace snow_shot::network {
 
-// Direct AI Studio OCR v2 client; no Snow Shot account, local model or relay.
+// Direct AI Studio OCR v2 client; no upstream hosted-service relay or local model.
 class BaiduPaddleOcrClient final : public QObject {
   public:
     struct Options {

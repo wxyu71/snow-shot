@@ -1,6 +1,7 @@
 #include "snow_shot/presentation/globalmousetypes.h"
 #include "snow_shot/app/distribution.h"
 #include "snow_shot/app/edition.h"
+#include "snow_shot/shortcuts/annotationoptionshortcut.h"
 #include "snow_shot/storage/applicationstorage.h"
 #include "snow_shot/storage/configurationschema.h"
 #include "snow_shot/storage/configurationstore.h"
@@ -91,6 +92,9 @@ void writeBytes(const QString& path, const QByteArray& bytes) {
     require(file.write(bytes) == bytes.size(), "failed to write test file");
 }
 
+QByteArray readBytes(const QString& path);
+QJsonObject readObject(const QString& path);
+
 void fullscreenWindowFilterPersistsAndDefaultsToGames() {
     QTemporaryDir temporary;
     require(temporary.isValid(), "fullscreen filter requires isolated storage");
@@ -98,30 +102,42 @@ void fullscreenWindowFilterPersistsAndDefaultsToGames() {
     const QString key = QStringLiteral("global_shortcuts/fullscreen_window_filter");
     const QString enabledKey =
         QStringLiteral("global_shortcuts/disable_on_focused_fullscreen_window");
+    const QString scopeKey = QStringLiteral("global_shortcuts/fullscreen_disable_scope");
+    const QJsonArray defaultScope{QStringLiteral("global_shortcuts")};
+    const QJsonArray mouseScope{QStringLiteral("global_mouse")};
     QMap<QString, QJsonValue> exported;
     {
         storage::ConfigurationStore store(path, true, true, 60000);
         require(store.value(key) == QJsonValue(QStringLiteral("game_windows")) &&
-                    !store.value(enabledKey).toBool(),
+                    !store.value(enabledKey).toBool() && store.value(scopeKey) == defaultScope,
                 "new configurations default to game filtering without enabling suppression");
         require(store.setValue(key, QStringLiteral("all_windows")) &&
                     !store.setValue(key, QStringLiteral("unknown")) && !store.setValue(key, true) &&
                     store.value(key) == QJsonValue(QStringLiteral("all_windows")),
                 "only the two stable filter identifiers can be persisted");
+        require(store.setValue(scopeKey, mouseScope) && !store.setValue(scopeKey, true) &&
+                    store.value(scopeKey) == mouseScope,
+                "the fullscreen scope is stored as a list independently of the filter");
         exported = store.snapshot();
         require(store.flushNow().success, "persist the selected fullscreen filter");
     }
     storage::ConfigurationStore reloaded(path, true, true, 60000);
-    require(reloaded.value(key) == QJsonValue(QStringLiteral("all_windows")),
-            "fullscreen filter survives a storage restart");
+    require(reloaded.value(key) == QJsonValue(QStringLiteral("all_windows")) &&
+                reloaded.value(scopeKey) == mouseScope,
+            "fullscreen filter and scope survive a storage restart");
     storage::ConfigurationStore imported(temporary.filePath(QStringLiteral("import.json")), true,
                                          true, 60000);
     require(imported.applySnapshot(exported) &&
-                imported.value(key) == QJsonValue(QStringLiteral("all_windows")),
-            "configuration snapshots export and import the filter");
+                imported.value(key) == QJsonValue(QStringLiteral("all_windows")) &&
+                imported.value(scopeKey) == mouseScope,
+            "configuration snapshots export and import the filter and its scope");
     require(imported.applySnapshot({{enabledKey, true}}) && imported.value(enabledKey).toBool() &&
-                imported.value(key) == QJsonValue(QStringLiteral("game_windows")),
-            "older configurations retain suppression but adopt the game filter default");
+                imported.value(key) == QJsonValue(QStringLiteral("game_windows")) &&
+                imported.value(scopeKey) == defaultScope,
+            "older configurations retain suppression and adopt the default filter and scope");
+    require(imported.applySnapshot({{scopeKey, QJsonArray{}}}) &&
+                imported.value(scopeKey) == QJsonArray{},
+            "an explicitly empty fullscreen scope survives import");
     require(imported.applySnapshot({{key, QStringLiteral("unsupported")}}) &&
                 imported.value(key) == QJsonValue(QStringLiteral("game_windows")),
             "invalid imported filters recover to game windows");
@@ -203,13 +219,8 @@ void updateSettingsPersistAndValidate() {
     require(temporary.isValid(), "update settings require isolated storage");
     const QString path = temporary.filePath(QStringLiteral("config.json"));
     const QString key = QStringLiteral("updates/mode");
-#ifdef Q_OS_MACOS
-    const QString defaultMode = QStringLiteral("check");
-    const QString nextLaunchMode = QStringLiteral("check");
-#else
-    const QString defaultMode = QStringLiteral("download");
+    const QString defaultMode = QStringLiteral("next_launch");
     const QString nextLaunchMode = QStringLiteral("next_launch");
-#endif
     {
         storage::ConfigurationStore store(path, true, true, 60000);
         require(store.value(key) == defaultMode, "existing update default must be preserved");
@@ -229,6 +240,115 @@ void updateSettingsPersistAndValidate() {
                     reloaded.value(key) == defaultMode,
                 "update policy reset must restore its original default");
     }
+    // Choices saved after migration must not be replaced on subsequent launches.
+    for (const auto& mode : {QStringLiteral("manual"), QStringLiteral("check"),
+                             QStringLiteral("download"), QStringLiteral("next_launch")}) {
+        storage::ConfigurationStore store(path, true, true, 60000);
+        require(store.setValue(key, mode) && store.flushNow().success,
+                "saved update preference must persist");
+        storage::ConfigurationStore reloaded(path, true, true, 60000);
+#ifdef Q_OS_MACOS
+        const QString expected = mode == u"download" ? QStringLiteral("check") : mode;
+#else
+        const QString expected = mode;
+#endif
+        require(reloaded.value(key) == expected,
+                "new defaults must preserve saved update preferences");
+    }
+}
+
+void legacyUpdateSettingsMigrateOnce() {
+    QTemporaryDir temporary;
+    require(temporary.isValid(), "update migration requires isolated storage");
+    const QString key = QStringLiteral("updates/mode");
+    const QString versionKey = QStringLiteral("storage/schema_version");
+    const int currentVersion = storage::ConfigurationSchema::currentVersion();
+    require(currentVersion >= 7, "the Sparkle migration requires schema version 7");
+    const QList<QJsonValue> oldModes = {
+        QStringLiteral("manual"),         QStringLiteral("check"),   QStringLiteral("download"),
+        QStringLiteral("next_launch"),    QStringLiteral("invalid"), true,
+        QJsonValue(QJsonValue::Undefined)};
+    for (int version = 1; version < 7; ++version) {
+        for (qsizetype index = 0; index < oldModes.size(); ++index) {
+            const auto& oldMode = oldModes.at(index);
+            QJsonObject updates;
+            if (!oldMode.isUndefined())
+                updates.insert(QStringLiteral("mode"), oldMode);
+            const QString path =
+                temporary.filePath(QStringLiteral("legacy-%1-%2.json").arg(version).arg(index));
+            writeBytes(
+                path,
+                QJsonDocument(
+                    QJsonObject{
+                        {QStringLiteral("storage"),
+                         QJsonObject{{QStringLiteral("schema_version"), version}}},
+                        {QStringLiteral("updates"), updates},
+                        {QStringLiteral("interface"),
+                         QJsonObject{{QStringLiteral("theme_mode"), QStringLiteral("dark")}}},
+                        {QStringLiteral("extension"), QJsonObject{{QStringLiteral("keep"), true}}}})
+                    .toJson());
+#ifdef Q_OS_MACOS
+            const QJsonValue expected = QStringLiteral("next_launch");
+#else
+            const auto normalized = storage::ConfigurationSchema::normalize(key, oldMode);
+            const QJsonValue expected = normalized.valid
+                                            ? normalized.value
+                                            : storage::ConfigurationSchema::defaultValue(key);
+#endif
+            {
+                storage::ConfigurationStore store(path, true, true, 60000);
+                require(store.value(key) == expected && store.value(versionKey) == currentVersion &&
+                            store.value(QStringLiteral("interface/theme_mode")) ==
+                                QStringLiteral("dark") &&
+                            store.isDirty() && store.flushNow().success,
+                        "legacy macOS policies migrate to automatic updates; Windows keeps valid "
+                        "choices");
+            }
+            const auto document = readObject(path);
+            require(document.value(QStringLiteral("updates"))
+                                .toObject()
+                                .value(QStringLiteral("mode")) == expected &&
+                        document.value(QStringLiteral("storage"))
+                                .toObject()
+                                .value(QStringLiteral("schema_version")) == currentVersion &&
+                        document.value(QStringLiteral("extension"))
+                                .toObject()
+                                .value(QStringLiteral("keep")) == true,
+                    "migration persists its policy and version while retaining unrelated fields");
+            const QString chosenMode =
+                index % 2 == 0 ? QStringLiteral("manual") : QStringLiteral("check");
+            {
+                storage::ConfigurationStore reloaded(path, true, true, 60000);
+                require(reloaded.value(key) == expected && !reloaded.isDirty() &&
+                            reloaded.setValue(key, chosenMode) && reloaded.flushNow().success,
+                        "migrated users can change their update preference");
+            }
+            storage::ConfigurationStore reloaded(path, true, true, 60000);
+            require(reloaded.value(key) == chosenMode && !reloaded.isDirty(),
+                    "the one-time migration must not override later user choices");
+            require(reloaded.applySnapshot({{key, oldMode}}, version) &&
+                        reloaded.value(key) == expected,
+                    "older configuration imports use the same update migration");
+            require(reloaded.applySnapshot({{key, chosenMode}}, currentVersion) &&
+                        reloaded.value(key) == chosenMode,
+                    "current configuration imports preserve explicit update preferences");
+        }
+    }
+
+    const QString futurePath = temporary.filePath(QStringLiteral("future.json"));
+    const QByteArray future =
+        QJsonDocument(
+            QJsonObject{{QStringLiteral("storage"),
+                         QJsonObject{{QStringLiteral("schema_version"), currentVersion + 1}}},
+                        {QStringLiteral("updates"),
+                         QJsonObject{{QStringLiteral("mode"), QStringLiteral("manual")}}}})
+            .toJson();
+    writeBytes(futurePath, future);
+    storage::ConfigurationStore futureStore(futurePath, true, true, 60000);
+    require(futureStore.compatibility() == storage::ConfigurationCompatibility::FutureVersion &&
+                futureStore.value(key) == QStringLiteral("manual") && !futureStore.isDirty() &&
+                futureStore.flushNow().success && readBytes(futurePath) == future,
+            "future configuration versions remain read-only and are never migrated");
 }
 
 void scrollingIntervalSettingsPersistAndValidate() {
@@ -376,121 +496,75 @@ storage::ApplicationStorage& initialize(const QString& executableDirectory,
 void autoSaveAfterExecutionSettingsMigrateAndPersist() {
     QTemporaryDir temporary;
     require(temporary.isValid(), "auto-save settings require isolated storage");
-    const QString key = QStringLiteral("screenshot/auto_save_after_execution_actions");
-    const QString legacyKey = QStringLiteral("screenshot/auto_save_after_copy");
-    const QStringList actions{
-        QStringLiteral("copy_screenshot"),         QStringLiteral("copy_scrolling_screenshot"),
-        QStringLiteral("copy_pinned_image"),       QStringLiteral("capture_focused_window"),
-        QStringLiteral("capture_current_monitor"), QStringLiteral("pin_to_screen")};
-    const QStringList legacyActions = actions.mid(0, 5);
-    const QJsonArray legacyArray = QJsonArray::fromStringList(legacyActions);
-    const auto* entry = storage::ConfigurationSchema::entry(key);
-    require(entry != nullptr && entry->valueKind == storage::ConfigurationValueKind::StringList &&
-                entry->defaultValue == QJsonArray{} && entry->allowedStringValues == actions &&
-                !storage::ConfigurationSchema::contains(legacyKey),
-            "auto-save schema must expose all six scenarios with an empty default");
-    const auto normalized = storage::ConfigurationSchema::normalize(
-        key, QJsonArray{QStringLiteral(" COPY_SCREENSHOT "), QStringLiteral("copy_screenshot"),
-                        QStringLiteral("pin_to_screen"), QStringLiteral("unsupported"), 1});
-    require(normalized.valid && normalized.changed &&
-                normalized.value == QJsonArray{QStringLiteral("copy_screenshot"),
-                                               QStringLiteral("pin_to_screen")} &&
-                !storage::ConfigurationSchema::normalize(key, true).valid,
-            "auto-save choices must use the existing allowed-list normalization");
-
-    for (int version = 1; version <= 3; ++version) {
-        for (const bool enabled : {false, true}) {
-            const QString path =
-                temporary.filePath(QStringLiteral("legacy-%1-%2.json").arg(version).arg(enabled));
-            writeBytes(path, QJsonDocument(
-                                 QJsonObject{
-                                     {QStringLiteral("storage"),
-                                      QJsonObject{{QStringLiteral("schema_version"), version}}},
-                                     {QStringLiteral("screenshot"),
-                                      QJsonObject{{QStringLiteral("auto_save_after_copy"), enabled},
-                                                  {QStringLiteral("extension"), 42}}},
-                                 })
-                                 .toJson());
-            const QJsonArray expected = enabled ? legacyArray : QJsonArray{};
-            {
-                storage::ConfigurationStore store(path, true, true, 60000);
-                require(store.value(key) == expected && !store.snapshot().contains(legacyKey) &&
-                            store.value(QStringLiteral("storage/schema_version")).toInt() ==
-                                storage::ConfigurationSchema::currentVersion() &&
-                            store.flushNow().success,
-                        "legacy booleans must retain their original five auto-save scenarios");
-                const QJsonObject screenshot =
-                    readObject(path).value(QStringLiteral("screenshot")).toObject();
-                require(
-                    !screenshot.contains(QStringLiteral("auto_save_after_copy")) &&
-                        screenshot.value(QStringLiteral("auto_save_after_execution_actions")) ==
-                            expected &&
-                        screenshot.value(QStringLiteral("extension")).toInt() == 42,
-                    "writable migration must replace the old key and preserve unrelated fields");
-            }
-            storage::ConfigurationStore reloaded(path, true, true, 60000);
-            require(reloaded.value(key) == expected && !reloaded.isDirty(),
-                    "auto-save migration must survive reload without repeating");
+    using storage::ExportTask;
+    using storage::ExportTrigger;
+    const auto copy = storage::exportTaskRow(ExportTrigger::ScreenshotCopy).key.toString();
+    const auto pinned = storage::exportTaskRow(ExportTrigger::PinnedCopy).key.toString();
+    const auto pin = storage::exportTaskRow(ExportTrigger::ScreenshotPin).key.toString();
+    const QJsonArray save{QStringLiteral("auto_save")};
+    const QStringList legacyCopies{
+        QStringLiteral("copy_screenshot"), QStringLiteral("copy_scrolling_screenshot"),
+        QStringLiteral("capture_current_monitor"), QStringLiteral("capture_focused_window")};
+    for (int scenario = 0; scenario < 8; ++scenario) {
+        QJsonObject screenshot{{QStringLiteral("extension"), 42}};
+        if (scenario < 4)
+            screenshot.insert(QStringLiteral("auto_save_after_execution_actions"),
+                              QJsonArray{legacyCopies.at(scenario)});
+        else if (scenario == 4)
+            screenshot.insert(QStringLiteral("auto_save_after_execution_actions"),
+                              QJsonArray{QStringLiteral("copy_pinned_image")});
+        else if (scenario == 5) {
+            screenshot.insert(QStringLiteral("auto_save_after_execution_actions"),
+                              QJsonArray{QStringLiteral("pin_to_screen")});
+            screenshot.insert(QStringLiteral("copy_after_pinning_to_screen"), true);
+        } else {
+            screenshot.insert(QStringLiteral("auto_save_after_copy"), true);
         }
+        QJsonObject document{
+            {QStringLiteral("storage"), QJsonObject{{QStringLiteral("schema_version"), 7}}},
+            {QStringLiteral("screenshot"), screenshot}};
+        if (scenario == 7)
+            document.insert(QStringLiteral("export_tasks"),
+                            QJsonObject{{QStringLiteral("screenshot_copy"), QJsonArray{}}});
+        const QString path =
+            temporary.filePath(QString::number(scenario) + QStringLiteral(".json"));
+        writeBytes(path, QJsonDocument(document).toJson());
+        {
+            storage::ConfigurationStore store(path, true, true, 60000);
+            require(store.value(copy) == (scenario < 4 || scenario == 6 ? save : QJsonArray{}) &&
+                        store.value(pinned) ==
+                            (scenario == 4 || scenario >= 6 ? save : QJsonArray{}) &&
+                        store.value(pin) == (scenario == 5
+                                                 ? QJsonArray{QStringLiteral("copy_to_clipboard"),
+                                                              QStringLiteral("auto_save")}
+                                                 : QJsonArray{}) &&
+                        store.flushNow().success,
+                    "legacy scenarios merge onto independent rows and explicit rows win");
+        }
+        storage::ConfigurationStore reloaded(path, true, true, 60000);
+        const auto disk = readObject(path).value(QStringLiteral("screenshot")).toObject();
+        require(!reloaded.isDirty() && disk.value(QStringLiteral("extension")).toInt() == 42 &&
+                    !disk.contains(QStringLiteral("auto_save_after_copy")) &&
+                    !disk.contains(QStringLiteral("auto_save_after_execution_actions")) &&
+                    !disk.contains(QStringLiteral("copy_after_pinning_to_screen")),
+                "migration is durable, removes retired keys and preserves unknown fields");
     }
-    for (const QJsonValue& current :
-         {QJsonValue(QJsonArray{}), QJsonValue(QJsonArray{QStringLiteral("pin_to_screen")}),
-          QJsonValue(true)}) {
-        const QString path = temporary.filePath(QStringLiteral("precedence.json"));
-        writeBytes(
-            path,
-            QJsonDocument(
-                QJsonObject{
-                    {QStringLiteral("storage"), QJsonObject{{QStringLiteral("schema_version"), 3}}},
-                    {QStringLiteral("screenshot"),
-                     QJsonObject{{QStringLiteral("auto_save_after_copy"), true},
-                                 {QStringLiteral("auto_save_after_execution_actions"), current}}},
-                })
-                .toJson());
-        storage::ConfigurationStore store(path, true, true, 60000);
-        require(store.value(key) == (current.isArray() ? current : QJsonValue(QJsonArray{})),
-                "a present action list must override legacy true even when empty or invalid");
-    }
-    const QString futurePath = temporary.filePath(QStringLiteral("future.json"));
-    const QByteArray futureBytes =
-        QJsonDocument(
-            QJsonObject{{QStringLiteral("storage"),
-                         QJsonObject{{QStringLiteral("schema_version"),
-                                      storage::ConfigurationSchema::currentVersion() + 1}}},
-                        {QStringLiteral("screenshot"),
-                         QJsonObject{{QStringLiteral("auto_save_after_copy"), true}}}})
-            .toJson();
-    writeBytes(futurePath, futureBytes);
-    storage::ConfigurationStore future(futurePath, true, true, 60000);
-    require(!future.isWritable() && !future.isDirty() && future.value(key) == QJsonArray{} &&
-                future.flushNow().success && readBytes(futurePath) == futureBytes,
-            "future-version documents must remain read-only without legacy migration");
-
     const QString executable = temporary.filePath(QStringLiteral("bin"));
     auto& appStorage = initialize(executable, temporary.filePath(QStringLiteral("data")));
     const storage::ScreenshotSettings settings;
-    require(settings.autoSaveAfterExecutionActions().isEmpty() &&
-                !settings.autoSaveAfterExecution(QStringLiteral("copy_screenshot")),
-            "fresh auto-save preferences must disable every scenario");
-    for (const QString& action : actions) {
-        require(settings.setAutoSaveAfterExecutionActions({action}) &&
-                    settings.autoSaveAfterExecutionActions() == QStringList{action},
-                "each execution scenario must be selectable independently");
-        for (const QString& candidate : actions) {
-            require(settings.autoSaveAfterExecution(candidate) == (candidate == action),
-                    "one selected scenario must not enable any other scenario");
-        }
+    for (const auto& row : storage::exportTaskRows) {
+        require(!settings.exportTasks(row.trigger) &&
+                    settings.setExportTasks(row.trigger, row.allowed) &&
+                    settings.exportTasks(row.trigger) == row.allowed,
+                "each action has an independent empty default");
     }
-    require(!settings.autoSaveAfterExecution(QStringLiteral("unsupported")) &&
-                settings.setCopyImageFileToClipboard(true) && appStorage.flushNow().success,
-            "auto-save actions must remain independent from copying image files");
+    require(appStorage.flushNow().success, "flush export tasks");
     appStorage.shutdown();
     static_cast<void>(initialize(executable, temporary.filePath(QStringLiteral("data"))));
-    require(
-        settings.autoSaveAfterExecutionActions() == QStringList{QStringLiteral("pin_to_screen")} &&
-            settings.copyImageFileToClipboard() && settings.setAutoSaveAfterExecutionActions({}) &&
-            settings.autoSaveAfterExecutionActions().isEmpty(),
-        "chosen scenarios must persist and reset to an empty list");
+    for (const auto& row : storage::exportTaskRows)
+        require(settings.exportTasks(row.trigger) == row.allowed &&
+                    settings.setExportTasks(row.trigger, {}),
+                "task selections survive reload and can be cleared");
     appStorage.shutdown();
 }
 
@@ -542,7 +616,7 @@ void portableSystemIntegrationDefaults() {
     const QString enabledKey = QStringLiteral("system/auto_start_at_boot");
     const QString menuKey = QStringLiteral("system/context_menu_mode");
     auto& appStorage = initialize(executable, fallback);
-    require(storage::SystemSettings().autoStartAtBoot() &&
+    require(!storage::SystemSettings().autoStartAtBoot() &&
                 appStorage.configuration().value(menuKey) == QStringLiteral("image_files"),
             "application data storage keeps the standard integration defaults");
     require(QDir().mkpath(executable), "create a portable executable directory");
@@ -551,7 +625,7 @@ void portableSystemIntegrationDefaults() {
     static_cast<void>(initialize(executable, fallback));
     if (snow_shot::app::distribution::isStoreManaged()) {
         require(appStorage.status().effectiveMode == storage::StorageMode::ApplicationData &&
-                    storage::SystemSettings().autoStartAtBoot() &&
+                    !storage::SystemSettings().autoStartAtBoot() &&
                     appStorage.configuration().value(menuKey) == QStringLiteral("image_files"),
                 "Store distribution ignores portable defaults");
         return;
@@ -698,7 +772,8 @@ void defaultsAndTypedRoundTrip() {
                         .toObject()
                         .value(QStringLiteral("smart_selection")) ==
                     QStringLiteral("window_sub_element") &&
-                history.value(QStringLiteral("enabled")).toBool() &&
+                history.value(QStringLiteral("retention_mode")) == QStringLiteral("full") &&
+                !history.contains(QStringLiteral("enabled")) &&
                 history.value(QStringLiteral("retention_days")).toInt() == 7 &&
                 history.value(QStringLiteral("max_entries")).toInt() == 100 &&
                 history.value(QStringLiteral("max_disk_mib")).toInt() == 1024 &&
@@ -888,7 +963,7 @@ void settingsSchemaDefaultsAndValidationAreComplete() {
         return storage::ConfigurationSchema::defaultValue(QString::fromLatin1(key));
     };
     require(
-        defaultValue("system/auto_start_at_boot").toBool() &&
+        !defaultValue("system/auto_start_at_boot").toBool() &&
             defaultValue("network/proxy").toString() == QStringLiteral("none") &&
             defaultValue("text_recognition/model_type").toString() == QStringLiteral("small") &&
             defaultValue("text_recognition/detector_resize_policy").toString() ==
@@ -927,7 +1002,7 @@ void settingsSchemaDefaultsAndValidationAreComplete() {
                 structuredShortcuts(QJsonArray{QStringLiteral("Ctrl+Shift+S")}) &&
             defaultValue("screenshot_shortcuts/save_as_file").toArray() ==
                 structuredShortcuts(QJsonArray{QStringLiteral("Ctrl+S")}) &&
-            defaultValue("screenshot/auto_save_after_execution_actions").toArray().isEmpty() &&
+            defaultValue("export_tasks/screenshot_copy").toArray().isEmpty() &&
             !defaultValue("screenshot/copy_image_file_to_clipboard").toBool() &&
             defaultValue("screenshot/image_save_directory").toString() ==
                 systemSaveDirectory(QStandardPaths::PicturesLocation) &&
@@ -1245,12 +1320,16 @@ void settingsSchemaDefaultsAndValidationAreComplete() {
         {QStringLiteral("tray/left_click_action"),
          {QStringLiteral("none"), QStringLiteral("screenshot"), QStringLiteral("show_main_window"),
           QStringLiteral("screenshot_copy"), QStringLiteral("screenshot_fixed"),
-          QStringLiteral("open_capture_history"), QStringLiteral("open_pin_to_screen_management"),
+          QStringLiteral("pin_clipboard_content"), QStringLiteral("restore_last_closed_windows"),
+          QStringLiteral("hide_show_all_windows"), QStringLiteral("open_capture_history"),
+          QStringLiteral("open_pin_to_screen_management"),
           QStringLiteral("open_function_settings")}},
         {QStringLiteral("tray/middle_click_action"),
          {QStringLiteral("none"), QStringLiteral("screenshot"), QStringLiteral("show_main_window"),
           QStringLiteral("screenshot_copy"), QStringLiteral("screenshot_fixed"),
-          QStringLiteral("open_capture_history"), QStringLiteral("open_pin_to_screen_management"),
+          QStringLiteral("pin_clipboard_content"), QStringLiteral("restore_last_closed_windows"),
+          QStringLiteral("hide_show_all_windows"), QStringLiteral("open_capture_history"),
+          QStringLiteral("open_pin_to_screen_management"),
           QStringLiteral("open_function_settings")}},
     };
     for (auto it = allowedStringValues.cbegin(); it != allowedStringValues.cend(); ++it) {
@@ -1448,6 +1527,7 @@ void screenshotUiSchemaRepairsStructuredValues() {
                      QJsonArray{
                          QStringLiteral("convert-to-html"), QStringLiteral("convert-to-markdown"),
                          QStringLiteral("latex-recognition"), QStringLiteral("barcode-recognition"),
+                         QStringLiteral("document-recognition"),
                          QStringLiteral("table-recognition")},
                      QJsonArray{QStringLiteral("record-screen")},
                      QJsonArray{QStringLiteral("pin-window-to-screen"),
@@ -1599,8 +1679,9 @@ void screenshotUiSchemaRepairsStructuredValues() {
                     QJsonArray{
                         QStringLiteral("upload-to-cloud"), QStringLiteral("print"),
                         QStringLiteral("quick-save"), QStringLiteral("save-as-file"),
-                        QStringLiteral("table-recognition"), QStringLiteral("convert-to-markdown"),
-                        QStringLiteral("latex-recognition"), QStringLiteral("convert-to-html")},
+                        QStringLiteral("document-recognition"), QStringLiteral("table-recognition"),
+                        QStringLiteral("convert-to-markdown"), QStringLiteral("latex-recognition"),
+                        QStringLiteral("convert-to-html")},
                     QJsonArray{QStringLiteral("record-screen")},
                     QJsonArray{QStringLiteral("pin-window-to-screen"),
                                QStringLiteral("pin-to-screen")},
@@ -1620,14 +1701,14 @@ void screenshotUiSchemaRepairsStructuredValues() {
         {QStringLiteral("positions"), QJsonArray{}},
         {QStringLiteral("hidden"),
          QJsonArray{QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition"),
-                    QStringLiteral("convert-to-markdown"), QStringLiteral("convert-to-html"),
-                    QStringLiteral("latex-recognition"), QStringLiteral("record-screen"),
-                    QStringLiteral("pin-window-to-screen"), QStringLiteral("pin-to-screen"),
-                    QStringLiteral("text-recognition"), QStringLiteral("text-translation"),
-                    QStringLiteral("scrolling-screenshot"), QStringLiteral("upload-to-cloud"),
-                    QStringLiteral("print"), QStringLiteral("quick-save"),
-                    QStringLiteral("save-as-file"), QStringLiteral("separator"),
-                    QStringLiteral("cancel"), QStringLiteral("copy")}},
+                    QStringLiteral("document-recognition"), QStringLiteral("convert-to-markdown"),
+                    QStringLiteral("convert-to-html"), QStringLiteral("latex-recognition"),
+                    QStringLiteral("record-screen"), QStringLiteral("pin-window-to-screen"),
+                    QStringLiteral("pin-to-screen"), QStringLiteral("text-recognition"),
+                    QStringLiteral("text-translation"), QStringLiteral("scrolling-screenshot"),
+                    QStringLiteral("upload-to-cloud"), QStringLiteral("print"),
+                    QStringLiteral("quick-save"), QStringLiteral("save-as-file"),
+                    QStringLiteral("separator"), QStringLiteral("cancel"), QStringLiteral("copy")}},
     };
     const auto normalizedAllHidden = storage::ConfigurationSchema::normalize(
         QStringLiteral("screenshot_toolbar/action_tools_layout"), allHiddenActionLayout);
@@ -1749,7 +1830,7 @@ void screenshotUiAdaptersRoundTripTypedValues() {
     const storage::ScreenshotToolbarLayout actionLayout{
         {{QStringLiteral("upload-to-cloud"), QStringLiteral("quick-save"),
           QStringLiteral("save-as-file"), QStringLiteral("record-screen")},
-         {QStringLiteral("table-recognition")}},
+         {QStringLiteral("document-recognition"), QStringLiteral("table-recognition")}},
         {QStringLiteral("barcode-recognition"), QStringLiteral("pin-window-to-screen"),
          QStringLiteral("pin-to-screen"), QStringLiteral("convert-to-markdown"),
          QStringLiteral("convert-to-html"), QStringLiteral("latex-recognition"),
@@ -1770,7 +1851,8 @@ void screenshotUiAdaptersRoundTripTypedValues() {
             "pinned defaults must expose configurable section dividers and Confirm Edit");
     // This valid layout resembles a historical screenshot default; pinned layouts must not migrate.
     const storage::ScreenshotToolbarLayout pinnedLayout{
-        {{QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition")},
+        {{QStringLiteral("barcode-recognition"), QStringLiteral("document-recognition"),
+          QStringLiteral("table-recognition")},
          {QStringLiteral("convert-to-markdown"), QStringLiteral("latex-recognition")},
          {QStringLiteral("convert-to-html")},
          {QStringLiteral("text-recognition")},
@@ -2422,6 +2504,19 @@ void localShortcutDefaultsPreserveConfiguredBindings() {
                 store.value(nextKey) == QJsonArray{} && store.value(quickSaveKey) == nextDefault,
             "repairing an invalid shortcut must not introduce a conflicting default");
     const QString copyKey = QStringLiteral("screenshot_shortcuts/copy_to_clipboard");
+    const QString cycleKey = QStringLiteral("drawing_shortcuts/cycle_annotation_tool_options");
+    const QString shapeKey = QStringLiteral("drawing_shortcuts/shape");
+    const QString smartSelectionKey = QStringLiteral(
+        "screenshot_shortcuts/switch_selection_between_window_and_window_sub_element");
+    const QJsonArray tab{shortcutObject(QStringLiteral("Tab"))};
+    require(store.applySnapshot({{smartSelectionKey, tab}}) && store.value(cycleKey) == tab,
+            "a Screenshot Tab binding must not suppress the Annotation default");
+    require(store.applySnapshot({{shapeKey, tab}}) && store.value(shapeKey) == tab &&
+                store.value(cycleKey) == QJsonArray{} && store.flushNow().success,
+            "an existing Annotation Tab binding must suppress the cycle default");
+    storage::ConfigurationStore cycleReloaded(variantsPath, true, true, 60000);
+    require(cycleReloaded.value(shapeKey) == tab && cycleReloaded.value(cycleKey) == QJsonArray{},
+            "the occupied Tab and unassigned annotation cycle must survive reload");
     const QJsonArray copyDefault{shortcutObject(QStringLiteral("Ctrl+C")),
                                  shortcutObject(QStringLiteral("Enter"))};
     require(storage::ConfigurationSchema::defaultValue(copyKey) == copyDefault &&
@@ -2668,8 +2763,12 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
     auto& applicationStorage = initialize(executable, temporary.path());
 
     const storage::SystemSettings system;
-    require(system.autoStartAtBoot() && !system.launchAsAdministrator(),
-            "elevated startup must default off");
+    require(system.autoStartAtBoot() == storage::ConfigurationSchema::defaultValue(
+                                            QStringLiteral("system/auto_start_at_boot"))
+                                            .toBool() &&
+                !system.launchAsAdministrator(),
+            "startup uses the platform default and elevated startup defaults off");
+    require(system.setAutoStartAtBoot(true), "enable startup before testing elevation");
     require(system.setLaunchAsAdministrator(true) && system.launchAsAdministrator(),
             "elevated startup preference must persist");
     require(applicationStorage.flushNow().success, "startup preferences must flush");
@@ -2732,7 +2831,8 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
     require(screenshot.autoExecuteAfterTextRecognition() == QStringLiteral("no_action") &&
                 screenshot.doubleClickAction() == QStringLiteral("copy") &&
                 screenshot.middleMouseButtonAction() == QStringLiteral("pin") &&
-                !screenshot.showCursor() && screenshot.autoSaveAfterExecutionActions().isEmpty() &&
+                !screenshot.showCursor() &&
+                !screenshot.exportTasks(storage::ExportTrigger::ScreenshotCopy) &&
                 !screenshot.copyImageFileToClipboard() &&
                 screenshot.imageFormat() == QStringLiteral("png") &&
                 screenshot.compressionLevel() == QStringLiteral("medium") &&
@@ -2750,7 +2850,8 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
                 QStringLiteral("quick_copy_text_and_end_screenshot")) &&
                 screenshot.setDoubleClickAction(QStringLiteral("save")) &&
                 screenshot.setMiddleMouseButtonAction(QStringLiteral("none")) &&
-                screenshot.setAutoSaveAfterExecutionActions({QStringLiteral("copy_screenshot")}) &&
+                screenshot.setExportTasks(storage::ExportTrigger::ScreenshotCopy,
+                                          storage::ExportTask::AutoSave) &&
                 screenshot.setCopyImageFileToClipboard(true) &&
                 screenshot.setImageSaveDirectory(QStringLiteral("D:/Captures")) &&
                 screenshot.setLastManualSaveDirectory(QStringLiteral("D:/Exports")) &&
@@ -2767,7 +2868,8 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
                     QStringLiteral("quick_copy_text_and_end_screenshot") &&
                 screenshot.doubleClickAction() == QStringLiteral("save") &&
                 screenshot.middleMouseButtonAction() == QStringLiteral("none") &&
-                screenshot.autoSaveAfterExecution(QStringLiteral("copy_screenshot")) &&
+                screenshot.exportTasks(storage::ExportTrigger::ScreenshotCopy)
+                    .testFlag(storage::ExportTask::AutoSave) &&
                 screenshot.copyImageFileToClipboard() &&
                 screenshot.imageSaveDirectory() == QStringLiteral("D:/Captures") &&
                 screenshot.lastManualSaveDirectory() == QStringLiteral("D:/Exports") &&
@@ -3065,7 +3167,7 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
 
     const shortcuts::ShortcutBindingMap defaults = drawingShortcuts.allShortcuts();
     require(
-        defaults.size() == 18 && defaults.contains(QStringLiteral("line")) &&
+        defaults.size() == 19 && defaults.contains(QStringLiteral("line")) &&
             defaults.value(QStringLiteral("line")).isEmpty() &&
             defaults.contains(QStringLiteral("spotlight")) &&
             defaults.value(QStringLiteral("spotlight")).isEmpty() &&
@@ -3083,9 +3185,11 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
                 QStringList{QStringLiteral("9")} &&
             portable(defaults.value(QStringLiteral("reset_canvas"))) ==
                 QStringList{QStringLiteral("Ctrl+Shift+Z")} &&
+            portable(defaults.value(shortcuts::kCycleAnnotationToolOptions)) ==
+                QStringList{QStringLiteral("Tab")} &&
             drawingShortcuts.shortcuts(QStringLiteral("unsupported")).isEmpty() &&
             !drawingShortcuts.setShortcuts(QStringLiteral("unsupported"), {QStringLiteral("Q")}),
-        "drawing shortcut adapter must expose seventeen tools and the canvas reset default");
+        "drawing shortcut adapter must expose the default tools and commands");
 
     require(drawingShortcuts.setSelect({QStringLiteral("Ctrl+Shift+V")}) &&
                 portable(drawingShortcuts.select()) == QStringList{QStringLiteral("Ctrl+Shift+V")},
@@ -3257,6 +3361,41 @@ void smartSelectionAccessorAndSignal() {
     QObject::disconnect(connection);
 }
 
+void legacyShutterSoundSettingsMigrate() {
+    const QString key = QStringLiteral("screenshot/shutter_sound_notification");
+    const QString obsolete = QStringLiteral("screenshot_sound_notification");
+    const QString direct = QStringLiteral("direct_capture");
+    const QString normal = QStringLiteral("normal_screenshot");
+    QTemporaryDir temporary;
+    require(temporary.isValid(), "create isolated shutter sound migration storage");
+    const QString path = temporary.filePath(QStringLiteral("config.json"));
+    const auto verify = [&](QJsonValue shutter, QJsonValue screenshot, QJsonArray expected) {
+        const QJsonObject group{{QStringLiteral("shutter_sound_notification"), shutter},
+                                {obsolete, screenshot}};
+        writeBytes(path,
+                   QJsonDocument(QJsonObject{{QStringLiteral("storage"),
+                                              QJsonObject{{QStringLiteral("schema_version"), 7}}},
+                                             {QStringLiteral("screenshot"), group}})
+                       .toJson());
+        storage::ConfigurationStore store(path, true, true, 60000);
+        require(store.value(key) == expected && store.flushNow().success,
+                "migrated shutter sound must preserve the two effective preferences");
+        const auto saved = readObject(path).value(QStringLiteral("screenshot")).toObject();
+        require(saved.value(QStringLiteral("shutter_sound_notification")) == expected &&
+                    !saved.contains(obsolete),
+                "only the combined sound preference must remain on disk");
+    };
+    const auto missing = QJsonValue(QJsonValue::Undefined);
+    verify(true, false, {direct});
+    verify(false, true, {normal});
+    verify(true, true, {direct, normal});
+    verify(false, false, {});
+    verify(missing, true, {direct, normal});
+    verify(false, missing, {});
+    verify(QJsonArray{QStringLiteral("disabled")}, missing, {});
+    verify(QJsonArray{normal}, false, {normal});
+}
+
 void smartSelectionLegacyValuesMigrate() {
     const QString key = QStringLiteral("screenshot_selection/smart_selection");
     const QString targetKey = QStringLiteral("screenshot_selection/selection_target");
@@ -3304,6 +3443,44 @@ void smartSelectionLegacyValuesMigrate() {
            QStringLiteral("window_sub_element"));
 }
 
+void historyRetentionMigration() {
+    QTemporaryDir temporary;
+    const auto key = QStringLiteral("capture_history/retention_mode");
+    const auto legacy = QStringLiteral("capture_history/enabled");
+    const auto path = temporary.filePath(QStringLiteral("settings.json"));
+    constexpr int previousSchemaVersion = 8;
+    const int currentSchemaVersion = storage::ConfigurationSchema::currentVersion();
+    require(currentSchemaVersion > previousSchemaVersion,
+            "history retention mode requires a new configuration schema version");
+    for (const bool enabled : {false, true}) {
+        const QString mode = enabled ? QStringLiteral("full") : QStringLiteral("disabled");
+        const QJsonObject version{{QStringLiteral("schema_version"), previousSchemaVersion}};
+        const QJsonObject history{{QStringLiteral("enabled"), enabled}};
+        writeBytes(path, QJsonDocument(QJsonObject{{QStringLiteral("storage"), version},
+                                                   {QStringLiteral("capture_history"), history}})
+                             .toJson());
+        storage::ConfigurationStore store(path, true, true, 60000);
+        require(store.value(key) == mode && store.flushNow().success,
+                "legacy screenshot history must retain its enabled state on upgrade");
+        const auto document = readObject(path);
+        require(document.value(QStringLiteral("storage"))
+                        .toObject()
+                        .value(QStringLiteral("schema_version")) == currentSchemaVersion,
+                "migration must persist the new schema version for older readers");
+        const auto group = document.value(QStringLiteral("capture_history")).toObject();
+        require(group.value(QStringLiteral("retention_mode")) == mode &&
+                    !group.contains(QStringLiteral("enabled")),
+                "migration persists the dropdown and retires the boolean");
+        const auto imported =
+            storage::ConfigurationSchema::migrateLegacyValues({{legacy, enabled}});
+        const auto both = storage::ConfigurationSchema::migrateLegacyValues(
+            {{legacy, enabled}, {key, QStringLiteral("results_only")}});
+        require(imported.value(key) == mode && both.value(key) == QStringLiteral("results_only") &&
+                    !imported.contains(legacy) && !both.contains(legacy),
+                "imports migrate the boolean and prefer an explicit mode");
+    }
+}
+
 void unknownFieldsArePreserved() {
     QTemporaryDir temporary;
     require(temporary.isValid(), "failed to create unknown-field directory");
@@ -3344,6 +3521,22 @@ void malformedConfigurationIsCopiedAndReplaced() {
                  .entryInfoList({QStringLiteral("config.json.corrupt.*.json")}, QDir::Files)
                  .isEmpty(),
             "malformed configuration was not copied to a corrupt backup");
+    const auto malformedBackups =
+        QDir(temporary.path())
+            .entryInfoList({QStringLiteral("config.json.corrupt.*.json")}, QDir::Files, QDir::Time);
+    require(!malformedBackups.isEmpty(), "malformed backup path is available");
+    const QJsonObject malformedBackup = readObject(malformedBackups.first().absoluteFilePath());
+    require(malformedBackup.value(QStringLiteral("diagnostics"))
+                    .toObject()
+                    .value(QStringLiteral("content_omitted"))
+                    .toBool() &&
+                !malformedBackup.value(QStringLiteral("diagnostics"))
+                     .toObject()
+                     .value(QStringLiteral("source_sha256"))
+                     .toString()
+                     .isEmpty() &&
+                !readBytes(malformedBackups.first().absoluteFilePath()).contains("{broken"),
+            "unparseable configuration backup keeps diagnostics but omits original content");
     require(store.flushNow().success &&
                 readObject(config)
                         .value(QStringLiteral("storage"))
@@ -3369,22 +3562,37 @@ void malformedConfigurationIsCopiedAndReplaced() {
                      .isEmpty(),
             "expired corrupt configuration backups were not cleaned up");
 
-    writeBytes(config, QByteArrayLiteral("{\"storage\": {}}"));
+    const QByteArray backupSecret = QByteArrayLiteral("legacy-corrupt-secret");
+    writeBytes(config,
+               QByteArrayLiteral(
+                   "{\"storage\":{},\"api_configuration\":{\"custom_models\":[{\"api_key\":\"") +
+                   backupSecret + QByteArrayLiteral("\"}]}}"));
     storage::ConfigurationStore missingVersion(config, true, true, 60000);
     require(missingVersion.compatibility() ==
                 storage::ConfigurationCompatibility::RecoveredDefaults,
             "missing schema version was not treated as corrupt");
+    const auto sanitizedBackups =
+        QDir(temporary.path())
+            .entryInfoList({QStringLiteral("config.json.corrupt.*.json")}, QDir::Files, QDir::Time);
+    require(!sanitizedBackups.isEmpty() &&
+                !readBytes(sanitizedBackups.first().absoluteFilePath()).contains(backupSecret),
+            "parseable corrupt configuration backup redacts provider credentials");
 }
 
 void futureVersionIsReadOnly() {
     QTemporaryDir temporary;
     require(temporary.isValid(), "failed to create future-version directory");
     const QString config = QDir(temporary.path()).filePath(QStringLiteral("config.json"));
-    writeBytes(config, QByteArrayLiteral("{\n"
-                                         "  \"storage\": {\"schema_version\": 6},\n"
-                                         "  \"interface\": {\"theme_mode\": \"dark\"},\n"
-                                         "  \"future\": {\"value\": 42}\n"
-                                         "}\n"));
+    const int futureVersion = storage::ConfigurationStore::currentSchemaVersion() + 1;
+    writeBytes(
+        config,
+        QJsonDocument(
+            QJsonObject{{QStringLiteral("storage"),
+                         QJsonObject{{QStringLiteral("schema_version"), futureVersion}}},
+                        {QStringLiteral("interface"),
+                         QJsonObject{{QStringLiteral("theme_mode"), QStringLiteral("dark")}}},
+                        {QStringLiteral("future"), QJsonObject{{QStringLiteral("value"), 42}}}})
+            .toJson());
     const QByteArray original = readBytes(config);
     storage::ConfigurationStore store(config, true, true, 60000);
     bool rejected = false;
@@ -4241,8 +4449,10 @@ void trayClickSettingsSurviveRestart() {
                                                   QStringLiteral("tray.restart-app"),
                                                   QStringLiteral("tray.exit")},
             "tray click choices and Restart App must survive storage restart");
-    for (const auto& action : {QStringLiteral("open_capture_history"),
-                               QStringLiteral("open_pin_to_screen_management")}) {
+    for (const auto& action :
+         {QStringLiteral("pin_clipboard_content"), QStringLiteral("restore_last_closed_windows"),
+          QStringLiteral("hide_show_all_windows"), QStringLiteral("open_capture_history"),
+          QStringLiteral("open_pin_to_screen_management")}) {
         const auto previousMiddle = tray.middleClickAction();
         require(tray.setLeftClickAction(action) && tray.middleClickAction() == previousMiddle &&
                     applicationStorage.flushNow().success,
@@ -4459,7 +4669,7 @@ void pinnedManagementConfigurationAndTrayMigration() {
                                          true, 30000);
     require(retained.value(QStringLiteral("tray/menu_options")).toArray() == customized,
             "customized tray menu remains unchanged");
-    require(migrated.value(QStringLiteral("pinned_history/enabled")).toBool() &&
+    require(!migrated.value(QStringLiteral("pinned_history/enabled")).toBool() &&
                 migrated.value(QStringLiteral("pinned_history/retention_days")).toInt() == 7 &&
                 migrated.value(QStringLiteral("pinned_history/max_entries")).toInt() == 100 &&
                 migrated.value(QStringLiteral("pinned_history/max_disk_mib")).toInt() == 1024,
@@ -4552,6 +4762,14 @@ int main(int argc, char** argv) {
         checkpointRevalidatesStorageAfterSnapshot();
         return 0;
     }
+    if (application.arguments().contains(QStringLiteral("--shutter-sound-only"))) {
+        legacyShutterSoundSettingsMigrate();
+        return 0;
+    }
+    if (application.arguments().contains(QStringLiteral("--history-retention-only"))) {
+        historyRetentionMigration();
+        return 0;
+    }
     if (application.arguments().contains(QStringLiteral("--smart-selection-only"))) {
         QCoreApplication::setOrganizationName(QStringLiteral("SnowShotTests"));
         QCoreApplication::setApplicationName(QStringLiteral("smart-selection-storage-tests"));
@@ -4586,6 +4804,7 @@ int main(int argc, char** argv) {
     }
     if (application.arguments().contains(QStringLiteral("--update-settings-only"))) {
         updateSettingsPersistAndValidate();
+        legacyUpdateSettingsMigrateOnce();
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--recording-audio-only"))) {
@@ -4703,6 +4922,7 @@ int main(int argc, char** argv) {
     ocrHighlightingSettingsPersistAndValidate();
     pinnedManagementConfigurationAndTrayMigration();
     updateSettingsPersistAndValidate();
+    legacyUpdateSettingsMigrateOnce();
     markerResolutionAndStatus();
     defaultsAndTypedRoundTrip();
     selectionTransitionAnimationMigratesAndPersists();
@@ -4738,6 +4958,8 @@ int main(int argc, char** argv) {
     missingOcrModelConfigurationDefaultsToSmallWithoutAMigration();
     smartSelectionAccessorAndSignal();
     smartSelectionLegacyValuesMigrate();
+    legacyShutterSoundSettingsMigrate();
+    historyRetentionMigration();
     unknownFieldsArePreserved();
     malformedConfigurationIsCopiedAndReplaced();
     futureVersionIsReadOnly();

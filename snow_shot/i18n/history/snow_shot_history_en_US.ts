@@ -15,6 +15,10 @@
     <context>
         <name>HistoryEntryWidget</name>
         <message>
+            <source>%1 x %2 px</source>
+            <translation>%1 x %2 px</translation>
+        </message>
+        <message>
             <source>%1 x %2 px  ·  %3 display(s)</source>
             <translation>%1 x %2 px  ·  %3 display(s)</translation>
         </message>
@@ -61,6 +65,10 @@
         <message>
             <source>Focused window</source>
             <translation>Focused window</translation>
+        </message>
+        <message>
+            <source>Image compression</source>
+            <translation>Image compression</translation>
         </message>
         <message>
             <source>Image editing</source>
@@ -1317,12 +1325,20 @@
             <translation>Discard this stitching session?</translation>
         </message>
         <message>
+            <source>Dropped image</source>
+            <translation>Dropped image</translation>
+        </message>
+        <message>
             <source>Export could not be started. Try again</source>
             <translation>Export could not be started. Try again</translation>
         </message>
         <message>
             <source>Exporting PDF page %1 of %2: %3%</source>
             <translation>Exporting PDF page %1 of %2: %3%</translation>
+        </message>
+        <message>
+            <source>Image editing</source>
+            <translation>Image editing</translation>
         </message>
         <message>
             <source>Image loading could not be started. Try again</source>
@@ -1626,6 +1642,10 @@ Files:
         <message>
             <source>Hidden</source>
             <translation>Hidden</translation>
+        </message>
+        <message>
+            <source>Image compression</source>
+            <translation>Image compression</translation>
         </message>
         <message>
             <source>Image editing</source>
@@ -1941,6 +1961,10 @@ Files:
             <translation>Cancel</translation>
         </message>
         <message>
+            <source>Checkerboard</source>
+            <translation>Checkerboard</translation>
+        </message>
+        <message>
             <source>Click-through</source>
             <translation>Click-through</translation>
         </message>
@@ -1994,6 +2018,10 @@ Files:
         <message>
             <source>Copy original content</source>
             <translation>Copy original content</translation>
+        </message>
+        <message>
+            <source>Copy text to clipboard</source>
+            <translation>Copy text to clipboard</translation>
         </message>
         <message>
             <source>Copy to clipboard</source>
@@ -2096,6 +2124,10 @@ Files:
             <translation>Hide other windows</translation>
         </message>
         <message>
+            <source>Image compression</source>
+            <translation>Image compression</translation>
+        </message>
+        <message>
             <source>Image editing</source>
             <translation>Image editing</translation>
         </message>
@@ -2118,6 +2150,10 @@ Files:
         <message>
             <source>Increase speed</source>
             <translation>Increase speed</translation>
+        </message>
+        <message>
+            <source>Keep transparent</source>
+            <translation>Keep transparent</translation>
         </message>
         <message>
             <source>Live content is unavailable. Retrying...</source>
@@ -2170,10 +2206,6 @@ Files:
         <message>
             <source>Pause</source>
             <translation>Pause</translation>
-        </message>
-        <message>
-            <source>Pin to screen management</source>
-            <translation>Pin to screen management</translation>
         </message>
         <message>
             <source>Pinned content</source>
@@ -2291,10 +2323,6 @@ Files:
             <translation>The current window content cannot be captured</translation>
         </message>
         <message>
-            <source>The image could not be saved automatically: %1</source>
-            <translation>The image could not be saved automatically: %1</translation>
-        </message>
-        <message>
             <source>The new content could not be loaded</source>
             <translation>The new content could not be loaded</translation>
         </message>
@@ -2339,6 +2367,10 @@ Files:
             <translation>Translation results</translation>
         </message>
         <message>
+            <source>Transparent layer</source>
+            <translation>Transparent layer</translation>
+        </message>
+        <message>
             <source>Unavailable</source>
             <translation>Unavailable</translation>
         </message>
@@ -2353,6 +2385,10 @@ Files:
         <message>
             <source>Uploading to cloud... %1%</source>
             <translation>Uploading to cloud... %1%</translation>
+        </message>
+        <message>
+            <source>Window management</source>
+            <translation>Window management</translation>
         </message>
     </context>
     <context>
@@ -2604,6 +2640,10 @@ Files:
         <message>
             <source>Copy files to clipboard</source>
             <translation>Copy files to clipboard</translation>
+        </message>
+        <message>
+            <source>Copy text to clipboard</source>
+            <translation>Copy text to clipboard</translation>
         </message>
         <message>
             <source>Delete empty groups</source>

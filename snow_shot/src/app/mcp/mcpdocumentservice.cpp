@@ -194,6 +194,10 @@ qint64 sourceAuxiliaryBytes(const McpDocumentService::Source& source) {
                     source.recognitionResults.latexModelSelection.size() +
                     source.recognitionResults.tableEffectiveModel.size() +
                     source.recognitionResults.latexEffectiveModel.size());
+#if SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION
+    if (source.recognitionResults.document)
+        bytes += source.recognitionResults.document->retainedBytes();
+#endif
     bytes += static_cast<qint64>(source.recognitionResults.tableEntries.capacity()) *
                  static_cast<qint64>(sizeof(ScreenshotTableRecognitionEntry)) +
              static_cast<qint64>(source.recognitionResults.latexEntries.capacity()) *
@@ -222,6 +226,7 @@ qint64 sourceAuxiliaryBytes(const McpDocumentService::Source& source) {
 }
 struct Document {
     quint64 owner = 0;
+    bool presentInImageEditing = false;
     QString id;
     quint64 revision = 1;
     QList<CanvasExportSource> sources;
@@ -435,6 +440,7 @@ class DocumentWorker final : public QObject {
         document->canvasBounds = source.canvasBounds;
         document->sourceBytes = bytes;
         document->historyCharge = inputCharge;
+        document->presentInImageEditing = source.presentInImageEditing;
         document->metadata = std::move(source.metadata);
         document->originalContent = std::move(source.originalContent);
         document->recognitionResults = std::move(source.recognitionResults);
@@ -509,6 +515,7 @@ class DocumentWorker final : public QObject {
             reservation->consumed = true;
         document.sourceBytes = bytes;
         document.sources = std::move(source.images);
+        document.presentInImageEditing = source.presentInImageEditing;
         document.metadata = std::move(source.metadata);
         document.originalContent = std::move(source.originalContent);
         document.recognitionResults = {};
@@ -657,6 +664,7 @@ class DocumentWorker final : public QObject {
         if (method == QStringLiteral("snow_shot_document_present") ||
             method == QStringLiteral("snow_shot_document_pin")) {
             McpDocumentService::Source source;
+            source.presentInImageEditing = document.presentInImageEditing;
             source.images = document.sources;
             source.canvasBounds = document.canvasBounds;
             source.documentSession = document.runtime.serializeDocumentSession();
@@ -884,6 +892,7 @@ class DocumentWorker final : public QObject {
             McpDocumentService::Source input;
             input.images = source->sources;
             input.canvasBounds = source->canvasBounds;
+            input.presentInImageEditing = source->presentInImageEditing;
             input.metadata = source->metadata;
             input.originalContent = source->originalContent;
             input.recognitionResults = source->recognitionResults;
@@ -1722,9 +1731,10 @@ struct McpDocumentService::Impl {
         QPointer<McpDocumentService> guard(&q);
         const QString kind =
             request.params.value(QStringLiteral("kind")).toString(QStringLiteral("text"));
-        const QStringList modes{QStringLiteral("text"), QStringLiteral("table"),
-                                QStringLiteral("qr"),   QStringLiteral("markdown"),
-                                QStringLiteral("html"), QStringLiteral("latex")};
+        const QStringList modes{QStringLiteral("text"),    QStringLiteral("table"),
+                                QStringLiteral("qr"),      QStringLiteral("markdown"),
+                                QStringLiteral("html"),    QStringLiteral("latex"),
+                                QStringLiteral("document")};
         const qsizetype index = modes.indexOf(kind);
         const auto documentId = request.params.value(QStringLiteral("document_id")).toString();
         const auto sourceRevision = static_cast<quint64>(
@@ -1737,7 +1747,8 @@ struct McpDocumentService::Impl {
             cached = result.source->recognitionResults;
         const bool cachedModelResult =
             (index == 1 && (cached.table.has_value() || !cached.tableEntries.isEmpty())) ||
-            (index == 5 && (cached.latex.has_value() || !cached.latexEntries.isEmpty()));
+            (index == 5 && (cached.latex.has_value() || !cached.latexEntries.isEmpty())) ||
+            (index == 6 && cached.document);
         if (index < 0 || (index == 0 && !ports.recognition) ||
             (index == 2 && !ports.qrRecognition) ||
             (index != 0 && index != 2 && !ports.api && !cachedModelResult)) {

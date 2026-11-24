@@ -1,4 +1,5 @@
 #include "snow_shot/platform/screenshotwindownames.h"
+#include "widgets/detail/window_modality.h"
 #include "snow_shot/runtime/runtimeactivitytracker.h"
 #include "recordingtrimsession.h"
 #include "snow_shot/platform/applicationqos.h"
@@ -30,7 +31,7 @@
 #include "snow_shot/presentation/components/screenrecordingsettingsdialog.h"
 #include "widgets/modal.h"
 #include "snow_shot/presentation/screenshotimagefileservice.h"
-#include "snow_shot/presentation/screenshotgeometry.h"
+#include "snow_shot/presentation/screenshotexportnaming.h"
 #include "snow_shot/presentation/screenrecordingareawindow.h"
 #include "snow_shot/presentation/screenrecordingtoolbarwindow.h"
 #include "snow_shot/presentation/screenshotcanvastoolstyles.h"
@@ -77,6 +78,7 @@
 
 #ifdef Q_OS_MACOS
 #include "snow_shot/platform/screenshotnative.h"
+#include "snow_shot/presentation/apppermissionservice.h"
 #endif
 
 #include <atomic>
@@ -292,6 +294,9 @@ struct RecordingUiSession final : QObject {
     std::unique_ptr<QObject> connections = std::make_unique<QObject>();
     std::unique_ptr<ScreenRecordingShortcutController> shortcuts;
     std::unique_ptr<RecordingEffectPreview> preview;
+#ifdef Q_OS_MACOS
+    bool previewSyncDeferred = false;
+#endif
     std::unique_ptr<snow_shot::presentation::recording::RecordingCountdownOverlay> followCountdown;
     bool followMouseSelected = false;
     std::unique_ptr<snow_shot::presentation::recording::RecordingColorSampler> colorSampler =
@@ -780,12 +785,18 @@ struct ScreenRecordingController::Impl {
             followGuideTick.reset();
             return;
         }
-        if (followScreen != screen || followScreenBounds != bounds) {
+#ifdef Q_OS_MACOS
+        const qreal scale = 1.0;
+#else
+        const qreal scale = screen->devicePixelRatio();
+#endif
+        if (followScreen != screen || followScreenBounds != bounds || followScreenScale != scale) {
             followScreen = screen;
             followScreenBounds = bounds;
+            followScreenScale = scale;
             followGuide.emplace(recordingRegion.size(), bounds,
                                 pointer ? QPointF(*pointer) : center, followMouseSmoothMovement,
-                                followMouseReduceJitter);
+                                followMouseReduceJitter, scale);
             followGuideTick.reset();
             lastFollowPointer = pointer;
             followGuideIdleSince = now;
@@ -934,6 +945,18 @@ struct ScreenRecordingController::Impl {
                                  toolbarWindow->endRegionInteraction(areaWindow->recordingRegion());
                                  areaWindow->activateInput();
                              }
+#ifdef Q_OS_MACOS
+                             if (uiSession->previewSyncDeferred) {
+                                 // Restore the controls before querying preview permissions.
+                                 QMetaObject::invokeMethod(
+                                     uiSession->connections.get(),
+                                     [this] {
+                                         if (uiSession && uiSession->previewSyncDeferred)
+                                             syncPreview();
+                                     },
+                                     Qt::QueuedConnection);
+                             }
+#endif
                          });
         QObject::connect(areaWindow, &ScreenRecordingAreaWindow::closeRequested,
                          uiSession->connections.get(), [this]() { close(); });
@@ -1381,7 +1404,7 @@ struct ScreenRecordingController::Impl {
         // Earlier retained sources remain on disk; earlier exports cease being
         // eligible for this recording's Copy action.
         retainedSourcePath.clear();
-        sessionWindowNames = {};
+        sessionExportContext = {};
         finalizedOutputPath.clear();
         finalizedDurationMilliseconds = 0;
         automationError.clear();
@@ -1455,12 +1478,18 @@ struct ScreenRecordingController::Impl {
         scheduleStart();
     }
 
+    bool needsMicrophonePermission() const {
+        return outputFormat == QStringLiteral("mp4") && microphoneEnabled;
+    }
+
+    bool needsInputMonitoringPermission() const {
+        return showKeyboard || recordMouseClicks || recordMouseScrolling ||
+               mouseTrailColor.alpha() != 0 || mouseClickColor.alpha() != 0;
+    }
+
     bool allowRecording(bool notify) {
-        const bool input = showKeyboard || recordMouseClicks || recordMouseScrolling ||
-                           mouseTrailColor.alpha() != 0 || mouseClickColor.alpha() != 0;
-        return !permissionCheck ||
-               permissionCheck(outputFormat == QStringLiteral("mp4") && microphoneEnabled, input,
-                               notify);
+        return !permissionCheck || permissionCheck(needsMicrophonePermission(),
+                                                   needsInputMonitoringPermission(), notify);
     }
 
     bool canNavigateAreaHistory() const {
@@ -1647,13 +1676,11 @@ struct ScreenRecordingController::Impl {
                          std::chrono::duration<double>(3.0 / config.capture_fps)));
             sessionLoopAnimatedImages = config.loop_animated_images != 0;
             const QDateTime outputTimestamp = QDateTime::currentDateTime();
-            sessionWindowNames =
-                exportWindowNames(settings.videoSaveDirectory(), settings.videoFilenameFormat());
-            const QString baseName = snow_shot::storage::expandScreenshotExportVariables(
-                settings.videoFilenameFormat(), outputTimestamp, sessionWindowNames);
-            const QStringList directories =
-                snow_shot::presentation::recording::screenRecordingDirectories(outputTimestamp,
-                                                                               sessionWindowNames);
+            const QString directoryTemplate = settings.videoSaveDirectory();
+            const QString filenameTemplate = settings.videoFilenameFormat();
+            sessionExportContext = captureExportContext(directoryTemplate, filenameTemplate);
+            if (directoryTemplate.contains(u"{SCREEN}") || filenameTemplate.contains(u"{SCREEN}"))
+                sessionExportContext.screen = screenshotScreenNameForNativeRegion(captureRegion);
             const QString extension = sessionOutputSettings.extension;
             const bool keyboard = showKeyboard || recordMouseClicks || recordMouseScrolling;
             const QString requestedPath =
@@ -1666,7 +1693,8 @@ struct ScreenRecordingController::Impl {
             startFuture = std::async(
                 std::launch::async,
                 snow_shot::runtime::trackRuntimeWork(
-                    [config, excludedWindowIds, directories, baseName, extension, keyboard,
+                    [config, excludedWindowIds, directoryTemplate, filenameTemplate,
+                     outputTimestamp, context = sessionExportContext, extension, keyboard,
                      keyboardFont, requestedPath, previewRetirement, deferred = sessionDeferred,
                      overlay, barColor, recovery = startupRecovery, webcamLease = webcam,
                      areaHistory = pendingAreaHistory]() mutable -> StartAttemptResult {
@@ -1677,11 +1705,18 @@ struct ScreenRecordingController::Impl {
                         StartAttemptResult result;
                         result.session.get_deleter().activity =
                             snow_shot::runtime::RuntimeActivityTracker::shared().acquire();
-                        result.outputPath =
-                            requestedPath.isEmpty()
-                                ? snow_shot::presentation::recording::screenRecordingOutputPath(
-                                      directories, baseName, extension)
-                                : requestedPath;
+                        result.outputPath = requestedPath;
+                        if (result.outputPath.isEmpty()) {
+                            const auto directories =
+                                snow_shot::presentation::recording::screenRecordingDirectories(
+                                    directoryTemplate, outputTimestamp, context);
+                            const auto baseName =
+                                snow_shot::storage::expandScreenshotExportVariables(
+                                    filenameTemplate, outputTimestamp, context);
+                            result.outputPath =
+                                snow_shot::presentation::recording::screenRecordingOutputPath(
+                                    directories, baseName, extension);
+                        }
                         // The recording exporter owns its private staging file and
                         // publishes only after finalization. Reserving the destination
                         // here would make that publication reject our own empty file.
@@ -1954,7 +1989,7 @@ struct ScreenRecordingController::Impl {
                                                        settings.useHardwareEncoder ? 1u : 0u,
                                                        sessionLoopAnimatedImages ? 1u : 0u};
                 trimSession->open(sourcePath, pendingOutputPath, options, sessionDeferred,
-                                  trimSaveWhenReady, sessionWindowNames);
+                                  trimSaveWhenReady, sessionExportContext);
             }
             return;
         }
@@ -2064,7 +2099,7 @@ struct ScreenRecordingController::Impl {
 
     void openFolder() {
         static_cast<void>(
-            snow_shot::presentation::recording::openScreenRecordingFolder(sessionWindowNames));
+            snow_shot::presentation::recording::openScreenRecordingFolder(sessionExportContext));
     }
 
     void offerRecovery() {
@@ -2148,8 +2183,8 @@ struct ScreenRecordingController::Impl {
         notice->open();
     }
 
-    snow_shot::storage::ScreenshotWindowNames exportWindowNames(const QString& directory,
-                                                                const QString& filename) const {
+    snow_shot::storage::ScreenshotExportContext
+    captureExportContext(const QString& directory, const QString& filename) const {
         const auto fields = snow_shot::storage::screenshotWindowNameFields(directory, filename);
         if (!fields.any())
             return {};
@@ -2707,8 +2742,9 @@ struct ScreenRecordingController::Impl {
         // Once startup begins, the recording worker owns capture and pause/resume.
         if (!recordingOptionsEditable())
             return;
-        const bool preview = !trimRequested && areaWindow && areaWindow->isVisible() &&
-                             !QApplication::activeModalWidget();
+        const bool preview =
+            !trimRequested && areaWindow && areaWindow->isVisible() &&
+            !adqt::widgets::detail::blockingModalWindow(areaWindow->windowHandle());
         static_cast<void>(
             snow_webcam_configure(webcam.get(), static_cast<uint32_t>(webcamSize), 30));
         snow_webcam_set_active(webcam.get(), static_cast<uint8_t>(preview));
@@ -2721,7 +2757,61 @@ struct ScreenRecordingController::Impl {
                              tr("Webcam unavailable: %1").arg(error));
     }
 
+#ifdef Q_OS_MACOS
+    bool previewScreenAccessGranted() const {
+        return !previewPermissionSnapshot ||
+               previewPermissionSnapshot->granted(
+                   snow_shot::presentation::AppPermission::ScreenRecording);
+    }
+
+    bool previewPermissionsGranted() const {
+        using snow_shot::presentation::AppPermission;
+        return !previewPermissionSnapshot ||
+               (previewScreenAccessGranted() &&
+                (!needsMicrophonePermission() ||
+                 previewPermissionSnapshot->granted(AppPermission::Microphone)) &&
+                (!needsInputMonitoringPermission() ||
+                 previewPermissionSnapshot->granted(AppPermission::InputMonitoring)));
+    }
+
+    void invalidatePreviewDimensions() {
+        ++dimensionsGeneration;
+        dimensionsResolved = false;
+        previewOutput = {};
+    }
+
+    void
+    setPreviewPermissionSnapshot(const snow_shot::presentation::AppPermissionSnapshot& snapshot) {
+        const bool previewAllowed = previewPermissionsGranted();
+        const bool screenAllowed = previewScreenAccessGranted();
+        previewPermissionSnapshot = snapshot;
+        if (screenAllowed != previewScreenAccessGranted()) {
+            // Native sizing also reads screen capture metadata. Ignore any result
+            // obtained across an authorization change, including a failed lookup.
+            invalidatePreviewDimensions();
+        }
+        if (uiSession && previewAllowed != previewPermissionsGranted()) {
+            // An action's live permission check can publish a snapshot synchronously.
+            // Reconcile preview after the action has finished its state transition.
+            QMetaObject::invokeMethod(
+                uiSession->connections.get(), [this] { syncPreview(); }, Qt::QueuedConnection);
+        }
+    }
+#endif
+
     void syncPreview() {
+#ifdef Q_OS_MACOS
+        // Geometry changes and pending sizing results can both reach this path
+        // during a drag. Defer preview work until the geometry settles.
+        if (uiSession) {
+            if (areaWindow->regionInteractionActive()) {
+                uiSession->previewSyncDeferred = true;
+                uiSession->preview->setEligible(false);
+                return;
+            }
+            uiSession->previewSyncDeferred = false;
+        }
+#endif
         syncWebcam();
         if (uiSession == nullptr) {
             return;
@@ -2734,7 +2824,7 @@ struct ScreenRecordingController::Impl {
         const auto output =
             directRecordingSettings(outputFormat, captureRegion.size(), automationOptions);
 #ifdef Q_OS_MACOS
-        if (!allowRecording(false)) {
+        if (!previewPermissionsGranted()) {
             uiSession->preview->setEligible(false);
             return;
         }
@@ -2743,9 +2833,7 @@ struct ScreenRecordingController::Impl {
             dimensionsRegion = captureRegion;
             dimensionsMaximum = output.maximumSize;
             dimensionsFormat = output.format;
-            ++dimensionsGeneration;
-            dimensionsResolved = false;
-            previewOutput = {};
+            invalidatePreviewDimensions();
         }
         if (!dimensionsResolved) {
             uiSession->preview->setEligible(false);
@@ -2904,9 +2992,9 @@ struct ScreenRecordingController::Impl {
         if (automationOwned || automationCommand)
             return;
         using adqt::widgets::AdModal;
-        auto* modal = new AdModal(uiSession ? static_cast<QObject*>(uiSession) : &owner);
+        auto* modal = snow_shot::presentation::createScreenRecordingModal(
+            uiSession ? static_cast<QObject*>(uiSession) : &owner, areaWindow);
         modal->setObjectName(QStringLiteral("screenRecordingErrorModal"));
-        snow_shot::presentation::configureScreenRecordingModal(*modal, areaWindow);
         if (toolbarWindow) {
             toolbarWindow->setAutoHideBlocked(modal, true);
             QObject::connect(modal, &adqt::widgets::AdModal::finished, uiSession->connections.get(),
@@ -2935,6 +3023,7 @@ struct ScreenRecordingController::Impl {
     quint64 automationRevision = snow_shot::presentation::nextAutomationRevision();
     bool automationNextStart = false;
 #ifdef Q_OS_MACOS
+    std::optional<snow_shot::presentation::AppPermissionSnapshot> previewPermissionSnapshot;
     QTimer dimensionsPollTimer;
     std::future<std::pair<quint64, QSize>> dimensionsFuture;
     quint64 dimensionsGeneration = 0;
@@ -2957,6 +3046,7 @@ struct ScreenRecordingController::Impl {
     uint64_t captureViewportRevision = 0;
     QPointer<QScreen> followScreen;
     QRect followScreenBounds;
+    qreal followScreenScale = 1.0;
     std::optional<snow_shot::presentation::recording::ScreenRecordingFollowGuideMotion> followGuide;
     std::optional<std::chrono::steady_clock::time_point> followGuideTick;
     std::optional<QPoint> lastFollowPointer;
@@ -2995,7 +3085,7 @@ struct ScreenRecordingController::Impl {
         ScreenshotToolPalette::RecordingSessionStatus::idle();
     qint64 durationMilliseconds = 0;
     QString pendingOutputPath;
-    snow_shot::storage::ScreenshotWindowNames sessionWindowNames;
+    snow_shot::storage::ScreenshotExportContext sessionExportContext;
     bool webcamEnabled = false;
     bool followMouse = false;
     bool followMouseSmoothMovement = true;
@@ -3140,6 +3230,13 @@ ScreenRecordingController::~ScreenRecordingController() {
 void ScreenRecordingController::setPermissionCheck(PermissionCheck check) {
     m_impl->permissionCheck = std::move(check);
 }
+
+#ifdef Q_OS_MACOS
+void ScreenRecordingController::setPreviewPermissionSnapshot(
+    const snow_shot::presentation::AppPermissionSnapshot& snapshot) {
+    m_impl->setPreviewPermissionSnapshot(snapshot);
+}
+#endif
 
 void ScreenRecordingController::open(const QRect& recordingRegion) {
     m_impl->open(recordingRegion);

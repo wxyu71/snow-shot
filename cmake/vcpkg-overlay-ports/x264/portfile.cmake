@@ -10,21 +10,40 @@ string(REGEX MATCH "^......." short_ref "${ref}")
 string(REGEX MATCH "[0-9]+\$" revision "${VERSION}")
 configure_file("${CURRENT_PORT_DIR}/version.diff.in" "${CURRENT_BUILDTREES_DIR}/src/version-${VERSION}.diff" @ONLY)
 
-vcpkg_from_gitlab(
-    GITLAB_URL https://code.videolan.org/
-    OUT_SOURCE_PATH SOURCE_PATH
-    REPO videolan/x264
-    REF "${ref}"
-    SHA512 707ff486677a1b5502d6d8faa588e7a03b0dee45491c5cba89341be4be23d3f2e48272c3b11d54cfc7be1b8bf4a3dfc3c3bb6d9643a6b5a2ed77539c85ecf294
-    HEAD_REF master
-    PATCHES
-        "${CURRENT_BUILDTREES_DIR}/src/version-${VERSION}.diff"
-        uwp-cflags.patch
-        parallel-install.patch
-        allow-clang-cl.patch
-        configure.patch
-        alias-safe-preallocation.patch
+set(_snow_x264_patches
+    "${CURRENT_BUILDTREES_DIR}/src/version-${VERSION}.diff"
+    uwp-cflags.patch
+    parallel-install.patch
+    allow-clang-cl.patch
+    configure.patch
+    alias-safe-preallocation.patch
 )
+
+if(VCPKG_TARGET_IS_WINDOWS AND "$ENV{SNOW_X264_USE_GIT_MIRROR}" STREQUAL "1")
+    message(STATUS "x264: using Git mirror at pinned commit ${ref}")
+    # The CI runner could not retrieve VideoLAN's GitLab archive (curl 56).
+    # The GitHub mirror exposes the SAME pinned Git commit, checked by
+    # vcpkg_from_git before a local archive is generated. Do not use an
+    # unverified GitHub tarball with the VideoLAN archive's SHA512.
+    vcpkg_from_git(
+        OUT_SOURCE_PATH SOURCE_PATH
+        URL https://github.com/mirror/x264.git
+        REF "${ref}"
+        HEAD_REF master
+        PATCHES ${_snow_x264_patches}
+    )
+else()
+    # The upstream archive keeps its independently pinned SHA512 checksum.
+    vcpkg_from_gitlab(
+        GITLAB_URL https://code.videolan.org/
+        OUT_SOURCE_PATH SOURCE_PATH
+        REPO videolan/x264
+        REF "${ref}"
+        SHA512 707ff486677a1b5502d6d8faa588e7a03b0dee45491c5cba89341be4be23d3f2e48272c3b11d54cfc7be1b8bf4a3dfc3c3bb6d9643a6b5a2ed77539c85ecf294
+        HEAD_REF master
+        PATCHES ${_snow_x264_patches}
+    )
+endif()
 
 function(add_cross_prefix)
   if(configure_env MATCHES "CC=([^\\/]*-)gcc$")

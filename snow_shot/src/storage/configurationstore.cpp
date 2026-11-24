@@ -1,6 +1,7 @@
 #include "snow_shot/shortcuts/screenshotshortcutcontext.h"
 #include "snow_shot/shortcuts/pinnedshortcutcontext.h"
 #include "snow_shot/storage/configurationstore.h"
+#include "configurationsecretprotection_p.h"
 #include "snow_shot/clouduploadconfiguration.h"
 #include "snow_shot/app/edition.h"
 #if SNOW_SHOT_ENABLE_API_CONFIGURATION
@@ -12,6 +13,7 @@
 #include "snow_shot/storage/storagelogging.h"
 #include "snow_shot/shortcuts/shortcutbinding.h"
 
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -86,7 +88,11 @@ QMap<QString, QJsonValue> overlayFromDocument(const QJsonObject& document) {
             overlay.insert(entry.key, raw);
         }
     }
-    for (const QString& legacyKey : {QStringLiteral("screenshot/auto_save_after_copy"),
+    for (const QString& legacyKey : {QStringLiteral("capture_history/enabled"),
+                                     QStringLiteral("screenshot/auto_save_after_copy"),
+                                     QStringLiteral("screenshot/auto_save_after_execution_actions"),
+                                     QStringLiteral("screenshot/copy_after_pinning_to_screen"),
+                                     QStringLiteral("screenshot/screenshot_sound_notification"),
                                      QStringLiteral("interface/app_font_size_percentage"),
                                      QStringLiteral("screenshot_selection/selection_target")}) {
         bool present = false;
@@ -172,6 +178,12 @@ MaterializedConfiguration materializeConfiguration(const QMap<QString, QJsonValu
     const QMap<QString, QJsonValue> currentOverlay =
         mutateDocument ? ConfigurationSchema::migrateLegacyValues(overlay) : overlay;
     if (mutateDocument) {
+        auto history = result.document.value(QStringLiteral("capture_history")).toObject();
+        if (history.contains(QStringLiteral("enabled"))) {
+            history.remove(QStringLiteral("enabled"));
+            result.document.insert(QStringLiteral("capture_history"), history);
+            result.dirty = !replaceAll;
+        }
         QJsonObject interfaceValues = result.document.value(QStringLiteral("interface")).toObject();
         if (interfaceValues.contains(QStringLiteral("app_font_size_percentage"))) {
             interfaceValues.remove(QStringLiteral("app_font_size_percentage"));
@@ -179,10 +191,15 @@ MaterializedConfiguration materializeConfiguration(const QMap<QString, QJsonValu
             result.dirty = !replaceAll;
         }
         QJsonObject screenshot = result.document.value(QStringLiteral("screenshot")).toObject();
-        if (screenshot.contains(QStringLiteral("auto_save_after_copy"))) {
-            screenshot.remove(QStringLiteral("auto_save_after_copy"));
-            result.document.insert(QStringLiteral("screenshot"), screenshot);
-            result.dirty = !replaceAll;
+        for (const auto& key : {QStringLiteral("auto_save_after_copy"),
+                                QStringLiteral("auto_save_after_execution_actions"),
+                                QStringLiteral("copy_after_pinning_to_screen"),
+                                QStringLiteral("screenshot_sound_notification")}) {
+            if (screenshot.contains(key)) {
+                screenshot.remove(key);
+                result.document.insert(QStringLiteral("screenshot"), screenshot);
+                result.dirty = !replaceAll;
+            }
         }
         QJsonObject screenshotSelection =
             result.document.value(QStringLiteral("screenshot_selection")).toObject();
@@ -220,6 +237,18 @@ MaterializedConfiguration materializeConfiguration(const QMap<QString, QJsonValu
         }
 
         QJsonValue raw = currentOverlay.value(entry.key);
+#ifdef Q_OS_MACOS
+        if (mutateDocument && schemaVersion < 7 && entry.key == QStringLiteral("updates/mode")) {
+            // Enable Sparkle for all existing macOS installations once. Version 7 records
+            // the migration so later user choices survive reloads and current snapshots.
+            raw = QStringLiteral("next_launch");
+        }
+#endif
+        if (mutateDocument && schemaVersion < 6 && raw == QStringLiteral("dedicated") &&
+            (entry.key == QStringLiteral("screenshot_table/model") ||
+             entry.key == QStringLiteral("screenshot_latex/model"))) {
+            raw = defaultValue;
+        }
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION
         if (entry.key == QStringLiteral("screenshot_translation/model") && mutateDocument &&
             schemaVersion < 5 && !raw.toString().startsWith(QStringLiteral("custom:")) &&
@@ -339,15 +368,43 @@ QString corruptBackupPath(const QString& configurationFile) {
 }
 
 void preserveCorruptFile(const QString& configurationFile) {
-    if (!QFileInfo::exists(configurationFile)) {
+    QFile source(configurationFile);
+    if (!source.open(QIODevice::ReadOnly))
+        return;
+    const QByteArray original = source.readAll();
+    source.close();
+
+    QJsonParseError parseError;
+    const QJsonDocument parsed = QJsonDocument::fromJson(original, &parseError);
+    QJsonObject backupDocument;
+    if (parseError.error == QJsonParseError::NoError && parsed.isObject()) {
+        backupDocument = parsed.object();
+        redactConfigurationSecrets(&backupDocument);
+    } else {
+        backupDocument.insert(
+            QStringLiteral("diagnostics"),
+            QJsonObject{
+                {QStringLiteral("corrupt_configuration"), true},
+                {QStringLiteral("content_omitted"), true},
+                {QStringLiteral("source_size"), QString::number(original.size())},
+                {QStringLiteral("source_sha256"),
+                 QString::fromLatin1(
+                     QCryptographicHash::hash(original, QCryptographicHash::Sha256).toHex())}});
+    }
+
+    QByteArray bytes = QJsonDocument(backupDocument).toJson(QJsonDocument::Indented);
+    if (!bytes.endsWith('\n'))
+        bytes.append('\n');
+    const QString backup = corruptBackupPath(configurationFile);
+    QSaveFile file(backup);
+    const qint64 byteCount = static_cast<qint64>(bytes.size());
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Truncate) || file.write(bytes) != byteCount ||
+        !file.commit()) {
+        qCWarning(storageLog) << "Unable to preserve sanitized invalid configuration"
+                              << configurationFile;
         return;
     }
-    const QString backup = corruptBackupPath(configurationFile);
-    if (QFile::copy(configurationFile, backup)) {
-        qCWarning(storageLog) << "Preserved invalid configuration at" << backup;
-    } else {
-        qCWarning(storageLog) << "Unable to preserve invalid configuration" << configurationFile;
-    }
+    qCWarning(storageLog) << "Preserved sanitized invalid configuration at" << backup;
 }
 
 void cleanupCorruptBackups(const QString& configurationFile) {
@@ -598,7 +655,14 @@ StorageResult ConfigurationStore::flushNow() {
             revision = m_revision;
         }
 
-        const QByteArray bytes = serializedDocument(document);
+        QJsonObject persistedDocument = document;
+        QString credentialsError;
+        if (!protectConfigurationSecrets(&persistedDocument, &credentialsError)) {
+            qCWarning(storageLog) << credentialsError << m_configurationFile;
+            setLastError(credentialsError);
+            return StorageResult::failure(credentialsError);
+        }
+        const QByteArray bytes = serializedDocument(persistedDocument);
         QSaveFile file(m_configurationFile);
         if (!file.open(QIODevice::WriteOnly) || file.write(bytes) != bytes.size() ||
             !file.commit()) {
@@ -667,7 +731,7 @@ void ConfigurationStore::load() {
             preserveCorruptFile(m_configurationFile);
             qCWarning(storageLog) << error;
         } else {
-            const QJsonObject parsedObject = parsed.object();
+            QJsonObject parsedObject = parsed.object();
             const QJsonValue versionValue = valueAtPath(parsedObject, kSchemaVersionKey);
             if (!ConfigurationSchema::parseIntegerVersion(versionValue, &version)) {
                 compatibility = ConfigurationCompatibility::RecoveredDefaults;
@@ -678,6 +742,8 @@ void ConfigurationStore::load() {
                 preserveCorruptFile(m_configurationFile);
                 qCWarning(storageLog) << error;
             } else {
+                const ConfigurationSecretLoadResult secretLoad =
+                    unprotectConfigurationSecrets(&parsedObject);
                 document = parsedObject;
                 if (version > ConfigurationSchema::currentVersion()) {
                     compatibility = ConfigurationCompatibility::FutureVersion;
@@ -690,10 +756,17 @@ void ConfigurationStore::load() {
                     compatibility, ConfigurationOverlayPolicy::MergeFromDisk);
                 loaded = materialized.values;
                 document = materialized.document;
-                dirty = materialized.dirty;
+                dirty = materialized.dirty || secretLoad.rewrite;
                 if (materialized.customConfigurationsRepaired) {
                     error = tr("Some custom API configurations are invalid and were ignored");
                     qCWarning(storageLog) << error;
+                }
+                if (secretLoad.decryptionFailed) {
+                    const QString credentialsError = QStringLiteral(
+                        "Some protected configuration credentials could not be decrypted and were cleared");
+                    if (error.isEmpty())
+                        error = credentialsError;
+                    qCWarning(storageLog) << credentialsError;
                 }
             }
         }

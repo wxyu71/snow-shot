@@ -16,8 +16,12 @@ endif()
 
 # SDK selection and the native compiler host are shared; PATH, INCLUDE and LIB
 # belong to each port's vcvars environment and must never cross architectures.
+# vcpkg builds Windows ports in an isolated environment. Pass the CI x264 mirror
+# selector into the portfile or it silently falls back to the failing GitLab
+# archive URL. Untracked is intentional: both sources pin the same Git commit.
 set(VCPKG_ENV_PASSTHROUGH_UNTRACKED
-    WindowsSdkDir WindowsSDKVersion SNOW_MSVC_HOST_ARCHITECTURE)
+    WindowsSdkDir WindowsSDKVersion SNOW_MSVC_HOST_ARCHITECTURE
+    SNOW_X264_USE_GIT_MIRROR)
 list(APPEND VCPKG_HASH_ADDITIONAL_FILES "${CMAKE_CURRENT_LIST_FILE}")
 list(APPEND VCPKG_HASH_ADDITIONAL_FILES
     "${CMAKE_CURRENT_LIST_DIR}/SnowBuildToolchain.cmake"

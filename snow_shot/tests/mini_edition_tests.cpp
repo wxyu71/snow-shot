@@ -92,6 +92,16 @@ void settingsExcludeRemovedFeatures() {
 }
 
 void toolbarDefaultsAndImports() {
+    // Removed original-author action variants must not leak back through
+    // imported toolbar layouts. The independent QR and local OCR shortcuts
+    // remain separate from this configurable online-action list.
+    for (const auto& disabled : {
+             QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition"),
+             QStringLiteral("latex-recognition"), QStringLiteral("document-recognition"),
+             QStringLiteral("convert-to-html")}) {
+        require(!snow_shot::app::editionActionToolAvailable(disabled),
+                "unsupported original toolbar action must remain unavailable");
+    }
     namespace layout = snow_shot::presentation::toolbar_layout;
     namespace storage = snow_shot::storage;
     for (const auto kind : {storage::ScreenshotToolbarLayoutKind::ActionTools,
@@ -110,9 +120,10 @@ void toolbarDefaultsAndImports() {
                 "explicit OCR visibility must survive normalization");
         storage::ScreenshotToolbarLayout imported;
         imported.positions = {
-            {QStringLiteral("table-recognition"), QStringLiteral("barcode-recognition"),
-             QStringLiteral("latex-recognition"), QStringLiteral("convert-to-markdown"),
-             QStringLiteral("convert-to-html"), QStringLiteral("text-translation")},
+            {QStringLiteral("table-recognition"), QStringLiteral("document-recognition"),
+             QStringLiteral("barcode-recognition"), QStringLiteral("latex-recognition"),
+             QStringLiteral("convert-to-markdown"), QStringLiteral("convert-to-html"),
+             QStringLiteral("text-translation")},
             {QStringLiteral("save-as-file")}};
         const auto normalized = layout::normalizedLayout(imported, kind);
         for (const auto& position : normalized.positions)

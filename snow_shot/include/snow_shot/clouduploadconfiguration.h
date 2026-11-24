@@ -1,6 +1,8 @@
 #ifndef SNOW_SHOT_CLOUDUPLOADCONFIGURATION_H
 #define SNOW_SHOT_CLOUDUPLOADCONFIGURATION_H
 
+#include "snow_shot/serverconfiguration.h"
+
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QMetaType>
@@ -41,8 +43,8 @@ struct CloudUploadSettings {
 inline bool validCloudUploadUrl(const QString& value) {
     const QUrl url(value, QUrl::StrictMode);
     return url.isValid() && !url.isRelative() && !url.host().isEmpty() &&
-           (url.scheme() == QStringLiteral("http") || url.scheme() == QStringLiteral("https")) &&
-           url.userInfo().isEmpty() && !url.hasQuery() && !url.hasFragment();
+           secureServiceUrl(url) && url.userInfo().isEmpty() && !url.hasQuery() &&
+           !url.hasFragment();
 }
 inline bool cloudUploadConfigurationValid(const CloudUploadConfiguration& value) {
     if (QUuid(value.id).isNull() || QUuid(value.id).toString(QUuid::WithoutBraces) != value.id ||

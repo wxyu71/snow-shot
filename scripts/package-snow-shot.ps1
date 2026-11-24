@@ -1087,7 +1087,7 @@ if ($nativeTarget) {
     $ocrVersionOutput = & (Join-Path $runtimeWork $ocrRuntimeFileName) --version 2>$null
     $ocrWorkerArchitecture = if ($Architecture -eq 'arm64') { 'aarch64' } else { 'x86_64' }
     if ($LASTEXITCODE -ne 0 -or $ocrVersionOutput -cne
-        "snow-ocr-process $ocrRuntimeVersion windows-$ocrWorkerArchitecture protocol 7") {
+        "snow-ocr-process $ocrRuntimeVersion windows-$ocrWorkerArchitecture protocol 8") {
         throw "The staged OCR runtime reported an unexpected version: $ocrVersionOutput"
     }
     $ocrRuntimeNativeProbePassed = $true
@@ -1180,6 +1180,20 @@ foreach ($model in $ocrModels) {
     }
 }
 
+$paragraphModel = (Get-Content -LiteralPath $ocrAssetManifestPath -Raw | ConvertFrom-Json).paragraph_model
+if ($paragraphModel.id -cne 'line2para-1-2-956253e' -or $paragraphModel.files.Count -ne 1) {
+    throw 'The trusted paragraph model descriptor is missing or invalid.'
+}
+$paragraphModelCache = Join-Path $artifactRoot "ocr-models-$($paragraphModel.id)"
+New-Item -ItemType Directory -Path $paragraphModelCache -Force | Out-Null
+foreach ($file in $paragraphModel.files) {
+    $path = Join-Path $paragraphModelCache $file.name
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        Invoke-WebRequest -Uri $file.url -OutFile $path -Headers @{ Referer = 'https://www.modelscope.cn/' }
+    }
+    Assert-ReleaseFile -Path $path -Bytes $file.size -Sha256 $file.sha256
+}
+
 $assetManifest = [ordered]@{
     schema = 2
     default_model = $ocrDefaultModelType
@@ -1190,6 +1204,7 @@ $assetManifest = [ordered]@{
         files = $runtimeFiles
     }
     models = $modelDescriptors
+    paragraph_model = $paragraphModel
 }
 $assetManifestSource = Join-Path $artifactRoot "snow-shot-ocr-asset-manifest.json"
 $assetManifest | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath $assetManifestSource -Encoding utf8
@@ -1302,6 +1317,14 @@ foreach ($variant in $variantStages.Keys) {
     Reset-ReleaseDirectory -Path $assetRoot
     Copy-Item -LiteralPath $assetManifestSource -Destination (Join-Path $assetRoot "asset-manifest.json")
     if ($variant -in @("offline", "portable")) {
+        $paragraphDestination = Join-Path $assetRoot "models\$($paragraphModel.id)"
+        New-Item -ItemType Directory -Path $paragraphDestination -Force | Out-Null
+        foreach ($file in $paragraphModel.files) {
+            Copy-Item -LiteralPath (Join-Path $paragraphModelCache $file.name) -Destination $paragraphDestination
+        }
+        [ordered]@{ schema = 1; component = $paragraphModel.id } |
+            ConvertTo-Json -Compress | Set-Content -LiteralPath (Join-Path $paragraphDestination '.complete.json') -Encoding utf8
+
         $runtimeDestination = Join-Path $assetRoot "runtimes\$ocrRuntimeVersion\$ocrPlatform"
         $modelDestination = Join-Path $assetRoot "models\$ocrDefaultModelId"
         New-Item -ItemType Directory -Path $runtimeDestination, $modelDestination -Force | Out-Null
@@ -1351,6 +1374,7 @@ $offlineAssetRoot = Join-Path $variantStages.offline "bin\assets\ocr"
 $expectedOfflineDirectories = @(
     "models",
     "models\$ocrDefaultModelId",
+    "models\$($paragraphModel.id)",
     "runtimes",
     "runtimes\$ocrRuntimeVersion",
     "runtimes\$ocrRuntimeVersion\$ocrPlatform"
@@ -1361,6 +1385,8 @@ $actualOfflineDirectories = @(Get-ChildItem -LiteralPath $offlineAssetRoot -Recu
 $expectedOfflineFiles = @(
     "asset-manifest.json",
     "models\$ocrDefaultModelId\.complete.json",
+    "models\$($paragraphModel.id)\.complete.json",
+    "models\$($paragraphModel.id)\line2para_1_2-epoch12-signed-1.625.onnx",
     "models\$ocrDefaultModelId\$($defaultOcrModel.Detector)",
     "models\$ocrDefaultModelId\$($defaultOcrModel.Recognizer)",
     "models\$ocrDefaultModelId\$($defaultOcrModel.Dictionary)",
@@ -1373,7 +1399,7 @@ $actualOfflineFiles = @(Get-ChildItem -LiteralPath $offlineAssetRoot -Recurse -F
     Sort-Object)
 if (@(Compare-Object $expectedOfflineDirectories $actualOfflineDirectories).Count -ne 0 -or
     @(Compare-Object $expectedOfflineFiles $actualOfflineFiles).Count -ne 0) {
-    throw "The offline installer must contain exactly runtime $ocrRuntimeVersion and the Small OCR model."
+    throw "The offline installer must contain exactly runtime $ocrRuntimeVersion and the Small OCR and paragraph models."
 }
 $portableProcess = Join-Path $variantStages.portable "bin\assets\ocr\runtimes\$ocrRuntimeVersion\$ocrPlatform\$ocrRuntimeFileName"
 if (-not (Test-Path -LiteralPath $portableProcess -PathType Leaf)) {

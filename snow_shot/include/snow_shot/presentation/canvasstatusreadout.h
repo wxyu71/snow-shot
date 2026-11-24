@@ -12,7 +12,15 @@ class CanvasStatusReadout final : public QLabel {
     Q_OBJECT
 
   public:
-    enum class Message { Scale, Opacity, Locked, MotionPreview, ResultPreview, RenderingPreview };
+    enum class Message {
+        Scale,
+        Opacity,
+        Locked,
+        MotionPreview,
+        ResultPreview,
+        RenderingPreview,
+        Thinking
+    };
     enum class Corner { BottomLeft, TopLeft };
     enum class DisplayMode { Hidden, Transient, Persistent };
 
@@ -33,6 +41,7 @@ class CanvasStatusReadout final : public QLabel {
 
     // Scale and opacity values are percentages; decimals controls their display precision.
     void setMessage(Message message, qreal value = 0, int decimals = 0);
+    void setScale(qreal factor, bool showOnChange = false);
     [[nodiscard]] Message message() const;
     void setText(const QString& text);
     void layoutIn(const QRectF& anchor, Corner corner = Corner::BottomLeft);

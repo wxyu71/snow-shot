@@ -2,6 +2,9 @@ name: Community Windows x64
 
 on:
   pull_request:
+    types: [opened, reopened, synchronize, ready_for_review]
+  push:
+    branches: [main]
   workflow_dispatch:
     inputs:
       publish_prerelease:
@@ -12,6 +15,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: read
 
 concurrency:
   group: community-windows-x64-${{ github.ref }}
@@ -20,46 +24,294 @@ concurrency:
 jobs:
   preflight:
     runs-on: ubuntu-24.04
-    timeout-minutes: 10
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      pull-requests: read
+      actions: read
     outputs:
       native: ${{ steps.classify.outputs.native }}
+      release: ${{ steps.classify.outputs.release }}
+      reuse: ${{ steps.classify.outputs.reuse }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Classify change
+      - name: Classify change and release intent
         id: classify
         shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+          PUBLISH: ${{ inputs.publish_prerelease || false }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
-          if [[ "${{ github.event_name }}" != "pull_request" ]]; then
-            echo "native=true" >> "$GITHUB_OUTPUT"
-            exit 0
+          native=true
+          release=false
+          base=""
+          case "$EVENT" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="$PUSH_BASE" ;;
+            workflow_dispatch)
+              if [[ "$PUBLISH" == true ]]; then release=true; fi
+              ;;
+          esac
+          if [[ -n "$base" ]] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            native=false
+            while IFS= read -r -d '' path; do
+              case "$path" in
+                *.md|*.markdown|*.rst|docs/*) ;;
+                *) native=true ;;
+              esac
+            done < <(git diff --name-only -z "$base" "$GITHUB_SHA")
+            if [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+              previous="$(python3 scripts/community_release.py version --ref "$base")"
+              current="$(python3 scripts/community_release.py version)"
+              if [[ "$previous" != "$current" ]]; then release=true; fi
+            fi
           fi
-          native=false
-          while IFS= read -r -d '' path; do
-            case "$path" in
-              *.md|*.markdown|*.rst|docs/*) ;;
-              *) native=true ;;
-            esac
-          done < <(git diff --name-only -z "${{ github.event.pull_request.base.sha }}" "$GITHUB_SHA")
-          echo "native=$native" >> "$GITHUB_OUTPUT"
-      - name: Run repository policy and helper tests
+          if [[ "$release" == true ]]; then native=true; fi
+          reuse=false
+          # One-time promotion of fully accepted #214. No application, packaging,
+          # configuration, dependency or submodule changes are permitted.
+          # Only this workflow may differ from the exact accepted source tree.
+          if [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] &&
+             { [[ "$EVENT" == pull_request && "$PR_NUMBER" == 2 && "$PR_BASE" == '5f3bd76282fc660968266bd957734b8b2fa05a06' ]] ||
+               [[ "$GITHUB_REF" == refs/heads/main && "$release" == true ]]; } &&
+             [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] &&
+             git merge-base --is-ancestor '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" &&
+             git diff --quiet '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" -- . ':(exclude).github/workflows/community-windows-x64.yml'; then
+            reuse=true
+            native=false
+          fi
+          printf '%s\n' "native=$native" "release=$release" "reuse=$reuse" >> "$GITHUB_OUTPUT"
+      - name: Authenticate accepted run and artifact provenance
+        if: steps.classify.outputs.reuse == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=45357342693
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id" | jq -e '
+            .id == 45357342693 and .workflow_id == 418456604 and
+            .path == ".github/workflows/community-windows-x64.yml" and
+            .event == "pull_request" and .status == "completed" and .conclusion == "success" and
+            .run_attempt == 1 and .repository.id == 1457922312 and .head_repository.id == 1457922312 and
+            .head_sha == "495353ad20f5b0cdeb044fc79a8451483b327215" and
+            any(.pull_requests[]; .number == 2 and .base.ref == "main" and
+              .head.ref == "review/upstream-main-4cc4dfe-20261116" and
+              .base.repo.id == 1457922312 and .head.repo.id == 1457922312)' >/dev/null
+          echo 'Accepted run identity verified.'
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/attempts/1/jobs?per_page=100" | jq -e '
+            [.jobs[] | select(.id == 138318340033 or .id == 138319303566 or
+              .id == 138319303711 or .id == 138320803545)] as $g |
+            ($g | length) == 4 and all($g[]; .status == "completed" and .conclusion == "success") and
+            any($g[]; .id == 138320803545 and
+              ([.steps[] | select(.name == "Build production Windows x64" or
+                .name == "Package production installers" or .name == "Verify installer assets" or
+                .name == "Smoke-test real Windows installers and in-place upgrade" or
+                .name == "Upload release candidates")] | length == 5 and all(.[]; .conclusion == "success")))' >/dev/null
+          echo 'Accepted job results verified.'
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" | jq -e '
+            any(.artifacts[]; .id == 14914284776 and .expired == false and
+            .name == "community-windows-x64-b9938c0201cfa7a2e9447745905a1e770ecda79c" and
+            .digest == "sha256:fa03fedbc1a68041b5c90c25a311bf9e25dab6e08687352126dd3e17c2f28eb8" and
+            .workflow_run.id == 45357342693 and .workflow_run.repository_id == 1457922312 and
+            .workflow_run.head_sha == "495353ad20f5b0cdeb044fc79a8451483b327215")' >/dev/null
+          echo "Accepted #214 provenance, production tests, source tree and artifact identity verified."
+      - name: Ensure upstream ShellCheck is available to actionlint
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
+          if ! command -v shellcheck >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends shellcheck
+          fi
+          shellcheck --version
+
+      - name: Validate workflows and embedded shell with actionlint and ShellCheck
+        shell: bash
+        run: |
+          set -euo pipefail
+          go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
+          "$(go env GOPATH)/bin/actionlint" -color -shellcheck "$(command -v shellcheck)"
+
+      - name: Analyze changed Bash scripts with upstream ShellCheck
+        shell: bash
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          base="${PR_BASE_SHA:-HEAD^}"
+          head="${PR_HEAD_SHA:-HEAD}"
+          scripts=()
+          while IFS= read -r -d '' path; do
+            [[ "$path" == scripts/*.sh && -f "$path" ]] || continue
+            scripts+=("$path")
+          done < <(git diff --name-only --diff-filter=ACMR -z "$base" "$head" -- scripts)
+          if (( ${#scripts[@]} > 0 )); then
+            printf 'ShellCheck on %s real changed Bash scripts\n' "${#scripts[@]}"
+            shellcheck --severity=error --format=gcc "${scripts[@]}"
+          else
+            echo 'No changed Bash scripts.'
+          fi
+
+      - name: Check local documentation links with Lychee
+        uses: lycheeverse/lychee-action@8646ba30535128ac92d33dfc9133794bfdd9b411 # v2.8.0
+        with:
+          args: >-
+            --offline --no-progress --root-dir .
+            README.md README.zh-CN.md AGENTS.md 'docs/**/*.md'
+          fail: true
+
+      - name: Audit workflow security with zizmor
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check zizmor==1.32.0
+          zizmor --strict-collection --min-severity=medium --min-confidence=high .
+
+      - name: Check production C++ class members before expensive Windows work
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Real tree-sitter-cpp ASTs, not greps or fixture-only test strings.
+          # Pinned binary wheels keep this independent of full Qt/MSVC builds.
+          python3 -m pip install --disable-pip-version-check --only-binary=:all:             tree-sitter==0.25.2 tree-sitter-cpp==0.23.4
+          python3 scripts/check-cpp-member-declarations.py --self-test
+          python3 scripts/check-cpp-member-declarations.py
+
+      - name: Check Python script syntax without running release actions
+        shell: bash
+        run: python3 -m compileall -q scripts
+
+      - name: Static-analyze real Python release and sync code with Astral Ruff
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check --only-binary=:all: ruff==0.17.6
+          # Correctness/dataflow checks, not legacy project-wide style churn.
+          # Covers real release, upstream-sync and helper source files.
+          ruff check --isolated --target-version py312 \
+            --select F821,F822,F823,F601,F602,F621,F622,F631,F632,F633,F634,F701,F702,F704,F706,F707,B012 \
+            --output-format github scripts
+
+      - name: Validate Cargo workspace manifests without downloading or compiling crates
+        shell: bash
+        timeout-minutes: 2
+        run: |
+          set -euo pipefail
+          cargo --version
+          for manifest in \
+            snow-crates/Cargo.toml \
+            snow_draw_engine_qt/Cargo.toml \
+            snow-image-rs/Cargo.toml \
+            snow_rust_ffi/Cargo.toml \
+            snow_shot/rust/snow-shot-mcp/Cargo.toml \
+            snow_shot/rust/snow-shot-updater/Cargo.toml; do
+            echo "Checking real Cargo workspace graph: $manifest"
+            cargo metadata --format-version 1 --no-deps --offline --locked \
+              --manifest-path "$manifest" > /dev/null
+          done
+
+      - name: Check native smoke formatting with clang-format
+        shell: bash
+        run: |
+          set -euo pipefail
+          clang-format-18 --dry-run --Werror \
+            ci/native-smoke/community_native_smoke_tests.cpp \
+            ci/native-smoke/community_toolbar_policy_tests.cpp \
+            ci/native-smoke/community_cloud_ocr_widget_tests.cpp \
+            snow_shot/src/presentation/components/cloudocrenginechoices.cpp \
+            snow_shot/include/snow_shot/presentation/components/cloudocrenginechoices.h
+
+      - name: Analyze modified PowerShell with PSScriptAnalyzer
+        shell: pwsh
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REUSE_ACCEPTED: ${{ steps.classify.outputs.reuse }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $head = if ($env:PR_HEAD_SHA) { $env:PR_HEAD_SHA } else { $env:GITHUB_SHA }
+          $base = if ($env:PR_BASE_SHA) { $env:PR_BASE_SHA } else { "$head^" }
+          # Analyze every changed PR script at Error severity. Earlier
+          # style warnings are advisory; keep the original strict Error +
+          # Warning gate for scripts changed in the latest commit.
+          $paths = @(& git diff --name-only --diff-filter=ACMR $base $head -- scripts |
+              Where-Object { $_ -match '\.(ps1|psm1|psd1)$' -and (Test-Path $_) })
+          # The accepted source already passed the latest-commit gate in #214.
+          # On promotion, a merge commit must not reclassify old warnings as new.
+          $recentBase = if ($env:REUSE_ACCEPTED -eq 'true') { '495353ad20f5b0cdeb044fc79a8451483b327215' } else { "$head^" }
+          $recentPaths = @(& git diff --name-only --diff-filter=ACMR $recentBase $head -- scripts |
+              Where-Object { $_ -match '\.(ps1|psm1|psd1)$' -and (Test-Path $_) } |
+              ForEach-Object { Split-Path -Leaf $_ })
+          if ($paths.Count -eq 0) {
+            Write-Host 'No modified PowerShell entry points.'
+          } else {
+            Install-Module PSScriptAnalyzer -RequiredVersion 1.25.0 -Scope CurrentUser -Force
+            Import-Module PSScriptAnalyzer -RequiredVersion 1.25.0
+            $allFindings = @($paths | ForEach-Object {
+              Invoke-ScriptAnalyzer -Path $_ -Severity Error,Warning
+            })
+            $blocking = @($allFindings | Where-Object {
+              $_.Severity.ToString() -eq 'Error' -or $_.ScriptName -in $recentPaths
+            })
+            $backlogCount = $allFindings.Count - $blocking.Count
+            Write-Host "PSScriptAnalyzer: $($allFindings.Count) PR-wide findings; $($blocking.Count) blocking (all Errors plus newest-commit Warnings); $backlogCount older Warnings advisory."
+            if ($blocking.Count -gt 0) {
+              $blocking | Format-Table ScriptName,Line,RuleName,Severity,Message -Wrap
+              throw "PSScriptAnalyzer found $($blocking.Count) blocking PowerShell issues"
+            }
+          }
+      - name: Run repository policy and helper tests
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REUSE_ACCEPTED: ${{ steps.classify.outputs.reuse }}
+        run: |
+          set -euo pipefail
+          # Review newly committed lines, not pre-existing whitespace in
+          # frozen third-party license text from prior upstream history.
+          head="${PR_HEAD_SHA:-HEAD}"
+          if [[ "$REUSE_ACCEPTED" == true ]]; then
+            git diff --check 495353ad20f5b0cdeb044fc79a8451483b327215 "$head"
+          else
+            git diff --check "$head^" "$head"
+          fi
           python3 scripts/test-upstream-sync.py
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
-          python3 scripts/paddleocr_live_e2e.py --selftest
+          python3 scripts/test-test-runner-policy.py
           python3 scripts/community_release.py selftest
+      - name: Verify rolling upstream sync PR ancestry
+        if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/upstream-sync-')
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          SYNC_PR_NUMBER: ${{ github.event.pull_request.number }}
+          SYNC_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          SYNC_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          upstream_repo="$(python3 -c 'import json; print(json.load(open(".github/upstream-protection.json"))["upstream"])')"
+          git remote add upstream "https://github.com/${upstream_repo}.git"
+          git fetch --no-tags upstream '+refs/heads/main:refs/remotes/upstream/main'
+          git fetch --no-tags origin "+refs/heads/${GITHUB_HEAD_REF}:refs/remotes/origin/${GITHUB_HEAD_REF}"
+          gh pr view "$SYNC_PR_NUMBER" --repo "$GITHUB_REPOSITORY" --json body --jq .body > "$RUNNER_TEMP/upstream-sync-pr-body.md"
+          python3 scripts/upstream_sync.py validate-pr \
+            --body-file "$RUNNER_TEMP/upstream-sync-pr-body.md" \
+            --head "$SYNC_HEAD_SHA" --base "$SYNC_BASE_SHA"
       - name: Validate prerelease source
-        if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
+        if: steps.classify.outputs.release == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -74,29 +326,234 @@ jobs:
           }
           python3 scripts/community_release.py validate-tag --tag "$(python3 scripts/community_release.py tag)"
 
-  windows:
+  native-smoke:
+    name: native-smoke (compiled Qt/C++ before Windows)
     needs: [preflight]
     if: needs.preflight.outputs.native == 'true'
+    runs-on: ubuntu-24.04
+    # #145 measured ~53 sec. Do not let fast gates approach release build cost.
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+          persist-credentials: false
+      - name: Install distribution Qt6, Ninja and Clang 18
+        shell: bash
+        run: |
+          set -euo pipefail
+          sudo apt-get update -qq
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+            qt6-base-dev ninja-build clang-18 clang-tidy-18
+          clang++-18 --version
+      - name: Configure native Qt contracts and real compilation database
+        working-directory: ci/native-smoke
+        run: |
+          cmake --preset community-native-clang
+          test -s "$GITHUB_WORKSPACE/build/ci-native-clang/compile_commands.json"
+      - name: Generate Qt MOC includes without compiling the full suite
+        working-directory: ci/native-smoke
+        run: |
+          cmake --build --preset community-native-clang --parallel 4 \
+            --target snow-shot-community-native-paddleocr-tests_autogen \
+                     snow-shot-community-native-settings-tests_autogen \
+                     snow-shot-community-native-toolbar-policy-tests_autogen \
+                     snow-shot-community-native-canvas-moc_autogen
+      - name: Verify syntax gate rejects a real Clang member mismatch
+        shell: bash
+        run: python3 scripts/test-clang-compile-database.py
+      - name: Run real Clang semantic checks on production translation units
+        shell: bash
+        timeout-minutes: 8
+        env:
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if [[ -n "$PR_BASE_SHA" ]]; then
+            git cat-file -e "$PR_BASE_SHA^{commit}" || {
+              echo "PR base missing in shallow checkout; cannot report honest coverage." >&2
+              exit 1
+            }
+            python3 scripts/check-clang-compile-database.py \
+              --database build/ci-native-clang/compile_commands.json \
+              --report build/ci-native-clang/clang-syntax-report.json \
+              --base-ref "$PR_BASE_SHA"
+          else
+            python3 scripts/check-clang-compile-database.py \
+              --database build/ci-native-clang/compile_commands.json \
+              --report build/ci-native-clang/clang-syntax-report.json
+          fi
+      - name: Run focused upstream clang-tidy static analyzer on real modified C++
+        shell: bash
+        timeout-minutes: 3
+        run: |
+          set -euo pipefail
+          clang-tidy-18 -p build/ci-native-clang \
+            -checks='-*,clang-analyzer-core.*,bugprone-use-after-move' \
+            --warnings-as-errors='clang-analyzer-core.*,bugprone-use-after-move' \
+            snow_shot/src/network/communitycloudocrsettings.cpp \
+            snow_shot/src/presentation/ocr/screenshotocrlayout.cpp
+      - name: Compile real production Qt AUTOMOC objects without application linking
+        working-directory: ci/native-smoke
+        timeout-minutes: 3
+        run: cmake --build --preset community-native-clang --parallel 4 --target snow-shot-community-native-canvas-moc
+      - name: Compile the actual Community Qt and OCR sources
+        working-directory: ci/native-smoke
+        run: cmake --build --preset community-native-clang --parallel 4
+      - name: Run Qt Test and OCR contract CTest cases
+        working-directory: ci/native-smoke
+        run: |
+          ctest --preset community-native-clang --output-on-failure \
+            --output-junit "$GITHUB_WORKSPACE/build/ci-native-clang/native-smoke.junit.xml"
+      - name: Upload fast native CTest diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: community-native-smoke-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            build/ci-native-clang/compile_commands.json
+            build/ci-native-clang/clang-syntax-report.json
+            build/ci-native-clang/native-smoke.junit.xml
+            build/ci-native-clang/Testing/Temporary/LastTest.log
+            build/ci-native-clang/CMakeFiles/CMakeConfigureLog.yaml
+
+  windows-contracts:
+    name: windows-contracts (prebuilt Qt 6.12, MSVC and native CTest)
+    needs: [preflight]
+    if: needs.preflight.outputs.native == 'true'
+    runs-on: windows-2022
+    # Cold Qt installation + MSVC Qt checks must fit a strict fast-gate budget.
+    # No source-built static Qt, Cargo, vcpkg or installer work in this job.
+    timeout-minutes: 12
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install official prebuilt Qt 6.12 desktop SDK
+        uses: jurplel/install-qt-action@a9c63c7c123f3069cff414e7e482d95dfa9d8125 # v4.4.1
+        with:
+          version: '6.12.0'
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          archives: qtbase
+          # aqtinstall 3.3.x does not yet support Qt 6.11+ per-architecture
+          # repository layouts. Use an audited upstream fix at a fixed commit.
+          aqtsource: 'git+https://github.com/miurahr/aqtinstall.git@076e1659807d0b362a3ed684d54c2e9c775eb9c7'
+          cache: 'false'
+      - name: Configure real MSVC Windows Qt native contracts
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path "$env:QT_ROOT_DIR/lib/cmake/Qt6/Qt6Config.cmake")) {
+            throw 'Pinned prebuilt Qt 6.12.0 SDK was not installed'
+          }
+          cmake -S ci/native-smoke -B build/ci-windows-contracts -G 'Visual Studio 17 2022' -A x64 "-DQt6_DIR=$env:QT_ROOT_DIR/lib/cmake/Qt6"
+          if ($LASTEXITCODE -ne 0) { throw 'MSVC Qt native-contract configuration failed' }
+      - name: Compile real Windows DPAPI, SDK and Qt AUTOMOC sources
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc snow-shot-community-native-cloud-ocr-widget-tests
+          if ($LASTEXITCODE -ne 0) { throw 'Windows native C++/Qt contract compilation failed' }
+      - name: Run real Windows Qt and platform policy CTests
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          ctest --test-dir build/ci-windows-contracts -C Release -R 'snow-shot-community-native-(settings|toolbar-policy|cloud-ocr-widget)-tests' --output-on-failure --output-junit "$env:RUNNER_TEMP/windows-fast-native-junit.xml"
+          if ($LASTEXITCODE -ne 0) { throw 'Windows-native Qt contract tests failed' }
+      - name: Upload Windows fast-gate CTest diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: community-windows-fast-contracts-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/windows-fast-native-junit.xml
+            build/ci-windows-contracts/Testing/Temporary/LastTest.log
+            build/ci-windows-contracts/CMakeFiles/CMakeConfigureLog.yaml
+
+  windows:
+    needs: [preflight, native-smoke, windows-contracts]
+    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
+    permissions:
+      contents: read
+    env:
+      SNOW_X264_USE_GIT_MIRROR: "1"
+      VCPKG_DOWNLOADS: ${{ github.workspace }}/.tools/vcpkg-downloads
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           submodules: recursive
           persist-credentials: false
 
+      - name: Restore hash-pinned NSIS installer
+        id: nsis-cache
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nsis-3.12-setup.exe
+          key: nsis-3.12-3bc2b06253a7e4957111be152ac6a536e0c7478a706e19da814038db5d706495
+
       - name: Bootstrap NSIS and smoke-test CPack
-        if: github.event_name == 'workflow_dispatch'
+        id: nsis-bootstrap
         shell: pwsh
-        run: ./scripts/bootstrap-community-nsis.ps1
+        timeout-minutes: 15
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/bootstrap-community-nsis.ps1
+
+      - name: Save verified NSIS installer immediately
+        if: steps.nsis-bootstrap.outputs.cacheable == 'true' && steps.nsis-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/nsis-3.12-setup.exe
+          key: ${{ steps.nsis-cache.outputs.cache-primary-key }}
+
+      # Test scripts deliberately exercise failing native commands. Run each
+      # in a separate PowerShell process so the step receives the suite's exit
+      # status rather than the last command's status inside the suite.
+      - name: Validate static Qt policies with executable fixtures
+        shell: pwsh
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/test-static-qt-features.ps1
+
+      - name: Test Qt cache ABI fingerprinting
+        shell: pwsh
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/test-qt-cache-identity.ps1
+
+      # A runner label can move to a newer MSVC/SDK/CMake image while its
+      # literal label remains unchanged. Include actual tool hashes.
+      - name: Identify native Windows toolchain
+        id: toolchain-cache
+        shell: pwsh
+        run: |
+          . ./scripts/snow-build-environment.ps1
+          Add-SnowMsvcToolsToPath -Architecture x64 | Out-Null
+          $inputs = @()
+          foreach ($tool in @('cl.exe', 'link.exe', 'lib.exe', 'cmake.exe')) {
+            $resolved = Get-Command $tool -CommandType Application -ErrorAction Stop | Select-Object -First 1
+            $inputs += (Get-FileHash -LiteralPath $resolved.Source -Algorithm SHA256).Hash.ToLowerInvariant()
+          }
+          $inputs += $env:VCToolsVersion, $env:WindowsSDKVersion, $PSVersionTable.PSVersion.ToString()
+          $digest = [Convert]::ToHexString([System.Security.Cryptography.SHA256]::HashData(
+            [System.Text.Encoding]::UTF8.GetBytes(($inputs -join '|')))).ToLowerInvariant()
+          "key=$digest" | Out-File -Append -FilePath $env:GITHUB_OUTPUT -Encoding utf8
+          Write-Host "Windows build toolchain fingerprint: $digest"
 
       - name: Restore vcpkg binary cache
         id: vcpkg-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: vcpkg-abi-windows-x64-static-${{ steps.toolchain-cache.outputs.key }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
       - name: Enable vcpkg binary cache
         shell: pwsh
         run: |
@@ -106,12 +563,12 @@ jobs:
 
       - name: Restore Cargo sources
         id: cargo-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: cargo-sources-windows-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Install pinned build dependencies
         shell: pwsh
@@ -119,77 +576,125 @@ jobs:
 
       - name: Save vcpkg binary cache
         if: steps.vcpkg-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .tools/vcpkg-binary-cache
-          key: community-vcpkg-x64-static-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+          key: vcpkg-abi-windows-x64-static-${{ steps.toolchain-cache.outputs.key }}-${{ hashFiles('scripts/bootstrap.ps1', 'scripts/snow-build-environment.ps1', 'scripts/build-toolchain.json', 'vcpkg.json', 'vcpkg-configuration.json', 'cmake/vcpkg-overlay-ports/**', 'cmake/vcpkg-overlay-triplets/**') }}
+
+      # Qt binaries are derived from the resolved vcpkg ABI and the exact
+      # host compiler, not from manually bumped cache generations.
+      - name: Compute static Qt cache identity
+        id: qt-identity
+        shell: pwsh
+        run: |
+          ./scripts/qt-cache-identity.ps1 -Architecture x64 -Configuration Release -DevelopmentModules
 
       - name: Restore static Qt
         id: qt-cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          path: ${{ steps.qt-identity.outputs.prefix }}
+          key: qt-static-windows-${{ steps.qt-identity.outputs.key }}
+          # No restore-keys: using a kit from a different ABI is unsafe.
+
       - name: Build or validate static Qt
         shell: pwsh
+        env:
+          QT_INSTALL_PREFIX: ${{ steps.qt-identity.outputs.prefix }}
         run: |
-          $prefix = Join-Path $PWD '.tools/qt/6.12.0/x64-static-release'
-          ./scripts/build-static-qt.ps1 -InstallPrefix $prefix -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
+          # An exact cache hit must pass the audited source/feature/ABI checks.
+          # A mismatch is a key-design or cache-integrity error, not an excuse
+          # to mutate an immutable cache entry and claim the build is green.
+          ./scripts/build-static-qt.ps1 -InstallPrefix $env:QT_INSTALL_PREFIX -Architecture x64 -Configuration Release -DevelopmentModules -Parallelism 8
           if ($LASTEXITCODE -ne 0) { throw 'Static Qt build failed' }
-          $qt6Dir = Join-Path $prefix 'lib/cmake/Qt6'
+          $qt6Dir = Join-Path $env:QT_INSTALL_PREFIX 'lib/cmake/Qt6'
           if (-not (Test-Path (Join-Path $qt6Dir 'Qt6Config.cmake'))) { throw 'Qt6Config.cmake missing' }
           "SNOW_QT_STATIC_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
           "Qt6_DIR=$qt6Dir" | Out-File -Append -FilePath $env:GITHUB_ENV -Encoding utf8
-      - name: Save static Qt
+      - name: Save validated static Qt
         if: steps.qt-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
-          path: .tools/qt/6.12.0/x64-static-release
-          key: community-qt-6.12.0-x64-release-${{ hashFiles('scripts/build-static-qt.ps1', 'scripts/snow-build-environment.ps1', 'scripts/qt-toolchain.json', 'scripts/static-qt-features.json', 'scripts/qtbase-*.patch', 'vcpkg.json', 'vcpkg-configuration.json') }}
+          path: ${{ steps.qt-identity.outputs.prefix }}
+          key: ${{ steps.qt-cache.outputs.cache-primary-key }}
 
-      - name: Configure focused native tests
-        shell: pwsh
-        run: cmake --preset snow-shot-msvc-test
-      - name: Build core Community native tests
-        timeout-minutes: 120
-        shell: pwsh
-        run: cmake --build --preset build-snow-shot-msvc-test --parallel 8
-      - name: Run core Community native tests
-        shell: pwsh
-        run: ctest --preset test-snow-shot-msvc-community
-
-      - name: Verify production license graph
-        if: github.event_name == 'workflow_dispatch'
+      - name: Verify release license graph before expensive native linking
         shell: pwsh
         run: ./scripts/preflight-community-release-licenses.ps1
+
+      - name: Configure goal acceptance native tests
+        shell: pwsh
+        run: cmake --preset snow-shot-msvc-test
+      # The actual schema executable was already linked ~34 minutes before the
+      # last large UI test in #135. Catch its failures before those other links.
+      - name: Build focused Windows schema contract first
+        timeout-minutes: 75
+        shell: pwsh
+        run: cmake --build --preset build-snow-shot-msvc-test --target snow-shot-configuration-schema-tests --parallel 8 -- "/bl:$env:RUNNER_TEMP/community-schema-msbuild.binlog"
+      - name: Run focused Windows schema contract first
+        shell: pwsh
+        env:
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+        run: ctest --preset test-snow-shot-msvc-community -R "^snow-shot-configuration-schema-tests$" --output-on-failure --output-junit "$env:RUNNER_TEMP/community-windows-schema-junit.xml"
+      - name: Build remaining Community native acceptance tests
+        timeout-minutes: 120
+        shell: pwsh
+        run: cmake --build --preset build-snow-shot-msvc-test --parallel 8 -- "/bl:$env:RUNNER_TEMP/community-tests-msbuild.binlog"
+      - name: Run Community native acceptance tests
+        shell: pwsh
+        env:
+          QT_QPA_FONTDIR: C:\Windows\Fonts
+        run: ctest --preset test-snow-shot-msvc-community --no-tests=error --output-on-failure --output-junit "$env:RUNNER_TEMP/community-windows-native-junit.xml"
       - name: Save complete Cargo sources
         if: steps.cargo-cache.outputs.cache-hit != 'true'
-        continue-on-error: true
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
             ~/.cargo/registry
             ~/.cargo/git
-          key: community-cargo-x64-v4-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
+          key: cargo-sources-windows-x64-${{ hashFiles('snow-crates/Cargo.lock', 'snow_draw_engine_qt/Cargo.lock', 'snow_rust_ffi/Cargo.lock', 'snow-image-rs/Cargo.lock', 'snow_shot/rust/snow-shot-mcp/Cargo.lock', 'snow_shot/rust/snow-shot-updater/Cargo.lock', 'scripts/snow-ocr-toolchain.ps1', 'scripts/snow-community-release-cargo-licenses.ps1', 'scripts/build-toolchain.json') }}
 
       - name: Build production Windows x64
-        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
-        run: ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
+        run: |
+          Start-Transcript -Path "$env:RUNNER_TEMP/community-production-build.log" | Out-Null
+          try {
+            ./scripts/build.ps1 -Preset snow-shot-msvc-release -SkipBootstrap
+            if ($LASTEXITCODE -ne 0) { throw 'Production Windows build returned a nonzero exit code' }
+          } finally {
+            Stop-Transcript | Out-Null
+          }
       - name: Package production installers
-        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
       - name: Verify installer assets
-        if: github.event_name == 'workflow_dispatch'
         shell: pwsh
         run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release --allow-build-intermediates
 
+      - name: Smoke-test real Windows installers and in-place upgrade
+        timeout-minutes: 20
+        shell: pwsh
+        run: ./scripts/test-community-windows-installer-smoke.ps1 -BuildDirectory build/snow-shot-msvc-release
+
+      - name: Upload Windows native and production diagnostics on every outcome
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: community-windows-diagnostics-${{ github.sha }}
+          retention-days: 14
+          if-no-files-found: ignore
+          path: |
+            ${{ runner.temp }}/community-schema-msbuild.binlog
+            ${{ runner.temp }}/community-windows-schema-junit.xml
+            ${{ runner.temp }}/community-tests-msbuild.binlog
+            ${{ runner.temp }}/community-windows-native-junit.xml
+            ${{ runner.temp }}/community-production-build.log
+            build/snow-shot-msvc-test/Testing/Temporary/LastTest.log
+            build/snow-shot-msvc-test/CMakeFiles/CMakeConfigureLog.yaml
+            build/snow-shot-msvc-release/CMakeFiles/CMakeConfigureLog.yaml
+
       - name: Upload release candidates
-        if: github.event_name == 'workflow_dispatch'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: community-windows-x64-${{ github.sha }}
           retention-days: 14
@@ -202,22 +707,35 @@ jobs:
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.manifest.json
 
   publish-prerelease:
-    needs: [windows]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true && needs.windows.result == 'success'
+    needs: [preflight, windows]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.preflight.outputs.release == 'true' && github.ref == 'refs/heads/main' && (needs.windows.result == 'success' || (needs.preflight.outputs.reuse == 'true' && needs.windows.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      actions: read
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        if: needs.preflight.outputs.reuse != 'true'
         with:
           name: community-windows-x64-${{ github.sha }}
           path: dist
+      - name: Download and authenticate the exact accepted #214 archive
+        if: needs.preflight.outputs.reuse == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/14914284776/zip" > accepted.zip
+          echo 'fa03fedbc1a68041b5c90c25a311bf9e25dab6e08687352126dd3e17c2f28eb8  accepted.zip' | sha256sum --check --strict
+          python3 -m zipfile -e accepted.zip dist
+          python3 scripts/community_release.py verify-assets --directory dist
       - name: Verify release inputs
         id: release
         shell: bash
@@ -238,6 +756,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
           ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
           if [[ -n "$ref" && "$ref" != "$GITHUB_SHA" ]]; then
             echo "Tag $RELEASE_TAG already points to $ref." >&2
@@ -268,4 +787,62 @@ jobs:
           mkdir verified
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verified
           python3 scripts/community_release.py verify-assets --directory verified
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md
+
+  cleanup-integrated-branches:
+    needs: [publish-prerelease]
+    if: needs.publish-prerelease.result == 'success' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Retire the integrated 1.6.3-beta.1 branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # One-time cleanup of this migration, only after a verified release.
+          [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] || exit 0
+          [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] || exit 0
+          pr="$(gh pr view 2 --repo "$GITHUB_REPOSITORY" --json state,headRefName,headRefOid,mergeCommit)"
+          [[ "$(jq -r .state <<< "$pr")" == 'MERGED' ]]
+          merged="$(jq -r .mergeCommit.oid <<< "$pr")"
+          git merge-base --is-ancestor "$merged" "$GITHUB_SHA"
+          candidate="$(jq -r .headRefOid <<< "$pr")"
+          [[ "$(jq -r .headRefName <<< "$pr")" == 'review/upstream-main-4cc4dfe-20261116' ]]
+          git merge-base --is-ancestor "$candidate" "$GITHUB_SHA"
+          gh auth setup-git --hostname github.com
+          retire() {
+            local branch="$1" expected="$2" kind="$3" ref remote actual
+            ref="refs/heads/$branch"
+            remote="$(git ls-remote --heads origin "$ref")"
+            if [[ -z "$remote" ]]; then return 0; fi
+            actual="${remote%%$'\t'*}"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::warning::Preserving $branch because its head changed."
+              return 0
+            fi
+            if [[ "$kind" == 'integrated' ]]; then
+              if ! git merge-base --is-ancestor "$expected" "$GITHUB_SHA"; then
+                echo "::warning::Preserving $branch: its commits are not integrated."
+                return 0
+              fi
+            fi
+            # Explicit deletion with a lease: do not remove newer human commits.
+            git push --force-with-lease="$ref:$expected" origin ":$ref"
+          }
+          retire 'feat/community-paddleocr-windows' 'f8e49ee0f710dee1fa7f9c3b39b358189c9531ed' integrated
+          retire 'feat/solo-rolling-upstream-sync' 'ef5835b8092a08dbec86fa4150ee0fdd22c84a2d' integrated
+          retire 'fix/upstream-sync-conflict-pr' '91d62ea8886ed6deb646c47d9b73751f1abf1d58' integrated
+          retire 'review/beta-integrated-7f34f246-20261121' 'af6d8e1caab0b3b9b3e0138c75e46c81c15a900b' integrated
+          retire 'review/incoming-upstream-7f34f246-20261121' '7f34f24696c06200bc7d707eab4f35d0a7fbdae1' integrated
+          # This exact, reviewed commit contains only the retired conflict report.
+          retire 'automation/upstream-review' '88107f99667f9cefc30fbac2c4ccaf2fdcb29e77' report-only
+          retire 'review/upstream-main-4cc4dfe-20261116' "$candidate" integrated

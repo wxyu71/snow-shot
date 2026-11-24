@@ -15,9 +15,11 @@
 #include "snow_shot/presentation/settings/applicationpriority.h"
 #include "snow_shot/platform/windows/autostartregistration.h"
 #include "snow_shot/platform/windows/administratorlaunch.h"
+#ifdef Q_OS_WIN
+#include "snow_shot/platform/windows/processpowerqos.h"
+#endif
 #include "snow_shot/app/distribution.h"
 #include "snow_shot/platform/windows/shellcontextmenuregistration.h"
-#include "widgets/message.h"
 #include "widgets/platform_compatibility.h"
 #include "snow_shot/presentation/components/screenshothistorypagewidget.h"
 #include "snow_shot/storage/applicationstorage.h"
@@ -51,7 +53,6 @@
 #include <QDir>
 #include <QStandardPaths>
 #include <QTimer>
-#include <QPointer>
 #include <QSysInfo>
 #include <optional>
 #include <utility>
@@ -156,12 +157,10 @@ int main(int argc, char* argv[]) {
     }
     QCoreApplication::setOrganizationName(snow_shot::app::edition::registryName());
     QString applicationName = snow_shot::app::edition::applicationName();
+#ifdef SNOW_SHOT_CONTROLLER_LIFETIME_TESTS
     QString e2eInstanceId;
-    bool e2eCaptureEnabled = false;
     for (int index = 1; index < argc; ++index) {
         const QString argument = QString::fromLocal8Bit(argv[index]);
-        e2eCaptureEnabled =
-            e2eCaptureEnabled || argument == QStringLiteral("--e2e-allow-overlay-capture");
         constexpr auto e2eInstancePrefix = "--e2e-instance-id=";
         if (argument.startsWith(QString::fromLatin1(e2eInstancePrefix))) {
             e2eInstanceId =
@@ -173,6 +172,7 @@ int main(int argc, char* argv[]) {
             .hasMatch()) {
         applicationName += QStringLiteral("-e2e-") + e2eInstanceId;
     }
+#endif
     QCoreApplication::setApplicationName(applicationName);
     QCoreApplication::setApplicationVersion(QStringLiteral(SNOW_DIAGNOSTICS_VERSION));
 #ifdef SNOW_SHOT_CONTROLLER_LIFETIME_TESTS
@@ -644,6 +644,11 @@ int main(int argc, char* argv[]) {
 #ifndef Q_OS_MACOS
     static_cast<void>(snow_shot::presentation::settings::applyConfiguredApplicationPriority());
 #endif
+#ifdef Q_OS_WIN
+    auto& applicationStorage = snow_shot::storage::ApplicationStorage::instance();
+    static_cast<void>(snow_shot::platform::windows::applyProcessPowerQoS(
+        applicationStorage.configuration().value(QStringLiteral("system/power_qos")).toString()));
+#endif
     QApplication::setQuitOnLastWindowClosed(false);
 #ifndef Q_OS_MACOS
     QApplication::setWindowIcon(
@@ -653,7 +658,6 @@ int main(int argc, char* argv[]) {
     snow_shot::presentation::LanguageManager::instance().initialize();
     snow_shot::presentation::styles::ThemeManager::instance().initialize(app);
 #ifdef Q_OS_WIN
-    auto& applicationStorage = snow_shot::storage::ApplicationStorage::instance();
     if (!snow_shot::app::distribution::isStoreManaged() && !updaterRelaunch &&
         snow_shot::update::startupUpdateMayDelayLaunch(launchArguments) &&
         applicationStorage.configuration().value(QStringLiteral("updates/mode")).toString() ==
@@ -730,7 +734,6 @@ int main(int argc, char* argv[]) {
         return applicationController.acceptsLaunchRequest(arguments);
     });
     applicationController.start(launchArguments, [&] {
-        const auto startupSettings = snow_shot::storage::SystemSettings();
 #ifdef Q_OS_WIN
         QString shellRegistrationError;
         const snow_shot::platform::windows::ShellContextMenuRegistration shellRegistration;
@@ -750,26 +753,8 @@ int main(int argc, char* argv[]) {
             snow_shot::app::reportStartupRegistrationFailure(shellRegistrationError);
         }
 #endif
-#ifdef Q_OS_MACOS
-        if (snow_shot::platform::macos::loginItemAutomaticRegistrationAllowed(launchArguments)) {
-            const auto completed = [controller = QPointer<snow_shot::app::ApplicationController>(
-                                        &applicationController)](
-                                       const snow_shot::platform::macos::LoginItemResult& result) {
-                if (result.success || !controller)
-                    return;
-                snow_shot::app::reportStartupRegistrationFailure(result.error);
-                // Startup can otherwise have only a tiny floating toolbar visible.
-                controller->showMainWindow();
-                adqt::widgets::AdMessage::Request request;
-                request.content = result.error;
-                adqt::widgets::AdMessageService::error(std::move(request));
-            };
-            const auto admitted = snow_shot::platform::macos::loginItemService().initialize(
-                startupSettings.autoStartAtBoot(), completed);
-            if (!admitted.success)
-                completed(admitted);
-        }
-#else
+#ifndef Q_OS_MACOS
+        const auto startupSettings = snow_shot::storage::SystemSettings();
         const auto startupResult = snow_shot::platform::windows::reconcileStartupMode(
             !startupSettings.autoStartAtBoot() ? snow_shot::platform::windows::StartupMode::Off
             : startupSettings.launchAsAdministrator()

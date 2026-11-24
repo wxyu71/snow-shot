@@ -6,15 +6,25 @@
 #include <optional>
 
 namespace snow_shot {
-// Empty means the configured environment/build default.
+[[nodiscard]] inline bool secureServiceUrl(const QUrl& url) {
+    if (url.scheme() == QStringLiteral("https"))
+        return true;
+    if (url.scheme() != QStringLiteral("http"))
+        return false;
+    const QString host = url.host().toLower();
+    return host == QStringLiteral("localhost") || host == QStringLiteral("127.0.0.1") ||
+           host == QStringLiteral("::1");
+}
+
+// Empty means no configured Community service.
 [[nodiscard]] inline std::optional<QString> normalizedServerUrl(const QString& value) {
     QString normalized = value.trimmed();
     if (normalized.isEmpty())
         return normalized;
     const QUrl url(normalized, QUrl::StrictMode);
     if (!url.isValid() || url.isRelative() || url.host().isEmpty() ||
-        (url.scheme() != QStringLiteral("http") && url.scheme() != QStringLiteral("https")) ||
-        url.authority().contains(u'@') || url.hasQuery() || url.hasFragment())
+        !secureServiceUrl(url) || url.authority().contains(u'@') || url.hasQuery() ||
+        url.hasFragment())
         return std::nullopt;
     normalized = url.toString(QUrl::FullyEncoded);
     while (normalized.endsWith(u'/'))

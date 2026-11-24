@@ -1,6 +1,7 @@
 #include <QVBoxLayout>
 #include "snow_shot/presentation/screenshotcanvastools.h"
 #include "palette_style_edit_test_support.h"
+#include "snow_shot/shortcuts/annotationoptionshortcut.h"
 #include "physical_key_test_support.h"
 #include "cloud_upload_test_support.h"
 #include "snow_shot/presentation/screenshotregiontypecontrol.h"
@@ -161,7 +162,8 @@ void canvasToolBindingsRespectCapabilitiesAndLifetime() {
 
 QString shortcutTooltip(const QString& label, const QStringList& portable) {
     const QString display = snow_shot::shortcuts::formatShortcutListDisplayText(
-        snow_shot::shortcuts::bindingsFromPortableText(portable));
+        snow_shot::shortcuts::bindingsFromPortableText(portable),
+        snow_shot::shortcuts::ShortcutPolicy::Application);
     return display.isEmpty() ? label : QStringLiteral("%1 (%2)").arg(label, display);
 }
 
@@ -1128,8 +1130,8 @@ void recordingEffectSettingsModal() {
                     !surface->windowHandle()->format().hasAlpha() &&
                     settings.modal->contentWidget()->isVisible(),
                 "each Settings open must expose an opaque window with visible form content");
-        require(surface->windowHandle()->transientParent() ==
-                    settings.modal->ownerWindow()->windowHandle(),
+        require(settings.modal->ownerWindow()->windowHandle()->isAncestorOf(
+                    surface->windowHandle(), QWindow::IncludeTransients),
                 "each Settings open must retain native recording-window ownership");
         require(settings.modal == palette.findChild<adqt::widgets::AdModal*>(
                                       QStringLiteral("screenRecordingEffectSettingsModal")),
@@ -1171,7 +1173,7 @@ void recordingEffectSettingsModal() {
     }
 
     require(modal->mode() == adqt::widgets::AdModal::Mode::Window &&
-                modal->windowModality() == Qt::ApplicationModal && modal->centered() &&
+                modal->windowModality() == Qt::WindowModal && modal->centered() &&
                 !modal->maskVisible() && !modal->closeOnMaskClick() &&
                 modal->ownerWindow() == &recordingOwner &&
                 modal->windowTitle() == QStringLiteral("Effect settings") &&
@@ -2755,6 +2757,7 @@ QList<adqt::widgets::AdButton*> mainActionToolbarButtons(ScreenshotToolPalette& 
     const QStringList actionIds{
         QStringLiteral("barcode-recognition"),
         QStringLiteral("table-recognition"),
+        QStringLiteral("document-recognition"),
         QStringLiteral("record-screen"),
         QStringLiteral("pin-to-screen"),
         QStringLiteral("text-recognition"),
@@ -4369,6 +4372,13 @@ void arrowAndLineUseConfiguredPopoverGroup() {
             "clicking the active replaced group trigger should return to selection");
 }
 
+// Keep fixtures for the retained two-tool legacy group independent of the new default.
+void hideDocumentForLegacyTableQrFixture(ScreenshotToolPalette::Options& options) {
+    options.actionToolsLayout = snow_shot::presentation::toolbar_layout::moveItemToHidden(
+        options.actionToolsLayout.value_or(snow_shot::storage::ScreenshotToolbarLayout{}),
+        options.actionToolsLayoutKind, QStringLiteral("document-recognition"), 0);
+}
+
 void tableBusyStatePreservesSiblingGroupPopovers(bool recoverFromMove = false) {
     ScreenshotToolPalette::Options options;
     options.showShapeTool = false;
@@ -4382,6 +4392,7 @@ void tableBusyStatePreservesSiblingGroupPopovers(bool recoverFromMove = false) {
         {{QStringLiteral("table-recognition"), QStringLiteral("barcode-recognition")},
          {QStringLiteral("text-recognition"), QStringLiteral("text-translation")}},
         {}};
+    hideDocumentForLegacyTableQrFixture(options);
     ScreenshotToolPalette palette(options);
     palette.resize(palette.contentSizeHint());
     palette.move(QApplication::primaryScreen()->availableGeometry().center() -
@@ -4637,6 +4648,7 @@ void mainToolbarGroupPopoversRecreateTheirOptions() {
     actionOptions.enableStyleToolbar = false;
     actionOptions.actionToolsLayout = snow_shot::storage::ScreenshotToolbarLayout{
         {{QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition")}}, {}};
+    hideDocumentForLegacyTableQrFixture(actionOptions);
     ScreenshotToolPalette actionPalette(actionOptions);
     actionPalette.show();
     QCoreApplication::processEvents();
@@ -4898,6 +4910,7 @@ void tableQrPopoverSharesOneEntryAndRemembersTheSelectedMode() {
     options.actionToolsLayout = snow_shot::storage::ScreenshotToolbarLayout{
         {{QStringLiteral("barcode-recognition"), QStringLiteral("table-recognition")}}, {}};
 
+    hideDocumentForLegacyTableQrFixture(options);
     ScreenshotToolPalette palette(options);
     palette.contentSizeHint();
     const QList<adqt::widgets::AdButton*> mainButtons = mainToolbarButtons(palette);
@@ -5007,6 +5020,7 @@ void drawingGroupClicksActivateOnceAfterPointerReentry() {
         options.showShapeTool = groups.at(index).contains(QStringLiteral("shape"));
         options.showArrowTool = groups.at(index).contains(QStringLiteral("arrow"));
         options.showDistanceTool = groups.at(index).contains(QStringLiteral("distance"));
+        options.showBracketTool = groups.at(index).contains(QStringLiteral("bracket"));
         options.showAngleTool = groups.at(index).contains(QStringLiteral("angle"));
         options.showLineTool = groups.at(index).contains(QStringLiteral("line"));
         options.showBrushTool = groups.at(index).contains(QStringLiteral("free-draw"));
@@ -5054,6 +5068,7 @@ void tableRecognitionClickActivatesOnceAfterPointerReentry() {
     options.showTableTool = true;
     options.showQrTool = true;
     options.enableStyleToolbar = false;
+    hideDocumentForLegacyTableQrFixture(options);
     ScreenshotToolPalette palette(options);
     palette.show();
     QCoreApplication::processEvents();
@@ -5847,7 +5862,7 @@ void pinnedActionLayoutUsesGenericStacks() {
     options.actionToolsLayoutKind = kind;
     const ScreenshotToolbarLayout previous{
         {{barcode, table}, {markdown}, {html}, {ocr}, {translation}}, {}};
-    ScreenshotToolbarLayout expected{{{barcode, table},
+    ScreenshotToolbarLayout expected{{{barcode, QStringLiteral("document-recognition"), table},
                                       {markdown, QStringLiteral("latex-recognition")},
                                       {html},
                                       {ocr},
@@ -5867,7 +5882,7 @@ void pinnedActionLayoutUsesGenericStacks() {
     };
     options.actionToolsLayout = previous;
     require(layout::normalizedLayout(previous, kind) == expected,
-            "pinned migration adds LaTeX beside Markdown without rearranging other positions");
+            "pinned migration inserts Document and LaTeX beside their related tools");
     ScreenshotToolPalette palette(options);
     palette.show();
     QCoreApplication::processEvents();
@@ -6384,6 +6399,7 @@ void configurableScreenshotActionLayoutSupportsStacksHidingAndRuntimeReplacement
                 mixedTrigger->property("screenshotToolbarPositionItems").toStringList() ==
                     QStringList{QStringLiteral("upload-to-cloud"), QStringLiteral("record-screen"),
                                 QStringLiteral("quick-save"), QStringLiteral("save-as-file"),
+                                QStringLiteral("document-recognition"),
                                 QStringLiteral("table-recognition")} &&
                 textTrigger->accessibleName() == QStringLiteral("Text recognition") &&
                 palette
@@ -6470,6 +6486,7 @@ void configurableScreenshotActionLayoutSupportsStacksHidingAndRuntimeReplacement
     const snow_shot::storage::ScreenshotToolbarLayout unstacked{
         {
             {QStringLiteral("barcode-recognition")},
+            {QStringLiteral("document-recognition")},
             {QStringLiteral("table-recognition")},
             {QStringLiteral("record-screen")},
             {QStringLiteral("pin-to-screen")},
@@ -6486,7 +6503,7 @@ void configurableScreenshotActionLayoutSupportsStacksHidingAndRuntimeReplacement
         QStringLiteral("screenshotQrRecognitionButton"));
     auto* directTable = palette.findChild<adqt::widgets::AdButton*>(
         QStringLiteral("screenshotTableRecognitionButton"));
-    require(mainActionToolbarButtons(palette).size() == 10 && directBarcode != nullptr &&
+    require(mainActionToolbarButtons(palette).size() == 11 && directBarcode != nullptr &&
                 directTable != nullptr && popoverForTrigger(directBarcode) == nullptr &&
                 popoverForTrigger(directTable) == nullptr &&
                 directBarcode->toolTip().startsWith(QStringLiteral("Barcode recognition")) &&
@@ -6525,7 +6542,7 @@ void configurableScreenshotActionLayoutSupportsStacksHidingAndRuntimeReplacement
         QStringLiteral("text-recognition"),     QStringLiteral("text-translation"),
         QStringLiteral("scrolling-screenshot"), QStringLiteral("quick-save"),
         QStringLiteral("save-as-file"),         QStringLiteral("print"),
-        QStringLiteral("upload-to-cloud"),
+        QStringLiteral("upload-to-cloud"),      QStringLiteral("document-recognition"),
     };
     ScreenshotToolPalette::Options hiddenOptions;
     hiddenOptions.showSelectTool = true;
@@ -6978,7 +6995,7 @@ void scrollingSettingsUseCenteredFormAndPersistOnAccept() {
                 captureInterface->controlSize() == AdSwitch::ControlSize::Medium,
             "form refreshes must preserve the generic switch's size and enabled state");
     require(modal->mode() == AdModal::Mode::Window && modal->centered() &&
-                modal->windowModality() == Qt::ApplicationModal && modal->ownerWindow() == &owner &&
+                modal->windowModality() == Qt::WindowModal && modal->ownerWindow() == &owner &&
                 modal->preferredWidth() == 440 && !modal->maskVisible() &&
                 !modal->closeOnMaskClick() &&
                 modal->standardButtons() == (AdModal::StandardButtons(AdModal::StandardButton::Ok) |
@@ -7459,7 +7476,7 @@ void latexHistoryActionsUseFormulaHistory() {
             "leaving LaTeX does not expose its history in QR mode");
 }
 
-void recognitionModelsDefaultToDedicated() {
+void recognitionModelsDefaultToFastVision() {
     using Tool = ScreenshotToolPalette::Tool;
     using adqt::widgets::AdSelect;
     for (const Tool tool : {Tool::Table, Tool::Latex}) {
@@ -7473,19 +7490,24 @@ void recognitionModelsDefaultToDedicated() {
         palette.setActiveTool(tool);
         auto* select =
             palette.findChild<AdSelect*>(QStringLiteral("screenshotRecognitionModelSelect"));
-        require(select &&
-                    select->currentValue().toString() == screenshotDedicatedRecognitionModelId() &&
+        require(select && !select->currentValue().isValid() &&
+                    select->placeholder() == QStringLiteral("Snow Shot visual understanding") &&
                     modelChanges == 0,
-                "Table and LaTeX selectors initially choose their dedicated models silently");
-        palette.setRecognitionModelState(tool, {});
-        require(select->currentValue().toString() == screenshotDedicatedRecognitionModelId() &&
-                    modelChanges == 0,
-                "empty Table and LaTeX model states fall back to their dedicated models silently");
+                "Table and LaTeX selectors wait for the default vision model without emitting");
+        ScreenshotRecognitionModelState catalog;
+        catalog.models = {{QStringLiteral("expert-model"), QStringLiteral("Expert Model"), false,
+                           QStringLiteral("default"), true},
+                          {QStringLiteral("ai-model"), QStringLiteral("Fast Model"), false,
+                           QStringLiteral("default"), true}};
+        palette.setRecognitionModelState(tool, catalog);
+        require(select->currentValue().toString() == QStringLiteral("ai-model") &&
+                    select->toolTip() == QStringLiteral("Fast Model") && modelChanges == 0,
+                "an empty selection defaults to Fast when the catalog arrives");
     }
 }
 
 void recognitionModelSelectorGroupsOptionsAndRetainsIndependentSelections() {
-    recognitionModelsDefaultToDedicated();
+    recognitionModelsDefaultToFastVision();
     using Tool = ScreenshotToolPalette::Tool;
     using adqt::widgets::AdSelect;
     ScreenshotToolPalette::Options options;
@@ -7559,25 +7581,26 @@ void recognitionModelSelectorGroupsOptionsAndRetainsIndependentSelections() {
     require(select != nullptr && !select->isHidden() &&
                 select->currentValue().toString() == screenshotDedicatedRecognitionModelId() &&
                 modelChanges == 0,
-            "Table must default to Dedicated Model without emitting a recognition request");
+            "Table must restore its saved dedicated model without emitting a recognition request");
     const auto requireCatalogOptions = [&](const QString& dedicatedLabel) {
         const auto grouped = select->options();
         const QStringList expectedIds{
-            screenshotDedicatedRecognitionModelId(), QStringLiteral("vision-default"),
-            QStringLiteral("vision-other"), QStringLiteral("custom:vision"),
-            QStringLiteral("custom:vision-other")};
+            QStringLiteral("vision-default"), QStringLiteral("vision-other"),
+            QStringLiteral("custom:vision"), QStringLiteral("custom:vision-other"),
+            screenshotDedicatedRecognitionModelId()};
         const QStringList expectedLabels{
-            dedicatedLabel, QStringLiteral("First server vision model"),
-            QStringLiteral("Other vision model"), QStringLiteral("A long custom vision model name"),
-            QStringLiteral("Second custom vision model")};
+            QStringLiteral("First server vision model"), QStringLiteral("Other vision model"),
+            QStringLiteral("A long custom vision model name"),
+            QStringLiteral("Second custom vision model"), dedicatedLabel};
         require(grouped.size() == expectedIds.size(),
                 "catalog options must include every server and custom vision model and exclude "
                 "both kinds of text-only model");
         for (qsizetype index = 0; index < grouped.size(); ++index) {
             require(grouped[index].value.toString() == expectedIds[index] &&
                         grouped[index].label == expectedLabels[index] && !grouped[index].disabled &&
-                        grouped[index].group == (index == 0 ? QStringLiteral("Dedicated model")
-                                                            : QStringLiteral("Vision model")),
+                        grouped[index].group == (index == grouped.size() - 1
+                                                     ? QStringLiteral("Dedicated model")
+                                                     : QStringLiteral("Vision model")),
                     "each grouped recognition option must preserve its exact model identity and "
                     "name, including the first server vision model");
         }
@@ -7669,13 +7692,14 @@ void recognitionModelSelectorGroupsOptionsAndRetainsIndependentSelections() {
     palette.setRecognitionModelState(Tool::Latex, latexState);
     const auto unavailableDefault = select->options();
     require(unavailableDefault.size() == 4 &&
-                unavailableDefault[0].label == QStringLiteral("LaTeX-specific model") &&
-                unavailableDefault[1].value.toString() == QStringLiteral("custom:vision") &&
-                unavailableDefault[2].value.toString() == QStringLiteral("custom:vision-other") &&
-                unavailableDefault[3].value.toString() ==
+                unavailableDefault[0].value.toString() == QStringLiteral("custom:vision") &&
+                unavailableDefault[1].value.toString() == QStringLiteral("custom:vision-other") &&
+                unavailableDefault[2].value.toString() ==
                     screenshotDefaultVisionRecognitionModelId() &&
-                unavailableDefault[3].label == QStringLiteral("Snow Shot visual understanding") &&
-                unavailableDefault[3].disabled && !select->currentValue().isValid() &&
+                unavailableDefault[2].label == QStringLiteral("Snow Shot visual understanding") &&
+                unavailableDefault[2].disabled &&
+                unavailableDefault[3].label == QStringLiteral("LaTeX-specific model") &&
+                !select->currentValue().isValid() &&
                 select->placeholder() == QStringLiteral("Snow Shot visual understanding") &&
                 select->lineEdit()->placeholderText() == select->placeholder() &&
                 select->loading() && modelChanges == 4,
@@ -7706,9 +7730,9 @@ void recognitionModelSelectorPreservesPopupStateAndScalesAndRetranslates() {
     require(select != nullptr, "recognition selector must materialize");
     const auto customOnly = select->options();
     require(customOnly.size() == 2 &&
-                customOnly[0].value.toString() == screenshotDedicatedRecognitionModelId() &&
-                customOnly[1].value.toString() == QStringLiteral("custom:vision") &&
-                customOnly[1].label == longName,
+                customOnly[0].value.toString() == QStringLiteral("custom:vision") &&
+                customOnly[0].label == longName &&
+                customOnly[1].value.toString() == screenshotDedicatedRecognitionModelId(),
             "an explicit custom selection must not add an unused semantic-default placeholder");
     select->setPopupVisible(true);
     QCoreApplication::processEvents();
@@ -7797,28 +7821,28 @@ void recognitionModelSelectorPreservesPopupStateAndScalesAndRetranslates() {
     require(
         translated.size() == 3 &&
             select->accessibleName() == QStringLiteral("Translated Recognition model") &&
-            translated[0].label == QStringLiteral("Translated Table-specific model") &&
-            translated[0].group == QStringLiteral("Translated Dedicated model") &&
-            translated[1].group == QStringLiteral("Translated Vision model") &&
-            translated[1].value.toString() == QStringLiteral("custom:vision") &&
-            translated[1].label == longName && translated[2].group == translated[1].group &&
-            translated[2].label == QStringLiteral("Translated Snow Shot visual understanding") &&
-            translated[2].disabled && !select->currentValue().isValid() &&
+            translated[2].label == QStringLiteral("Translated Table-specific model") &&
+            translated[2].group == QStringLiteral("Translated Dedicated model") &&
+            translated[0].group == QStringLiteral("Translated Vision model") &&
+            translated[0].value.toString() == QStringLiteral("custom:vision") &&
+            translated[0].label == longName && translated[1].group == translated[0].group &&
+            translated[1].label == QStringLiteral("Translated Snow Shot visual understanding") &&
+            translated[1].disabled && !select->currentValue().isValid() &&
             select->placeholder() == QStringLiteral("Translated Snow Shot visual understanding") &&
             select->lineEdit()->placeholderText() == select->placeholder(),
         "language changes must translate recognition groups while preserving model identities");
     palette.setActiveTool(Tool::Latex);
     const auto translatedLatex = select->options();
     require(translatedLatex.size() == 3 &&
-                translatedLatex[0].label == QStringLiteral("Translated LaTeX-specific model") &&
-                translatedLatex[0].group == QStringLiteral("Translated Dedicated model") &&
-                translatedLatex[1].group == QStringLiteral("Translated Vision model") &&
-                translatedLatex[1].label == longName &&
-                translatedLatex[1].value.toString() == QStringLiteral("custom:vision") &&
-                translatedLatex[2].group == translatedLatex[1].group &&
-                translatedLatex[2].label ==
+                translatedLatex[2].label == QStringLiteral("Translated LaTeX-specific model") &&
+                translatedLatex[2].group == QStringLiteral("Translated Dedicated model") &&
+                translatedLatex[0].group == QStringLiteral("Translated Vision model") &&
+                translatedLatex[0].label == longName &&
+                translatedLatex[0].value.toString() == QStringLiteral("custom:vision") &&
+                translatedLatex[1].group == translatedLatex[0].group &&
+                translatedLatex[1].label ==
                     QStringLiteral("Translated Snow Shot visual understanding") &&
-                translatedLatex[2].disabled && !select->currentValue().isValid() &&
+                translatedLatex[1].disabled && !select->currentValue().isValid() &&
                 select->placeholder() ==
                     QStringLiteral("Translated Snow Shot visual understanding") &&
                 select->lineEdit()->placeholderText() == select->placeholder() &&
@@ -7833,14 +7857,14 @@ void recognitionModelSelectorPreservesPopupStateAndScalesAndRetranslates() {
     palette.setRecognitionModelState(Tool::Latex, defaultState);
     const auto translatedCatalog = select->options();
     require(translatedCatalog.size() == 4 &&
-                translatedCatalog[0].label == QStringLiteral("Translated LaTeX-specific model") &&
-                translatedCatalog[1].group == QStringLiteral("Translated Vision model") &&
-                translatedCatalog[1].value.toString() == QStringLiteral("expert-model") &&
-                translatedCatalog[1].label == QStringLiteral("Expert Model") &&
-                translatedCatalog[2].value.toString() == QStringLiteral("server-vision") &&
-                translatedCatalog[2].label == QStringLiteral("Actual server vision name") &&
-                translatedCatalog[3].value.toString() == QStringLiteral("custom:vision") &&
-                translatedCatalog[3].label == longName &&
+                translatedCatalog[0].group == QStringLiteral("Translated Vision model") &&
+                translatedCatalog[0].value.toString() == QStringLiteral("expert-model") &&
+                translatedCatalog[0].label == QStringLiteral("Expert Model") &&
+                translatedCatalog[1].value.toString() == QStringLiteral("server-vision") &&
+                translatedCatalog[1].label == QStringLiteral("Actual server vision name") &&
+                translatedCatalog[2].value.toString() == QStringLiteral("custom:vision") &&
+                translatedCatalog[2].label == longName &&
+                translatedCatalog[3].label == QStringLiteral("Translated LaTeX-specific model") &&
                 select->currentValue().toString() == QStringLiteral("server-vision") &&
                 select->placeholder() == QStringLiteral("Translated Recognition model") &&
                 keyboardSelections == 1,
@@ -7885,7 +7909,7 @@ void imageConversionToolsExposeRecognitionActions() {
                 QStringList{
                     QStringLiteral("convert-to-html"), QStringLiteral("convert-to-markdown"),
                     QStringLiteral("latex-recognition"), QStringLiteral("barcode-recognition"),
-                    QStringLiteral("table-recognition")} &&
+                    QStringLiteral("document-recognition"), QStringLiteral("table-recognition")} &&
             group->accessibleName() == QStringLiteral("Table recognition"),
         "the recognition group initially shows the bottom tool even with a remembered QR entry");
     static_cast<void>(palette.sizeHint());
@@ -7912,12 +7936,12 @@ void imageConversionToolsExposeRecognitionActions() {
             popoverItems.push_back(itemId);
         }
     }
-    require(popoverItems == QStringList{QStringLiteral("table-recognition"),
-                                        QStringLiteral("barcode-recognition"),
-                                        QStringLiteral("latex-recognition"),
-                                        QStringLiteral("convert-to-markdown"),
-                                        QStringLiteral("convert-to-html")},
-            "recognition popover follows the configured stack from bottom to top");
+    require(
+        popoverItems ==
+            QStringList{QStringLiteral("table-recognition"), QStringLiteral("document-recognition"),
+                        QStringLiteral("barcode-recognition"), QStringLiteral("latex-recognition"),
+                        QStringLiteral("convert-to-markdown"), QStringLiteral("convert-to-html")},
+        "recognition popover follows the configured stack from bottom to top");
     for (auto* button : {markdownSource, markdown, htmlSource, html}) {
         const auto key = adqt::icons::describeIcon(button->iconRef()).key;
         require(key.pack == QStringLiteral("snow-shot") &&
@@ -7928,14 +7952,11 @@ void imageConversionToolsExposeRecognitionActions() {
     }
     int markdownRequests = 0;
     int htmlRequests = 0;
-    int settingsRequests = 0;
     QStringList modelChanges;
     QObject::connect(&palette, &ScreenshotToolPalette::markdownRequested, &palette,
                      [&]() { ++markdownRequests; });
     QObject::connect(&palette, &ScreenshotToolPalette::htmlRequested, &palette,
                      [&]() { ++htmlRequests; });
-    QObject::connect(&palette, &ScreenshotToolPalette::imageConversionSettingsRequested, &palette,
-                     [&]() { ++settingsRequests; });
     QObject::connect(&palette, &ScreenshotToolPalette::recognitionModelChanged, &palette,
                      [&](const QString& model) { modelChanges.append(model); });
     const QString builtIn = QStringLiteral("vision-a");
@@ -7969,9 +7990,9 @@ void imageConversionToolsExposeRecognitionActions() {
             "Markdown activates its own recognition tool");
     palette.setQrEnabled(true);
     palette.setTableEnabled(true);
-    auto* settings = palette.findChild<adqt::widgets::AdButton*>(
-        QStringLiteral("screenshotImageConversionSettingsButton"));
-    require(settings && !settings->isHidden(), "conversion activation exposes Settings");
+    require(!palette.findChild<adqt::widgets::AdButton*>(
+                QStringLiteral("screenshotImageConversionSettingsButton")),
+            "Markdown omits the conversion settings button");
     auto* modelSelect =
         palette.findChild<AdSelect*>(QStringLiteral("screenshotRecognitionModelSelect"));
     require(modelSelect && !modelSelect->isHidden() && modelSelect->searchEnabled() &&
@@ -7981,22 +8002,19 @@ void imageConversionToolsExposeRecognitionActions() {
     modelSelect->setCurrentValue(custom);
     require(modelChanges == QStringList{custom}, "Markdown routes the selected vision model");
     for (auto* button : palette.actionPanel()->findChildren<adqt::widgets::AdButton*>()) {
-        require(button == settings ||
-                    button->objectName() == QStringLiteral("screenshotShowOriginalImageButton") ||
+        require(button->objectName() == QStringLiteral("screenshotShowOriginalImageButton") ||
                     button->isHidden(),
-                "conversion sub-toolbar contains original-image toggle and Settings");
+                "the original-image toggle is the only button in the conversion sub-toolbar");
     }
-    settings->click();
-    require(settingsRequests == 1, "Settings routes to conversion settings");
     reopenConversionOptions();
     palette.setImageConversionBusy(true, false);
-    require(
-        markdown->busy() && group->busy() && !html->busy() && settings->isEnabled(),
-        "the group and active option show busy while Settings and other formats remain available");
+    require(markdown->busy() && group->busy() && !html->busy() && modelSelect->isEnabled(),
+            "the group and active option show busy while the model select remains available");
     html->click();
     require(htmlRequests == 1 && palette.activeTool() == ScreenshotToolPalette::Tool::Html &&
-                !settings->isHidden() && !group->busy() &&
-                group->accessibleName() == QStringLiteral("Convert to HTML") &&
+                !palette.findChild<adqt::widgets::AdButton*>(
+                    QStringLiteral("screenshotImageConversionSettingsButton")) &&
+                !group->busy() && group->accessibleName() == QStringLiteral("Convert to HTML") &&
                 adqt::icons::describeIcon(group->iconRef()).key.name == QStringLiteral("html"),
             "HTML switches format and retains the conversion sub-toolbar");
     require(!modelSelect->isHidden() && modelSelect->currentValue().toString() == custom &&
@@ -8014,26 +8032,20 @@ void imageConversionToolsExposeRecognitionActions() {
     latex->click();
     require(latexRequests == 1 && palette.activeTool() == ScreenshotToolPalette::Tool::Latex,
             "LaTeX activates through the recognition popup");
-    settings = palette.findChild<adqt::widgets::AdButton*>(
-        QStringLiteral("screenshotImageConversionSettingsButton"));
-    require(!settings || settings->isHidden(), "LaTeX has no conversion settings");
     auto* original = palette.findChild<adqt::widgets::AdButton*>(
         QStringLiteral("screenshotShowOriginalImageButton"));
     require(original && !original->isHidden(), "LaTeX retains QR's original image toggle");
     auto* latexModelSelect =
         palette.findChild<AdSelect*>(QStringLiteral("screenshotRecognitionModelSelect"));
-    require(latexModelSelect && latexModelSelect->options().size() == 1 &&
-                latexModelSelect->options().first().value ==
-                    screenshotDedicatedRecognitionModelId(),
-            "LaTeX keeps its own dedicated model when leaving image conversion");
+    require(latexModelSelect && latexModelSelect->options().size() == 2 &&
+                !latexModelSelect->currentValue().isValid() &&
+                latexModelSelect->placeholder() == QStringLiteral("Snow Shot visual understanding"),
+            "LaTeX keeps its own default vision model when leaving image conversion");
     palette.setLatexState(true, true);
     require(group->busy(), "LaTeX progress reaches the group button");
     palette.setLatexState(true, false);
     reopenConversionOptions();
     html->click();
-    settings = palette.findChild<adqt::widgets::AdButton*>(
-        QStringLiteral("screenshotImageConversionSettingsButton"));
-    require(settings != nullptr, "returning to HTML recreates conversion settings");
     modelSelect = palette.findChild<AdSelect*>(QStringLiteral("screenshotRecognitionModelSelect"));
     require(modelSelect && modelSelect->currentValue().toString() == builtIn &&
                 modelChanges == QStringList{custom, builtIn},
@@ -8073,8 +8085,7 @@ void imageConversionToolsExposeRecognitionActions() {
             "original-image button retranslates to Simplified Chinese");
     require(markdown->accessibleName() == QStringLiteral("转换为 Markdown") &&
                 html->accessibleName() == QStringLiteral("转换为 HTML") &&
-                group->accessibleName() == QStringLiteral("转换为 HTML") &&
-                settings->toolTip() == QStringLiteral("设置"),
+                group->accessibleName() == QStringLiteral("转换为 HTML"),
             "conversion buttons retranslate to Simplified Chinese");
     require(language.setLanguage(QStringLiteral("zh_TW")),
             "load Traditional Chinese toolbar labels");
@@ -8085,8 +8096,7 @@ void imageConversionToolsExposeRecognitionActions() {
             "original-image button retranslates to Traditional Chinese");
     require(markdown->accessibleName() == QStringLiteral("轉換為 Markdown") &&
                 html->accessibleName() == QStringLiteral("轉換為 HTML") &&
-                group->accessibleName() == QStringLiteral("轉換為 HTML") &&
-                settings->toolTip() == QStringLiteral("設定"),
+                group->accessibleName() == QStringLiteral("轉換為 HTML"),
             "conversion buttons retranslate to Traditional Chinese");
     require(language.setLanguage(QStringLiteral("en_US")), "restore English toolbar labels");
     QCoreApplication::processEvents();
@@ -8098,9 +8108,6 @@ void imageConversionToolsExposeRecognitionActions() {
     group->click();
     require(htmlRequests == 3 && palette.activeTool() == ScreenshotToolPalette::Tool::Html,
             "the group trigger remembers and reactivates the selected conversion format");
-    settings = palette.findChild<adqt::widgets::AdButton*>(
-        QStringLiteral("screenshotImageConversionSettingsButton"));
-    const QPointer<adqt::widgets::AdButton> settingsGuard(settings);
     reopenConversionOptions();
     palette.setLatexState(false, false);
     palette.setImageConversionEnabled(false);
@@ -8117,8 +8124,6 @@ void imageConversionToolsExposeRecognitionActions() {
     require(
         palette.activeTool() == ScreenshotToolPalette::Tool::Qr,
         "the recognition group can switch back to barcode after conversion becomes unavailable");
-    require(settingsGuard == nullptr || settingsGuard->isHidden(),
-            "leaving conversion removes its Settings control");
 }
 
 void ocrToolReplacesSelectionActionToolbarContents() {
@@ -9354,6 +9359,115 @@ void lineToolIsDiscoverableSelectableAndUsesLinearStyleControls() {
             "the canvas should accept the distinct Line tool identity");
     require(canvas.canvasTool() == SnowCanvasTool::Line,
             "the canvas should retain Line while using shared linear geometry");
+}
+
+void annotationShortcutCyclesPrimaryOptions() {
+    using Tool = ScreenshotToolPalette::Tool;
+    using Group = adqt::widgets::AdRadioButtonGroup;
+    const auto& shortcut = snow_shot::shortcuts::kCycleAnnotationToolOptions;
+    ScreenshotToolPalette palette(ScreenshotToolPalette::Options{});
+    const auto buttonWithLabel = [&](const char* label) -> QAbstractButton* {
+        const auto groups =
+            palette.findChildren<Group*>(QStringLiteral("screenshotAnnotationOptionGroup"));
+        for (const auto* group : groups) {
+            for (auto* button : group->buttons()) {
+                if (tooltipMatches(button->toolTip(), QString::fromUtf8(label)))
+                    return button;
+            }
+        }
+        return nullptr;
+    };
+    std::optional<SnowCanvasTool> requested;
+    snow_shot::presentation::bindScreenshotCanvasToolRequests(
+        palette, palette, [&](SnowCanvasTool tool) { requested = tool; });
+    struct OptionCycle {
+        Tool tool;
+        QList<const char*> labels;
+        QList<SnowCanvasTool> canvasTools;
+    };
+    const OptionCycle cycles[] = {
+        {Tool::Shape, {"Rectangle", "Ellipse", "Diamond"}, {}},
+        {Tool::Arrow, {"Straight arrow", "Curved arrow", "Elbow arrow"}, {}},
+        {Tool::Line, {"Straight line", "Curved line"}, {}},
+        {Tool::Angle, {"360° angle", "180° angle"}, {}},
+        {Tool::Brush, {"Regular brush", "Pressure-sensitive brush"}, {}},
+        {Tool::BrushHighlight,
+         {"Brush highlight", "Rectangle highlight"},
+         {SnowCanvasTool::PenHighlight, SnowCanvasTool::RectangleHighlight}},
+        {Tool::Spotlight, {"Rectangle", "Ellipse", "Diamond"}, {}},
+        {Tool::Magnifier, {"Rectangle", "Ellipse", "Diamond"}, {}},
+        {Tool::SequenceNumber,
+         {"Outlined circle", "Solid circle", "Outlined square", "Solid square", "Circle"},
+         {}},
+        {Tool::SpeechBubble, {"Rectangle", "Ellipse", "Diamond", "Thought bubble"}, {}},
+        {Tool::BrushFilter,
+         {"Brush filter", "Rectangle filter", "Auto filter"},
+         {SnowCanvasTool::PenFilter, SnowCanvasTool::RectangleFilter, SnowCanvasTool::AutoFilter}},
+        {Tool::Eraser,
+         {"Element eraser", "Rectangle eraser", "Brush eraser"},
+         {SnowCanvasTool::Eraser, SnowCanvasTool::RectangleEraser, SnowCanvasTool::BrushEraser}},
+    };
+    for (const auto& cycle : cycles) {
+        palette.setActiveTool(cycle.tool);
+        auto* first = buttonWithLabel(cycle.labels.first());
+        require(first != nullptr, cycle.labels.first());
+        first->click();
+        for (qsizetype step = 1; step <= cycle.labels.size(); ++step) {
+            requested.reset();
+            require(palette.canActivateDrawingShortcut(shortcut) &&
+                        palette.activateDrawingShortcut(shortcut),
+                    cycle.labels.first());
+            const qsizetype index = step % cycle.labels.size();
+            auto* selected = buttonWithLabel(cycle.labels.at(index));
+            require(selected && selected->isChecked(), cycle.labels.at(index));
+            require(cycle.canvasTools.isEmpty() ? !requested
+                                                : requested == cycle.canvasTools.at(index),
+                    "option cycling must dispatch the same canvas command as clicking");
+        }
+    }
+
+    palette.setActiveTool(Tool::Shape);
+    auto* ellipse = buttonWithLabel("Ellipse");
+    require(ellipse != nullptr, "Shape must expose the Ellipse option");
+    ellipse->setEnabled(false);
+    require(palette.activateDrawingShortcut(shortcut) &&
+                palette.creationStyleDefaults().rectangle.shape ==
+                    SnowCanvasRectangleShape::Diamond,
+            "cycling Shape must skip a disabled option and update its creation style");
+
+    palette.setActiveTool(Tool::Distance);
+    using Unit = SnowCanvasDistanceUnit;
+    auto* unitsRow =
+        palette.findChild<QWidget*>(QStringLiteral("screenshotDistanceUnitButtonGroup"));
+    auto* units = unitsRow ? unitsRow->findChild<Group*>() : nullptr;
+    require(units && units->button(static_cast<int>(Unit::Mm)), "distance units are available");
+    units->button(static_cast<int>(Unit::Mm))->click();
+    for (const auto unit : {Unit::Cm, Unit::M, Unit::Km, Unit::Px, Unit::Pt, Unit::In, Unit::Ft,
+                            Unit::Um, Unit::Mm}) {
+        require(palette.activateDrawingShortcut(shortcut) &&
+                    palette.creationStyleDefaults().distance.unit == unit,
+                "distance cycling must include every real unit and wrap");
+    }
+    require(!units->button(static_cast<int>(Unit::Mm))->isHidden() &&
+                units->checkedId() == static_cast<int>(Unit::Mm),
+            "distance cycling synchronizes the visible unit selector");
+
+    palette.setActiveTool(Tool::Brush);
+    SnowCanvasStyleToolbarState mixed;
+    mixed.source = SnowCanvasStyleToolbarSource::SelectedFreeDraw;
+    mixed.shapeStyleMixed = SnowCanvasShapeStyleMixedBrushMode;
+    palette.setStyleToolbarState(mixed);
+    require(palette.activateDrawingShortcut(shortcut) &&
+                buttonWithLabel("Regular brush")->isChecked(),
+            "cycling a mixed selection must begin at the first option");
+    palette.setStyleToolbarVisible(false);
+    require(!palette.canActivateDrawingShortcut(shortcut) &&
+                !palette.activateDrawingShortcut(shortcut),
+            "cycling is inapplicable when the style toolbar is hidden");
+    palette.setActiveTool(Tool::Text);
+    require(!palette.canActivateDrawingShortcut(shortcut) &&
+                !palette.activateDrawingShortcut(shortcut),
+            "unsupported tools must leave the shortcut unhandled");
 }
 
 void pressureBrushToolbarPreservesStylesAndMixedSelection() {
@@ -11190,10 +11304,10 @@ void watermarkEditsCommitCompleteConfigsAndClampWheel() {
 void watermarkTemplateLibraryAndEditorApplySnapshotsDeterministically() {
     const snow_shot::storage::WatermarkTemplateSettings templateSettings;
     require(templateSettings.setTemplates({
-                {QStringLiteral("Duplicate"), QStringLiteral("{text}-{YYYY}")},
+                {QStringLiteral("Duplicate"), QStringLiteral("{text}-{MM}")},
                 {QStringLiteral("Duplicate"), QStringLiteral("{text}-{YYYY}")},
             }),
-            "watermark-template fixture should persist duplicate rows");
+            "watermark-template fixture should persist duplicate names");
 
     int clockCalls = 0;
     ScreenshotToolPalette::Options options;
@@ -11368,7 +11482,7 @@ void watermarkTemplateLibraryAndEditorApplySnapshotsDeterministically() {
     require(nameItem != nullptr && valueItem != nullptr,
             "Add template should expose its named form items");
     require(createModal->mode() == adqt::widgets::AdModal::Mode::Window &&
-                createModal->windowModality() == Qt::ApplicationModal && createModal->centered() &&
+                createModal->windowModality() == Qt::WindowModal && createModal->centered() &&
                 createModal->ownerWindow() == &selectionDisplayOverlay &&
                 createModal->windowTitle() == QStringLiteral("Add template") &&
                 createModal->acceptButton()->text() == QStringLiteral("Add") &&
@@ -11440,16 +11554,16 @@ void watermarkTemplateLibraryAndEditorApplySnapshotsDeterministically() {
     select->showPopup();
     QCoreApplication::processEvents();
     QListView* view = select->view();
-    QModelIndex firstDuplicate;
+    QModelIndex secondDuplicate;
     for (int row = 0; view != nullptr && row < view->model()->rowCount(); ++row) {
         const QModelIndex candidate = view->model()->index(row, 0);
-        if (candidate.data(Qt::UserRole).toString() == QStringLiteral("watermark-template:0")) {
-            firstDuplicate = candidate;
+        if (candidate.data(Qt::UserRole).toString() == QStringLiteral("watermark-template:1")) {
+            secondDuplicate = candidate;
             break;
         }
     }
-    require(firstDuplicate.isValid(), "the first duplicate template should have a popup row");
-    const QRect rowRect = view->visualRect(firstDuplicate);
+    require(secondDuplicate.isValid(), "the second duplicate template should have a popup row");
+    const QRect rowRect = view->visualRect(secondDuplicate);
     const QPoint deletePoint(rowRect.right() - 15, rowRect.center().y());
     const auto sendMouse = [view](QEvent::Type type, const QPoint& point, Qt::MouseButton button,
                                   Qt::MouseButtons buttons) {
@@ -11462,14 +11576,14 @@ void watermarkTemplateLibraryAndEditorApplySnapshotsDeterministically() {
     sendMouse(QEvent::MouseButtonRelease, deletePoint, Qt::LeftButton, Qt::NoButton);
     QCoreApplication::processEvents();
 
-    auto* deleteModal = palette.findChild<adqt::widgets::AdModal*>(
+    QPointer<adqt::widgets::AdModal> deleteModal = palette.findChild<adqt::widgets::AdModal*>(
         QStringLiteral("screenshotWatermarkTemplateDeleteModal"));
     const SnowCanvasWatermarkConfig beforeDelete = applied;
     require(deleteModal && deleteModal->ownerWindow() == &selectionDisplayOverlay,
             "watermark deletion must use the same display owner as creation");
     require(deleteModal != nullptr && deleteModal->isOpen() &&
                 deleteModal->mode() == adqt::widgets::AdModal::Mode::Window &&
-                deleteModal->windowModality() == Qt::ApplicationModal &&
+                deleteModal->windowModality() == Qt::WindowModal &&
                 deleteModal->windowTitle() == QStringLiteral("Delete template") &&
                 deleteModal->text() ==
                     QStringLiteral("Delete template \"Duplicate\"? This action cannot be undone") &&
@@ -11489,13 +11603,21 @@ void watermarkTemplateLibraryAndEditorApplySnapshotsDeterministically() {
     require(languageManager.setLanguage(QStringLiteral("en_US")),
             "English Delete template language restoration should succeed");
     QCoreApplication::processEvents();
+    const snow_shot::storage::WatermarkTemplate concurrent{QStringLiteral("Added elsewhere"),
+                                                           QStringLiteral("{text}-{hh}")};
+    auto updatedLibrary = templateSettings.templates();
+    updatedLibrary.removeFirst();
+    updatedLibrary.append(concurrent);
+    require(templateSettings.setTemplates(updatedLibrary),
+            "another window can remove a preceding row and add a new template");
     deleteModal->acceptButton()->click();
     QCoreApplication::processEvents();
     const QVector<snow_shot::storage::WatermarkTemplate> afterDelete = templateSettings.templates();
-    require(afterDelete.size() == 2 && afterDelete.at(0).name == QStringLiteral("Duplicate") &&
-                afterDelete.at(1).name == QStringLiteral("Added") && commits == 4 &&
-                applied == beforeDelete,
-            "deleting a duplicate row should remove only that index and leave the snapshot intact");
+    require((!deleteModal || !deleteModal->isOpen()) && afterDelete.size() == 2 &&
+                afterDelete.at(0).name == QStringLiteral("Added") &&
+                afterDelete.at(1) == concurrent && commits == 4 && applied == beforeDelete,
+            "deletion follows the confirmed template after its index shifts and preserves other "
+            "windows' changes");
 
     require(templateSettings.setTemplates({}), "empty watermark-template library should persist");
     select->hidePopup();
@@ -18300,6 +18422,7 @@ void tableQrEntrySelectionPersistsAcrossPaletteInstances() {
     options.enableStyleToolbar = false;
 
     {
+        hideDocumentForLegacyTableQrFixture(options);
         ScreenshotToolPalette palette(options);
         auto* tableQrTrigger =
             palette.findChild<adqt::widgets::AdButton*>(QStringLiteral("screenshotTableQrButton"));
@@ -20988,6 +21111,51 @@ void layoutCompactionToolbar() {
 
 void runScreenshotQuickTextAnnotationToolbarTests();
 
+void documentRecognitionToolbarContract() {
+    namespace layout = snow_shot::presentation::toolbar_layout;
+    using Kind = snow_shot::storage::ScreenshotToolbarLayoutKind;
+    const auto defaults = layout::defaultPositions(Kind::ActionTools);
+    const auto group =
+        layout::stackPresentation(defaults.first(), [](const QString&) { return true; });
+    require(group.popoverItemIds.mid(0, 3) == QStringList{QStringLiteral("table-recognition"),
+                                                          QStringLiteral("document-recognition"),
+                                                          QStringLiteral("barcode-recognition")},
+            "document default order");
+    auto legacy = snow_shot::storage::ScreenshotToolbarLayout{defaults, {}};
+    legacy.positions[0].removeAll(QStringLiteral("document-recognition"));
+    const auto migrated = layout::normalizedLayout(legacy, Kind::ActionTools);
+    require(migrated.positions == defaults, "previous default migrates without other changes");
+    ScreenshotToolPalette::Options options;
+    options.showTableTool = true;
+    options.showQrTool = true;
+    ScreenshotToolPalette palette(options);
+    ScreenshotRecognitionModelState state;
+    state.selection = screenshotDedicatedRecognitionModelId();
+    state.effectiveModel = QStringLiteral("glm-ocr");
+    palette.setRecognitionModelState(ScreenshotToolPalette::Tool::Document, state);
+    palette.setActiveTool(ScreenshotToolPalette::Tool::Document);
+    palette.show();
+    QApplication::processEvents();
+    const auto* select = palette.findChild<adqt::widgets::AdSelect*>(
+        QStringLiteral("screenshotRecognitionModelSelect"));
+    const auto* original = palette.findChild<adqt::widgets::AdButton*>(
+        QStringLiteral("screenshotShowOriginalImageButton"));
+    const auto* open = palette.findChild<adqt::widgets::AdButton*>(
+        QStringLiteral("screenshotOpenDocumentFileButton"));
+    require(select && original && open, "document subtoolbar materialized");
+    require(select->options().size() == 1 &&
+                select->options()[0].label == QStringLiteral("Document Recognition Model") &&
+                select->options()[0].group == QStringLiteral("Dedicated Models") &&
+                select->currentValue().toString() == screenshotDedicatedRecognitionModelId(),
+            "one selected dedicated model");
+    require(original->geometry().left() < select->geometry().left() &&
+                select->geometry().left() < open->geometry().left(),
+            "document subtoolbar order");
+    auto* tableOpen = palette.findChild<adqt::widgets::AdButton*>(
+        QStringLiteral("screenshotOpenSpreadsheetFileButton"));
+    require(!tableOpen || tableOpen->isHidden(), "spreadsheet action hidden in document mode");
+}
+
 int main(int argc, char** argv) {
     QApplication application(argc, argv);
     QTemporaryDir storageDirectory;
@@ -21035,6 +21203,10 @@ int main(int argc, char** argv) {
 #endif
     if (application.arguments().contains(QStringLiteral("--quick-text-annotation-only"))) {
         runScreenshotQuickTextAnnotationToolbarTests();
+        return 0;
+    }
+    if (application.arguments().contains(QStringLiteral("--annotation-option-cycle-only"))) {
+        annotationShortcutCyclesPrimaryOptions();
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--custom-color-presets-only"))) {
@@ -21368,6 +21540,10 @@ int main(int argc, char** argv) {
     if (application.arguments().contains(QStringLiteral("--latex-only"))) {
         latexHistoryActionsUseFormulaHistory();
         recognitionModelSelectorGroupsOptionsAndRetainsIndependentSelections();
+        return 0;
+    }
+    if (application.arguments().contains(QStringLiteral("--document-only"))) {
+        documentRecognitionToolbarContract();
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--recognition-model-only"))) {

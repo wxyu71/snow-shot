@@ -726,10 +726,6 @@
     <context>
         <name>LoginItemService</name>
         <message>
-            <source>%1 needs a valid code signature to use launch at login. Reinstall the signed app</source>
-            <translation>%1 needs a valid code signature to use launch at login. Reinstall the signed app</translation>
-        </message>
-        <message>
             <source>A launch-at-login change is already in progress</source>
             <translation>A launch-at-login change is already in progress</translation>
         </message>
@@ -742,24 +738,8 @@
             <translation>Could not change launch at login: %1</translation>
         </message>
         <message>
-            <source>Could not save launch-at-login initialization. Registration was not changed</source>
-            <translation>Could not save launch-at-login initialization. Registration was not changed</translation>
-        </message>
-        <message>
             <source>Could not save the launch-at-login preference. The displayed macOS status is still current</source>
             <translation>Could not save the launch-at-login preference. The displayed macOS status is still current</translation>
-        </message>
-        <message>
-            <source>Move the signed %1 app to /Applications or ~/Applications to use launch at login</source>
-            <translation>Move the signed %1 app to /Applications or ~/Applications to use launch at login</translation>
-        </message>
-        <message>
-            <source>Move the signed Snow Shot app to /Applications or ~/Applications to use launch at login</source>
-            <translation>Move the signed Snow Shot app to /Applications or ~/Applications to use launch at login</translation>
-        </message>
-        <message>
-            <source>Snow Shot needs a valid code signature to use launch at login. Reinstall the signed app</source>
-            <translation>Snow Shot needs a valid code signature to use launch at login. Reinstall the signed app</translation>
         </message>
         <message>
             <source>macOS did not apply the launch-at-login change. Check Login Items in System Settings</source>
@@ -1016,6 +996,10 @@
             <translation>Convert to Markdown</translation>
         </message>
         <message>
+            <source>Document recognition</source>
+            <translation>Document recognition</translation>
+        </message>
+        <message>
             <source>Drag tools here to hide them from the screenshot toolbar</source>
             <translation>Drag tools here to hide them from the screenshot toolbar</translation>
         </message>
@@ -1235,6 +1219,10 @@
             <translation>Active window</translation>
         </message>
         <message>
+            <source>Adaptive guide colors</source>
+            <translation>Adaptive guide colors</translation>
+        </message>
+        <message>
             <source>Add a mask to highlight text recognition results</source>
             <translation>Add a mask to highlight text recognition results</translation>
         </message>
@@ -1289,10 +1277,6 @@
         <message>
             <source>Allow resizing the selection from its borders while non-move tools are active</source>
             <translation>Allow resizing the selection from its borders while non-move tools are active</translation>
-        </message>
-        <message>
-            <source>Also copy the screenshot to the clipboard when pinning it to screen</source>
-            <translation>Also copy the screenshot to the clipboard when pinning it to screen</translation>
         </message>
         <message>
             <source>Always</source>
@@ -1399,6 +1383,18 @@
             <translation>Applies to all three skins. Overlay fills each surface and crops the edges. Contain shows the whole image</translation>
         </message>
         <message>
+            <source>Applies to pins created from the screenshot window</source>
+            <translation>Applies to pins created from the screenshot window</translation>
+        </message>
+        <message>
+            <source>Applies to standard, scrolling, monitor, and focused-window captures</source>
+            <translation>Applies to standard, scrolling, monitor, and focused-window captures</translation>
+        </message>
+        <message>
+            <source>Applies when Copy current view copies an image</source>
+            <translation>Applies when Copy current view copies an image</translation>
+        </message>
+        <message>
             <source>Apply to recognized text when editing or copying</source>
             <translation>Apply to recognized text when editing or copying</translation>
         </message>
@@ -1447,8 +1443,8 @@
             <translation>Auto-recognize QR code</translation>
         </message>
         <message>
-            <source>Auto-save after execution</source>
-            <translation>Auto-save after execution</translation>
+            <source>Auto-save</source>
+            <translation>Auto-save</translation>
         </message>
         <message>
             <source>Auto-save image filename format</source>
@@ -1461,6 +1457,10 @@
         <message>
             <source>Automatic disabling</source>
             <translation>Automatic disabling</translation>
+        </message>
+        <message>
+            <source>Automatic disabling in fullscreen windows</source>
+            <translation>Automatic disabling in fullscreen windows</translation>
         </message>
         <message>
             <source>Automatic text recognition</source>
@@ -1485,6 +1485,10 @@
         <message>
             <source>Automatically select newly created elements</source>
             <translation>Automatically select newly created elements</translation>
+        </message>
+        <message>
+            <source>Automatically start Snow Shot in the background when you log in to your Mac</source>
+            <translation>Automatically start Snow Shot in the background when you log in to your Mac</translation>
         </message>
         <message>
             <source>Autostart</source>
@@ -1671,10 +1675,6 @@
             <translation>Check automatically</translation>
         </message>
         <message>
-            <source>Check for new versions on GitHub and Gitee</source>
-            <translation>Check for new versions on GitHub and Gitee</translation>
-        </message>
-        <message>
             <source>Child elements</source>
             <translation>Child elements</translation>
         </message>
@@ -1689,6 +1689,10 @@
         <message>
             <source>Choose automatic window or window sub-element selection, or select manually</source>
             <translation>Choose automatic window or window sub-element selection, or select manually</translation>
+        </message>
+        <message>
+            <source>Choose how Windows throttles the application's execution speed</source>
+            <translation>Choose how Windows throttles the application's execution speed</translation>
         </message>
         <message>
             <source>Choose how much execution time the application receives</source>
@@ -1835,6 +1839,10 @@
             <translation>Choose what happens automatically when text recognition completes</translation>
         </message>
         <message>
+            <source>Choose what happens when content is dropped on the floating toolbar</source>
+            <translation>Choose what happens when content is dropped on the floating toolbar</translation>
+        </message>
+        <message>
             <source>Choose what happens when the clipboard content or selected file is already pinned</source>
             <translation>Choose what happens when the clipboard content or selected file is already pinned</translation>
         </message>
@@ -1851,6 +1859,10 @@
             <translation>Choose when recognized text can be selected on pinned screenshots</translation>
         </message>
         <message>
+            <source>Choose when to play the shutter sound</source>
+            <translation>Choose when to play the shutter sound</translation>
+        </message>
+        <message>
             <source>Choose where images are written for automatic save and copy-file actions</source>
             <translation>Choose where images are written for automatic save and copy-file actions</translation>
         </message>
@@ -1859,12 +1871,20 @@
             <translation>Choose where recording output files are written</translation>
         </message>
         <message>
-            <source>Choose which actions also save an image in the selected image format and save directory</source>
-            <translation>Choose which actions also save an image in the selected image format and save directory</translation>
+            <source>Choose whether to keep editable screenshot sessions, only final images, or no new history</source>
+            <translation>Choose whether to keep editable screenshot sessions, only final images, or no new history</translation>
         </message>
         <message>
-            <source>Choose which fullscreen windows automatically disable global shortcuts</source>
-            <translation>Choose which fullscreen windows automatically disable global shortcuts</translation>
+            <source>Choose which fullscreen windows trigger automatic disabling</source>
+            <translation>Choose which fullscreen windows trigger automatic disabling</translation>
+        </message>
+        <message>
+            <source>Choose which inputs to disable</source>
+            <translation>Choose which inputs to disable</translation>
+        </message>
+        <message>
+            <source>Choose which tasks run after a successful image export</source>
+            <translation>Choose which tasks run after a successful image export</translation>
         </message>
         <message>
             <source>Clear</source>
@@ -1931,6 +1951,10 @@
             <translation>Color picker display mode</translation>
         </message>
         <message>
+            <source>Compress selected images</source>
+            <translation>Compress selected images</translation>
+        </message>
+        <message>
             <source>Compression level</source>
             <translation>Compression level</translation>
         </message>
@@ -1995,10 +2019,6 @@
             <translation>Copy</translation>
         </message>
         <message>
-            <source>Copy after pinning to screen</source>
-            <translation>Copy after pinning to screen</translation>
-        </message>
-        <message>
             <source>Copy after text recognition</source>
             <translation>Copy after text recognition</translation>
         </message>
@@ -2019,12 +2039,8 @@
             <translation>Copy color</translation>
         </message>
         <message>
-            <source>Copy current monitor</source>
-            <translation>Copy current monitor</translation>
-        </message>
-        <message>
-            <source>Copy focused window</source>
-            <translation>Copy focused window</translation>
+            <source>Copy file</source>
+            <translation>Copy file</translation>
         </message>
         <message>
             <source>Copy image file to clipboard</source>
@@ -2035,20 +2051,12 @@
             <translation>Copy original content</translation>
         </message>
         <message>
-            <source>Copy pinned window</source>
-            <translation>Copy pinned window</translation>
-        </message>
-        <message>
             <source>Copy recording</source>
             <translation>Copy recording</translation>
         </message>
         <message>
             <source>Copy screenshot</source>
             <translation>Copy screenshot</translation>
-        </message>
-        <message>
-            <source>Copy scrolling screenshot</source>
-            <translation>Copy scrolling screenshot</translation>
         </message>
         <message>
             <source>Copy text</source>
@@ -2165,6 +2173,10 @@
         <message>
             <source>Customize the screenshot action toolbar</source>
             <translation>Customize the screenshot action toolbar</translation>
+        </message>
+        <message>
+            <source>Cycle annotation tool options</source>
+            <translation>Cycle annotation tool options</translation>
         </message>
         <message>
             <source>DXGI</source>
@@ -2287,12 +2299,20 @@
             <translation>Diagnostics</translation>
         </message>
         <message>
+            <source>Disable global mouse</source>
+            <translation>Disable global mouse</translation>
+        </message>
+        <message>
             <source>Disable global shortcuts</source>
             <translation>Disable global shortcuts</translation>
         </message>
         <message>
-            <source>Disable shortcuts in fullscreen windows</source>
-            <translation>Disable shortcuts in fullscreen windows</translation>
+            <source>Disable scope</source>
+            <translation>Disable scope</translation>
+        </message>
+        <message>
+            <source>Disable/enable global mouse</source>
+            <translation>Disable/enable global mouse</translation>
         </message>
         <message>
             <source>Disable/enable global shortcuts</source>
@@ -2495,6 +2515,10 @@
             <translation>Export settings</translation>
         </message>
         <message>
+            <source>Export tasks</source>
+            <translation>Export tasks</translation>
+        </message>
+        <message>
             <source>Extended features settings</source>
             <translation>Extended features settings</translation>
         </message>
@@ -2559,6 +2583,10 @@
             <translation>Focused window</translation>
         </message>
         <message>
+            <source>Focused window and current display</source>
+            <translation>Focused window and current display</translation>
+        </message>
+        <message>
             <source>Follow mouse movement</source>
             <translation>Follow mouse movement</translation>
         </message>
@@ -2585,6 +2613,10 @@
         <message>
             <source>Full-screen canvas (enable/disable click-through)</source>
             <translation>Full-screen canvas (enable/disable click-through)</translation>
+        </message>
+        <message>
+            <source>Fullscreen input settings</source>
+            <translation>Fullscreen input settings</translation>
         </message>
         <message>
             <source>Fullscreen suppression</source>
@@ -2637,10 +2669,6 @@
         <message>
             <source>Global mouse gestures</source>
             <translation>Global mouse gestures</translation>
-        </message>
-        <message>
-            <source>Global shortcut activation behavior</source>
-            <translation>Global shortcut activation behavior</translation>
         </message>
         <message>
             <source>Global shortcuts</source>
@@ -2727,12 +2755,12 @@
             <translation>Icon</translation>
         </message>
         <message>
-            <source>Ignore global shortcuts while a matching focused window occupies an entire monitor</source>
-            <translation>Ignore global shortcuts while a matching focused window occupies an entire monitor</translation>
-        </message>
-        <message>
             <source>Image and document files</source>
             <translation>Image and document files</translation>
+        </message>
+        <message>
+            <source>Image editing</source>
+            <translation>Image editing</translation>
         </message>
         <message>
             <source>Image export</source>
@@ -2769,6 +2797,14 @@
         <message>
             <source>Image size</source>
             <translation>Image size</translation>
+        </message>
+        <message>
+            <source>Image splitting</source>
+            <translation>Image splitting</translation>
+        </message>
+        <message>
+            <source>Image stitching</source>
+            <translation>Image stitching</translation>
         </message>
         <message>
             <source>Import</source>
@@ -2831,6 +2867,10 @@
             <translation>Interface settings</translation>
         </message>
         <message>
+            <source>Invert guide colors that are similar to their sampled background color</source>
+            <translation>Invert guide colors that are similar to their sampled background color</translation>
+        </message>
+        <message>
             <source>JPEG</source>
             <translation>JPEG</translation>
         </message>
@@ -2851,6 +2891,10 @@
             <translation>Keep closed windows available for restoration; disabling does not delete existing records</translation>
         </message>
         <message>
+            <source>Keep full history</source>
+            <translation>Keep full history</translation>
+        </message>
+        <message>
             <source>Keep group main buttons visible</source>
             <translation>Keep group main buttons visible</translation>
         </message>
@@ -2859,12 +2903,16 @@
             <translation>Keep records permanently</translation>
         </message>
         <message>
+            <source>Keep results only</source>
+            <translation>Keep results only</translation>
+        </message>
+        <message>
             <source>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</source>
             <translation>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</translation>
         </message>
         <message>
-            <source>Keep screenshots available after the application closes</source>
-            <translation>Keep screenshots available after the application closes</translation>
+            <source>Keep selection width and height consistent</source>
+            <translation>Keep selection width and height consistent</translation>
         </message>
         <message>
             <source>Keep the Snow Shot save dialog open after saving to show the result</source>
@@ -3009,14 +3057,6 @@
         <message>
             <source>Main interface skin position</source>
             <translation>Main interface skin position</translation>
-        </message>
-        <message>
-            <source>Maintain selection aspect ratio</source>
-            <translation>Maintain selection aspect ratio</translation>
-        </message>
-        <message>
-            <source>Manage Snow Shot's login permission in macOS System Settings</source>
-            <translation>Manage Snow Shot's login permission in macOS System Settings</translation>
         </message>
         <message>
             <source>Manage macOS permissions for Snow Shot</source>
@@ -3200,6 +3240,10 @@
             <translation>Normal</translation>
         </message>
         <message>
+            <source>Normal screenshot</source>
+            <translation>Normal screenshot</translation>
+        </message>
+        <message>
             <source>Notify after export completes</source>
             <translation>Notify after export completes</translation>
         </message>
@@ -3224,16 +3268,16 @@
             <translation>Only when displayed</translation>
         </message>
         <message>
-            <source>Open</source>
-            <translation>Open</translation>
-        </message>
-        <message>
-            <source>Open Login Items settings</source>
-            <translation>Open Login Items settings</translation>
-        </message>
-        <message>
             <source>Open a canvas on the current display or toggle click-through</source>
             <translation>Open a canvas on the current display or toggle click-through</translation>
+        </message>
+        <message>
+            <source>Open at login</source>
+            <translation>Open at login</translation>
+        </message>
+        <message>
+            <source>Open image compression for each selected image file, or an empty window if no images are selected</source>
+            <translation>Open image compression for each selected image file, or an empty window if no images are selected</translation>
         </message>
         <message>
             <source>Open image editing for each selected image file, or an empty window if no images are selected</source>
@@ -3320,6 +3364,18 @@
             <translation>Pages</translation>
         </message>
         <message>
+            <source>Pause or resume configured global mouse gestures</source>
+            <translation>Pause or resume configured global mouse gestures</translation>
+        </message>
+        <message>
+            <source>Pause the selected inputs while a matching focused window occupies an entire monitor</source>
+            <translation>Pause the selected inputs while a matching focused window occupies an entire monitor</translation>
+        </message>
+        <message>
+            <source>Performance</source>
+            <translation>Performance</translation>
+        </message>
+        <message>
             <source>Permanently remove all saved screenshots</source>
             <translation>Permanently remove all saved screenshots</translation>
         </message>
@@ -3332,20 +3388,12 @@
             <translation>Permission status and access</translation>
         </message>
         <message>
-            <source>Persistent screenshot history</source>
-            <translation>Persistent screenshot history</translation>
-        </message>
-        <message>
             <source>Pin clipboard content to screen</source>
             <translation>Pin clipboard content to screen</translation>
         </message>
         <message>
             <source>Pin images, supported files, formatted text, or HTML from the clipboard to the screen</source>
             <translation>Pin images, supported files, formatted text, or HTML from the clipboard to the screen</translation>
-        </message>
-        <message>
-            <source>Pin screenshot to screen</source>
-            <translation>Pin screenshot to screen</translation>
         </message>
         <message>
             <source>Pin selected files to screen</source>
@@ -3444,20 +3492,20 @@
             <translation>Play / pause</translation>
         </message>
         <message>
-            <source>Play a shutter sound when capturing the focused window or current display</source>
-            <translation>Play a shutter sound when capturing the focused window or current display</translation>
-        </message>
-        <message>
-            <source>Play a shutter sound when screenshot capture starts</source>
-            <translation>Play a shutter sound when screenshot capture starts</translation>
-        </message>
-        <message>
             <source>Play saved GIF, APNG, and WebP recordings repeatedly</source>
             <translation>Play saved GIF, APNG, and WebP recordings repeatedly</translation>
         </message>
         <message>
             <source>Portrait A4</source>
             <translation>Portrait A4</translation>
+        </message>
+        <message>
+            <source>Power QoS</source>
+            <translation>Power QoS</translation>
+        </message>
+        <message>
+            <source>Power saving</source>
+            <translation>Power saving</translation>
         </message>
         <message>
             <source>Preload the selected model for faster recognition. Requires a resident process and uses additional memory</source>
@@ -3740,6 +3788,10 @@
             <translation>Retain closed windows</translation>
         </message>
         <message>
+            <source>Retain screenshot history</source>
+            <translation>Retain screenshot history</translation>
+        </message>
+        <message>
             <source>Retention limits apply only to closed windows; retained windows are always protected</source>
             <translation>Retention limits apply only to closed windows; retained windows are always protected</translation>
         </message>
@@ -3762,6 +3814,70 @@
         <message>
             <source>Run after %1 seconds</source>
             <translation>Run after %1 seconds</translation>
+        </message>
+        <message>
+            <source>Run after copying a pinned window</source>
+            <translation>Run after copying a pinned window</translation>
+        </message>
+        <message>
+            <source>Run after copying a screenshot</source>
+            <translation>Run after copying a screenshot</translation>
+        </message>
+        <message>
+            <source>Run after pinning a screenshot to the screen</source>
+            <translation>Run after pinning a screenshot to the screen</translation>
+        </message>
+        <message>
+            <source>Run after printing a pinned window</source>
+            <translation>Run after printing a pinned window</translation>
+        </message>
+        <message>
+            <source>Run after printing a screenshot</source>
+            <translation>Run after printing a screenshot</translation>
+        </message>
+        <message>
+            <source>Run after saving a pinned window</source>
+            <translation>Run after saving a pinned window</translation>
+        </message>
+        <message>
+            <source>Run after saving a screenshot</source>
+            <translation>Run after saving a screenshot</translation>
+        </message>
+        <message>
+            <source>Run after sharing a pinned window via AirDrop</source>
+            <translation>Run after sharing a pinned window via AirDrop</translation>
+        </message>
+        <message>
+            <source>Run after sharing a screenshot via AirDrop</source>
+            <translation>Run after sharing a screenshot via AirDrop</translation>
+        </message>
+        <message>
+            <source>Run after uploading a pinned window</source>
+            <translation>Run after uploading a pinned window</translation>
+        </message>
+        <message>
+            <source>Run after uploading a screenshot</source>
+            <translation>Run after uploading a screenshot</translation>
+        </message>
+        <message>
+            <source>Runs after a successful manual cloud upload</source>
+            <translation>Runs after a successful manual cloud upload</translation>
+        </message>
+        <message>
+            <source>Runs after each successful Quick save or Save as file</source>
+            <translation>Runs after each successful Quick save or Save as file</translation>
+        </message>
+        <message>
+            <source>Runs after each successful individual save</source>
+            <translation>Runs after each successful individual save</translation>
+        </message>
+        <message>
+            <source>Runs after the print job is submitted</source>
+            <translation>Runs after the print job is submitted</translation>
+        </message>
+        <message>
+            <source>Runs when AirDrop confirms sharing</source>
+            <translation>Runs when AirDrop confirms sharing</translation>
         </message>
         <message>
             <source>Save as file</source>
@@ -3952,10 +4068,6 @@
             <translation>Screenshot shortcuts and actions</translation>
         </message>
         <message>
-            <source>Screenshot sound notification</source>
-            <translation>Screenshot sound notification</translation>
-        </message>
-        <message>
             <source>Screenshot toolbar</source>
             <translation>Screenshot toolbar</translation>
         </message>
@@ -3998,6 +4110,10 @@
         <message>
             <source>Select skin image</source>
             <translation>Select skin image</translation>
+        </message>
+        <message>
+            <source>Select tasks</source>
+            <translation>Select tasks</translation>
         </message>
         <message>
             <source>Select the language used throughout the application</source>
@@ -4348,10 +4464,6 @@
             <translation>Smart control releases unused heap memory while the app is idle. Active captures and pinned images are kept</translation>
         </message>
         <message>
-            <source>Smart control trims resident memory while the app is idle. The next use may briefly take longer</source>
-            <translation>Smart control trims resident memory while the app is idle. The next use may briefly take longer</translation>
-        </message>
-        <message>
             <source>Smart merge</source>
             <translation>Smart merge</translation>
         </message>
@@ -4620,6 +4732,10 @@
             <translation>Toggle always on top for the window under the cursor</translation>
         </message>
         <message>
+            <source>Toggle automatic disabling of the selected inputs in fullscreen windows. This shortcut stays active while automatic disabling is enabled</source>
+            <translation>Toggle automatic disabling of the selected inputs in fullscreen windows. This shortcut stays active while automatic disabling is enabled</translation>
+        </message>
+        <message>
             <source>Toggle cursor visibility</source>
             <translation>Toggle cursor visibility</translation>
         </message>
@@ -4642,6 +4758,10 @@
         <message>
             <source>Tool positions</source>
             <translation>Tool positions</translation>
+        </message>
+        <message>
+            <source>Toolbar drop behavior</source>
+            <translation>Toolbar drop behavior</translation>
         </message>
         <message>
             <source>Toolbar opacity</source>
@@ -4758,10 +4878,6 @@
         <message>
             <source>Turn every global shortcut off or back on; this shortcut stays active while global shortcuts are disabled</source>
             <translation>Turn every global shortcut off or back on; this shortcut stays active while global shortcuts are disabled</translation>
-        </message>
-        <message>
-            <source>Turn off or back on the suppression of global shortcuts while the focused window is fullscreen; this shortcut stays active while fullscreen suppression is enabled</source>
-            <translation>Turn off or back on the suppression of global shortcuts while the focused window is fullscreen; this shortcut stays active while fullscreen suppression is enabled</translation>
         </message>
         <message>
             <source>UIA</source>
@@ -5002,24 +5118,64 @@
     <context>
         <name>SettingsVariableHelp</name>
         <message>
-            <source>%1: Application name</source>
-            <translation>%1: Application name</translation>
+            <source>Application name</source>
+            <translation>Application name</translation>
         </message>
         <message>
-            <source>%1: Current time</source>
-            <translation>%1: Current time</translation>
+            <source>Date and time</source>
+            <translation>Date and time</translation>
         </message>
         <message>
-            <source>%1: Window name</source>
-            <translation>%1: Window name</translation>
+            <source>Desktop</source>
+            <translation>Desktop</translation>
+        </message>
+        <message>
+            <source>Documents</source>
+            <translation>Documents</translation>
+        </message>
+        <message>
+            <source>Downloads</source>
+            <translation>Downloads</translation>
+        </message>
+        <message>
+            <source>Home</source>
+            <translation>Home</translation>
         </message>
         <message>
             <source>OK</source>
             <translation>OK</translation>
         </message>
         <message>
+            <source>Path prefix only</source>
+            <translation>Path prefix only</translation>
+        </message>
+        <message>
+            <source>Pictures</source>
+            <translation>Pictures</translation>
+        </message>
+        <message>
+            <source>Source display (Display-1, Display-2, or Multi)</source>
+            <translation>Source display (Display-1, Display-2, or Multi)</translation>
+        </message>
+        <message>
+            <source>System folders</source>
+            <translation>System folders</translation>
+        </message>
+        <message>
+            <source>Time and source</source>
+            <translation>Time and source</translation>
+        </message>
+        <message>
             <source>Variable description</source>
             <translation>Variable description</translation>
+        </message>
+        <message>
+            <source>Videos</source>
+            <translation>Videos</translation>
+        </message>
+        <message>
+            <source>Window name</source>
+            <translation>Window name</translation>
         </message>
     </context>
     <context>

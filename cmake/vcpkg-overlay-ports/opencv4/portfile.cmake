@@ -9,13 +9,10 @@ if(VCPKG_TARGET_IS_WINDOWS)
     set(VCPKG_CRT_LINKAGE static)
 endif()
 
-# fix to get version from eigen after v3.4.0
-vcpkg_download_distfile(
-    PATCH1_FILE
-    URLS https://github.com/opencv/opencv/commit/468de9b36740b3355f0d5cd8be2ce28b340df120.patch?full_index=1
-    SHA512 09ee552fcd9a96359230104d7bf8610a63e05d743a3b51d58c6469331729a6440444e05c616464380dbebaefdd7ee6fb06cac5fc70694af85f9c8d40201aad10
-    FILENAME 468de9b36740b3355f0d5cd8be2ce28b340df120.patch
-)
+# Keep the upstream Eigen3 config-version correction local: fetching GitHub's
+# commit .patch URL repeatedly returned HTTP 503 in Windows CI.
+# Provenance: opencv/opencv@468de9b36740b3355f0d5cd8be2ce28b340df120.
+# The overlay patch is byte-for-byte equivalent in effect on OpenCV 4.12.0.
 
 vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
@@ -39,7 +36,7 @@ vcpkg_from_github(
       0022-android-use-vcpkg-cpu-features.patch
       0023-ffmpeg8-support.patch
       0025-dnn-snow-shot-qr-layers.patch
-      "${PATCH1_FILE}"
+      0026-fix-eigen3-config-version.patch
 )
 # Disallow accidental build of vendored copies. 3rdparty/protobuf is the one
 # exception: the dnn module consumes it, and vcpkg's protobuf is a shared-CRT

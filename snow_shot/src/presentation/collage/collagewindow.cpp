@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 #include "snow_shot/presentation/collagewindow.h"
+#include "snow_shot/presentation/components/windowconfirmation.h"
 #include "snow_shot/presentation/imagesplitdocument.h"
 #include "snow_shot/presentation/collagesettingsstore.h"
 #include "snow_shot/presentation/components/collageeditorwidget.h"
@@ -58,6 +59,7 @@ using adqt::widgets::AdModal;
     QT_TRANSLATE_NOOP("ImageStitchingWindow", "Clear all"),
     QT_TRANSLATE_NOOP("ImageStitchingWindow", "Clear all images?"),
     QT_TRANSLATE_NOOP("ImageStitchingWindow", "Clipboard image"),
+    QT_TRANSLATE_NOOP("ImageStitchingWindow", "Image editing"),
     QT_TRANSLATE_NOOP("ImageStitchingWindow", "Image stitching"),
     QT_TRANSLATE_NOOP("ImageStitchingWindow", "Copy"),
     QT_TRANSLATE_NOOP("ImageStitchingWindow", "Copying stitched image…"),
@@ -188,6 +190,7 @@ struct ImageStitchingWindow::Impl {
     components::ImageStitchingEditorWidget* editor;
     AdModal* modal;
     AdButton* cancelButton;
+    AdButton* editButton;
     AdButton* copyButton;
     AdButton* saveButton;
     QPointer<AdModal> confirmation;
@@ -263,19 +266,22 @@ struct ImageStitchingWindow::Impl {
         layout->addWidget(editor->outputDescriptionWidget(), 1, Qt::AlignVCenter);
         editor->outputDescriptionWidget()->show();
         cancelButton = new AdButton(footer);
+        editButton = new AdButton(footer);
         copyButton = new AdButton(footer);
         saveButton = new AdButton(footer);
         cancelButton->setObjectName(QStringLiteral("collageCancel"));
+        editButton->setObjectName(QStringLiteral("collageImageEditing"));
         copyButton->setObjectName(QStringLiteral("collageCopy"));
         saveButton->setObjectName(QStringLiteral("collageSave"));
         saveButton->setButtonStyle(AdButton::ButtonStyle::Solid);
         saveButton->setAccentRole(AdButton::AccentRole::Primary);
-        for (auto* button : {cancelButton, copyButton, saveButton}) {
+        for (auto* button : {cancelButton, editButton, copyButton, saveButton}) {
             button->setFocusPolicy(Qt::StrongFocus);
             layout->addWidget(button);
         }
         modal->setFooterWidget(footer);
         QObject::connect(cancelButton, &AdButton::clicked, &q, &ImageStitchingWindow::requestClose);
+        QObject::connect(editButton, &AdButton::clicked, &q, [this] { openImageEditing(); });
         QObject::connect(copyButton, &AdButton::clicked, &q, &ImageStitchingWindow::copy);
         QObject::connect(saveButton, &AdButton::clicked, &q, &ImageStitchingWindow::save);
         QObject::connect(modal, &AdModal::closeRequested, &q,
@@ -352,10 +358,11 @@ struct ImageStitchingWindow::Impl {
     void retranslate() {
         modal->setWindowTitle(imageStitchingText("Image stitching"));
         cancelButton->setText(imageStitchingText("Cancel"));
+        editButton->setText(imageStitchingText("Image editing"));
         copyButton->setText(imageStitchingText("Copy"));
         saveButton->setText(imageStitchingText("Save"));
         editor->retranslateUi();
-        for (auto* button : {cancelButton, copyButton, saveButton})
+        for (auto* button : {cancelButton, editButton, copyButton, saveButton})
             button->setAccessibleName(button->text());
         if (confirmation)
             translateConfirmation();
@@ -488,6 +495,8 @@ struct ImageStitchingWindow::Impl {
                       validateImageStitchingPdfSettings(document->pdfSettings()).isEmpty()
                 : document->layout().isValid();
         const bool ready = !closing && !importing && !exporting && !confirmationPending && valid;
+        editButton->setVisible(!pdf);
+        editButton->setEnabled(!pdf && ready && services.openImageEditing);
         copyButton->setVisible(!pdf);
         copyButton->setEnabled(ready);
         saveButton->setEnabled(ready);
@@ -496,6 +505,18 @@ struct ImageStitchingWindow::Impl {
         cancelButton->setEnabled(!pdfCancelRequested);
         editor->setLoading(importing);
         editor->setExportBusy(exporting);
+    }
+
+    void openImageEditing() {
+        if (!modal->isOpen() || !editButton->isEnabled())
+            return;
+        services.openImageEditing(ScreenshotExportSource::fromProducer(
+            [items = document->items(),
+             settings = document->settings()](const ScreenshotExportCancellation& cancellation) {
+                return renderImageStitchingResult(items, settings, [cancellation] {
+                    return cancellation.isCancellationRequested();
+                });
+            }));
     }
 
     bool canPaste() const {
@@ -578,21 +599,17 @@ struct ImageStitchingWindow::Impl {
             services.confirm(editor->window(), clear, std::move(complete));
             return;
         }
-        auto* dialog = new AdModal(&q);
+        auto* dialog = modal_window::createConfirmation(&q, editor->window());
         confirmation = dialog;
         confirmationClear = clear;
         dialog->setObjectName(QStringLiteral("collageDiscardConfirmation"));
-        dialog->setMode(AdModal::Mode::Window);
-        dialog->setOwnerWindow(editor->window());
-        dialog->setWindowModality(Qt::WindowModal);
-        dialog->setPreset(AdModal::Preset::Confirm);
+
         translateConfirmation();
         dialog->setAcceptAccentRole(AdButton::AccentRole::Danger);
         QObject::connect(dialog, &AdModal::finished, &q,
                          [complete = std::move(complete)](AdModal::DialogCode code) {
                              complete(code == AdModal::DialogCode::Accepted);
                          });
-        QObject::connect(dialog, &AdModal::finished, dialog, &QObject::deleteLater);
         dialog->present();
     }
 
@@ -1403,11 +1420,18 @@ void ImageStitchingWindow::paste() {
     }
     if (!snapshot)
         return;
+    addImageSnapshot(std::move(*snapshot), std::move(reservation),
+                     imageStitchingText("Clipboard image"));
+}
+
+void ImageStitchingWindow::addImageSnapshot(
+    ScreenshotClipboardContentSnapshot snapshot,
+    std::shared_ptr<ImageStitchingImportReservation> reservation, QString label) {
     ImportItem item;
-    item.label = imageStitchingText("Clipboard image");
+    item.label = std::move(label);
     item.clipboard = std::move(snapshot);
     item.reservation = std::move(reservation);
-    d.beginImport({std::move(item)});
+    m_impl->beginImport({std::move(item)});
 }
 
 void ImageStitchingWindow::addSelectedFiles(std::shared_ptr<platform::SelectedFileBackend> backend,

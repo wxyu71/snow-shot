@@ -559,11 +559,12 @@ if ($Force -and (Test-Path -LiteralPath $buildDirectory -PathType Container)) {
     Remove-Item -LiteralPath $buildDirectory -Recurse -Force
 }
 
-$configurationArgument = if ($Configuration -eq "Debug") { "-debug" } else { "-release" }
-$ltcgEnabled = Get-SnowStaticQtLtcgEnabled -Configuration $Configuration -Architecture $Architecture
-$ltcgArgument = if ($ltcgEnabled) { "-ltcg" } else { "-no-ltcg" }
-$zlibArgument = if ($Configuration -eq "Debug") { "-qt-zlib" } else { "-system-zlib" }
-$pngArgument = if ($Configuration -eq "Debug") { "-qt-libpng" } else { "-system-libpng" }
+$buildOptions = Get-SnowStaticQtBuildOptions -Configuration $Configuration -Architecture $Architecture
+$configurationArgument = $buildOptions.ConfigurationArgument
+$ltcgEnabled = $buildOptions.LtcgEnabled
+$ltcgArgument = $buildOptions.LtcgArgument
+$zlibArgument = $buildOptions.ZlibArgument
+$pngArgument = $buildOptions.PngArgument
 $archivePath = Join-Path ([System.IO.Path]::GetDirectoryName($sourceDirectory)) "qt-everywhere-src-$QtVersion.tar.xz"
 $sourceRelativePath = "qt/$($QtVersion.Substring(0, $QtVersion.LastIndexOf('.')))/$QtVersion/single/qt-everywhere-src-$QtVersion.tar.xz"
 $sourceUrls = @(
@@ -695,8 +696,8 @@ if (-not (Test-Path -LiteralPath $cachePath -PathType Leaf)) {
     throw "Qt configure did not produce $cachePath."
 }
 $cache = Get-Content -LiteralPath $cachePath -Raw
-$ltcgState = if ($ltcgEnabled) { "ON" } else { "OFF" }
-$systemCodecState = if ($Configuration -eq "Release") { "ON" } else { "OFF" }
+$ltcgState = $buildOptions.LtcgState
+$systemCodecState = $buildOptions.SystemCodecState
 Assert-CacheEntry -Cache $cache -Pattern "(?m)^FEATURE_ltcg:BOOL=$ltcgState\r?`$" -Description "$Configuration LTCG policy"
 Assert-CacheEntry -Cache $cache -Pattern "(?m)^QT_FEATURE_ltcg:INTERNAL=$ltcgState\r?`$" -Description "the internal $Configuration LTCG policy"
 Assert-CacheEntry -Cache $cache -Pattern "(?m)^FEATURE_system_png:BOOL=$systemCodecState\r?`$" -Description "$Configuration libpng linkage"

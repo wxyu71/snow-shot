@@ -41,7 +41,7 @@ try {
             foreach ($name in $names) {
                 $bytes = if ($name.EndsWith('.zip')) { [IO.File]::ReadAllBytes($zipPath) } else { [byte[]](1, 2, 3, 4) }
                 $hash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes)).ToLowerInvariant()
-                $url = "https://github.com/mg-chao/snow-shot/releases/download/$tag/$name"
+                $url = "https://github.com/wxyu71/snow-shot/releases/download/$tag/$name"
                 $script:downloads[$url] = $bytes
                 $script:release.assets += [pscustomobject]@{ name = $name; size = $bytes.Length; digest = "sha256:$hash"; browser_download_url = $url }
             }
@@ -49,7 +49,7 @@ try {
     }
     Require ((@(Get-SnowShotReleaseArchitectures $script:release '2.0.0') -join ',') -ceq 'x64,arm64') 'Both architectures must be detected.'
     $directory = New-SnowShotWingetManifest $tag $root
-    $yaml = Get-Content (Join-Path $directory 'mg-chao.snow-shot.installer.yaml') -Raw
+    $yaml = Get-Content (Join-Path $directory 'wxyu71.snow-shot.installer.yaml') -Raw
     Require ($yaml.Contains('Architecture: arm64') -and $yaml.Contains('Architecture: x64')) 'Full WinGet must contain both native architectures.'
     foreach ($edition in @('Full', 'Mini')) {
         $product = Get-SnowShotEdition $edition
@@ -66,7 +66,7 @@ try {
     $script:release.assets = @($saved | Where-Object { $_.name -clike 'snow-shot-2.0.0-windows-*-offline.exe' })
     Require ((@(Get-SnowShotWingetArchitectures $script:release '2.0.0') -join ',') -ceq 'x64,arm64') 'Full-only releases must retain both WinGet architectures.'
     $fullOnly = New-SnowShotWingetManifest $tag $root
-    Require ((Get-Content (Join-Path $fullOnly 'mg-chao.snow-shot.installer.yaml') -Raw) -ceq $yaml) 'Mini assets must not affect Full WinGet manifests.'
+    Require ((Get-Content (Join-Path $fullOnly 'wxyu71.snow-shot.installer.yaml') -Raw) -ceq $yaml) 'Mini assets must not affect Full WinGet manifests.'
     $script:release.assets += $script:release.assets[1]
     Must-Fail { Get-SnowShotWingetArchitectures $script:release '2.0.0' }
     $script:release.assets = @($saved | Where-Object { $_.name -ceq 'snow-shot-2.0.0-windows-x64-offline.exe' -or $_.name -clike 'snow-shot-mini-*' })

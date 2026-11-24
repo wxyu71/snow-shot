@@ -5,7 +5,7 @@ x86_64 builds. It is an implementation in progress, **not completed acceptance o
 the comprehensive macOS plan**. Snow Shot's Qt recording workflow now uses the
 native session through the common recording C API; its SDR integration and
 acceptance coverage are documented in
-`../../snow_shot/tests/macos_recording_tests.md`. Remaining media requirements
+[archived macOS recording acceptance](https://github.com/wxyu71/snow-shot/blob/54f9ed59e7b5dc7d40783ebabf023aa4aa8bc555/snow_shot/tests/macos_recording_tests.md). Remaining media requirements
 are listed below rather than implied by a successful compilation.
 
 ## Ownership and architecture

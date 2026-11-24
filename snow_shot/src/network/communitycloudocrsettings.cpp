@@ -45,6 +45,7 @@ QString unprotect(const QString& value) {
     return QString::fromUtf8(clear);
 }
 #endif
+
 } // namespace
 
 CommunityCloudOcrSettings readCommunityCloudOcrSettings() {
@@ -52,6 +53,10 @@ CommunityCloudOcrSettings readCommunityCloudOcrSettings() {
     CommunityCloudOcrSettings result;
     result.apiUrl = settings.value(QStringLiteral("api_url"), result.apiUrl).toString();
     result.model = settings.value(QStringLiteral("model"), result.model).toString();
+    // Old opt-in Vision configurations must not re-enable an unsupported
+    // provider. The Community Online OCR action is PaddleOCR + Markdown only.
+    result.engine = QStringLiteral("paddleocr");
+    result.outputFormat = QStringLiteral("markdown");
 #ifdef Q_OS_WIN
     const QString secured = settings.value(QStringLiteral("access_token_dpapi_v1")).toString();
     if (!secured.isEmpty())
@@ -75,6 +80,10 @@ bool writeCommunityCloudOcrSettings(const CommunityCloudOcrSettings& values) {
 #endif
     settings.setValue(QStringLiteral("api_url"), values.apiUrl);
     settings.setValue(QStringLiteral("model"), values.model);
+    // Retain the two compatibility keys while overwriting old Vision/HTML/LaTeX
+    // preferences. This must not touch the user's separate upstream AI models.
+    settings.setValue(QStringLiteral("engine"), QStringLiteral("paddleocr"));
+    settings.setValue(QStringLiteral("output_format"), QStringLiteral("markdown"));
     settings.sync();
     return settings.status() == QSettings::NoError;
 }

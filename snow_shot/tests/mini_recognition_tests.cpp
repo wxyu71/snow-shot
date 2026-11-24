@@ -88,7 +88,8 @@ void manualRecognitionWithoutRemoteProviders() {
     session.setTarget({QStringLiteral("mini-manual-text"), image, QRectF(0, 0, 120, 40)});
     require(recognition.requests == 0, "creating a text session must not start recognition");
     using Mode = ScreenshotRecognitionSessionController::Mode;
-    for (const auto mode : {Mode::Table, Mode::Qr, Mode::Latex, Mode::Markdown, Mode::Html}) {
+    for (const auto mode :
+         {Mode::Table, Mode::Qr, Mode::Latex, Mode::Markdown, Mode::Html, Mode::Document}) {
         session.activate(mode);
         require(!session.active() && recognition.requests == 0,
                 "removed modes must not activate providers or change session state");
@@ -169,12 +170,12 @@ void removedProvidersAndCachesDoNotParticipateInTextSessions() {
 
     using Mode = ScreenshotRecognitionSessionController::Mode;
     session.activate(Mode::Text);
-    for (const auto mode : {Mode::Table, Mode::Qr, Mode::Latex, Mode::Markdown, Mode::Html}) {
+    for (const auto mode :
+         {Mode::Table, Mode::Qr, Mode::Latex, Mode::Markdown, Mode::Html, Mode::Document}) {
         session.activate(mode);
         require(session.active() && session.mode() == Mode::Text && !session.busy(mode),
                 "removed modes must preserve an active Mini text session");
     }
-    session.openImageConversionSettings();
     session.cancelWorkflow();
     session.invalidate();
     require(recognition.requests == 1 && qr.requests == 0 && qr.cancellations == 0,
@@ -197,7 +198,7 @@ void removedRecognitionViewsRemainUnavailable() {
 }
 
 void legacyPinPayloadsRetainOnlySupportedRecognition() {
-    for (const quint8 translationVersion : {quint8(1), quint8(2)}) {
+    for (const quint8 translationVersion : {quint8(1), quint8(2), quint8(3), quint8(4)}) {
         QByteArray bytes;
         QDataStream stream(&bytes, QIODevice::WriteOnly);
         stream.setVersion(QDataStream::Qt_6_11);
@@ -226,12 +227,16 @@ void legacyPinPayloadsRetainOnlySupportedRecognition() {
                << quint32(models.size());
         stream.writeRawData(models.constData(), static_cast<int>(models.size()));
         stream << quint32(0x53535452) << translationVersion;
+        if (translationVersion == 4)
+            stream << true;
         if (translationVersion == 1) {
             stream << QStringList{QStringLiteral("Unavailable translation")};
         } else {
             stream << selection << qint64(1) << QStringLiteral("Unavailable translation")
                    << line.confidence << line.quad << quint8(0) << line.paragraph
                    << line.sourceLineQuads;
+            if (translationVersion >= 3)
+                stream << line.sourceLineIndices;
         }
         require(stream.status() == QDataStream::Ok, "prepare a legacy Full recognition payload");
         const auto results = ScreenshotPinnedWindow::decodeRecognitionSnapshot(bytes);
@@ -239,10 +244,10 @@ void legacyPinPayloadsRetainOnlySupportedRecognition() {
                     results.text->presentation && !results.text->presentation->lines.isEmpty() &&
                     results.text->presentation->lines.front().text == line.text && !results.table &&
                     !results.qr && !results.latex && !results.visibleLatex &&
-                    !results.translatedText && results.conversions.isEmpty() &&
-                    !results.visibleConversion && results.tableEntries.isEmpty() &&
-                    results.latexEntries.isEmpty() && results.tableModelSelection.isEmpty() &&
-                    results.latexModelSelection.isEmpty(),
+                    !results.translatedText && !results.translatedTextComplete &&
+                    results.conversions.isEmpty() && !results.visibleConversion &&
+                    results.tableEntries.isEmpty() && results.latexEntries.isEmpty() &&
+                    results.tableModelSelection.isEmpty() && results.latexModelSelection.isEmpty(),
                 "Mini pin restore must skip removed payloads while retaining local text");
     }
 }
@@ -262,8 +267,8 @@ void removedPaletteToolsCannotMaterializeControls() {
                 palette.findChild<QWidget*>(QStringLiteral("screenshotOcrTextEditButton")) &&
                 palette.findChild<QWidget*>(QStringLiteral("screenshotOcrTextFormattingSelect")),
             "Mini manual OCR must retain editing and formatting controls");
-    for (const auto tool :
-         {Tool::TextTranslation, Tool::Table, Tool::Qr, Tool::Latex, Tool::Markdown, Tool::Html}) {
+    for (const auto tool : {Tool::TextTranslation, Tool::Table, Tool::Qr, Tool::Latex,
+                            Tool::Markdown, Tool::Html, Tool::Document}) {
         palette.setActiveTool(tool);
         require(palette.activeTool() == Tool::Ocr,
                 "removed recognition tools must not replace the active Mini OCR tool");

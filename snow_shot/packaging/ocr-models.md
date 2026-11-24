@@ -1,7 +1,7 @@
 # OCR runtime and V6 models
 
 Snow Shot uses CPU inference and optional GPU acceleration through the `simd-paddle-ocr-rs` Git submodule.
-Runtime **1.2.2** uses protocol **7**. Initialize submodules before building;
+Runtime **1.4.0** uses protocol **8**. Initialize submodules before building;
 the worker alone uses the library's pinned `nightly-2026-09-08` compiler.
 Other Rust packages keep their existing toolchain. The runtime takes verified
 local model paths, borrows child-owned BGR pixels, and returns owned text,
@@ -21,10 +21,10 @@ The selected model reports acquisition failure without switching to another mode
 Verified caches are retained and stale activation results are discarded.
 
 Downloads, extracted runtime files, and packaged assets are verified with SHA-256
-before publication. Normal startup reuses installed assets after checking the
-manifest, file types and sizes, completion markers, and bundled executable
-permissions and architecture. It does not hash the full files again, so same-size
-content changes after installation are not detected by startup validation.
+before publication. Normal startup reuses installed model data after checking the
+manifest, file types and sizes, and completion markers. User-writable cached runtime
+files are re-hashed before every activation because they contain executable code;
+bundled runtime validation continues to rely on the application package trust boundary.
 
 The default maximum-side detector policy selects limits of 960, 1500, or 2000
 according to the screenshot's longest side. Minimum-side mode uses 736. Accuracy
@@ -32,8 +32,10 @@ First uses a recognition-width floor of 320; Speed First uses 48. Widths align t
 32 pixels. Recognition text and confidence can differ from the previous runtime.
 The recognizer uses the model's Softmax probabilities for confidence. Empty
 lines and confidence below 0.5 are filtered. Residency defaults on in Full and off
-in Mini. Hot start defaults off in both editions and is effective only when
-residency is enabled.
+in Mini, but it is a post-use optimization: loading the setting at application
+startup never acquires assets or starts the OCR worker. The first interactive
+local OCR request arms residency for the process lifetime. Hot start defaults off
+in both editions and is effective only after residency has been armed.
 
 Hardware acceleration also defaults off. Windows builds enable Vulkan 1.3
 through the GPU driver's loader; Apple Silicon builds enable Metal. Device
@@ -63,10 +65,11 @@ capacity. The mapping is released after the last image is copied into the child,
 independently of inference and session lifetime.
 
 After three unexpected exits in 60 seconds, background residency is suspended.
-The first two retries wait 1 and 2 seconds. The next user recognition re-arms
-residency; automatic prefetch runs on demand while suspended. Background resource
-acquisition retries after 5, 15, and then 60 seconds without showing settings
-errors. Warm-up failures are logged and retried on the next recognition.
+The first two retries wait 1 and 2 seconds. The next interactive user recognition
+re-arms residency; automatic prefetch runs only on demand while suspended. Asset
+acquisition retries after 5, 15, and then 60 seconds only after OCR demand has
+armed or requested the runtime; startup configuration alone never begins that
+retry loop. Warm-up failures are logged and retried on the next recognition.
 
 ## Runtime preparation and publication
 
@@ -74,7 +77,7 @@ Windows x64 and ARM64 ZIPs contain exactly the versioned worker executable and
 `runtime-manifest.json`. There are no inference DLLs. The trusted descriptors in
 this directory are generated from the actual built bytes, including archive and
 entry hashes. Preparation creates local artifacts; publication is a release step.
-Keep all earlier published archives unchanged. Publish the exact pinned 1.2.2
+Keep all earlier published archives unchanged. Publish the exact pinned 1.4.0
 archives before distributing this application revision.
 
 ```powershell
@@ -87,13 +90,13 @@ architecture, dependency imports, archive inventory and hashes, then emits the
 trusted descriptor and native-validation status. Cross-built ARM64 artifacts
 still require native validation before production publication.
 
-Full offline Windows packages bundle Small V6. Online and Mini variants acquire
+Full offline Windows packages bundle Small V6 and the independent line2para model. Online and Mini variants acquire
 the trusted runtime and selected model on demand. Offline staging and managed
 downloads use the same pinned descriptors. Rollback requires the preceding app
 and its matching runtime and manifest.
 
 macOS x64/ARM64 builds bundle the local worker, without ONNX Runtime dylibs, and
-use a generated schema-3 manifest. Full bundles Small V6; Mini bundles the worker
+use a generated schema-3 manifest. Full bundles Small V6 and line2para; Mini bundles the worker
 and downloads selected models. Runtime code updates only with the app. Models
 and manifests are sealed under `Contents/Resources/assets` and exposed through
 the relative `Contents/MacOS/assets` resource link. Hashes are finalized after
@@ -115,10 +118,10 @@ Supply verified models as `<model-root>/<cache-id>/<filename>` for real inferenc
 $env:SNOW_TEST_OCR_TEXT_FIXTURE = (Resolve-Path snow_shot/tests/baselines/ocr-model-versions.png).Path
 $test = 'build/windows-msvc-debug/snow_shot/test-bin/Debug/snow-shot-ocr-recognition-service-tests.exe'
 $modelRoot = (Resolve-Path build/ocr-versioned-models).Path
-$worker = (Resolve-Path artifacts/snow-ocr-runtime-1.2.2/snow-ocr-process-1.2.2-windows-x64.exe).Path
+$worker = (Resolve-Path artifacts/snow-ocr-runtime-1.4.0/snow-ocr-process-1.4.0-windows-x64.exe).Path
 & $test "--model-root=$modelRoot" "--worker=$worker"
 & $test "--model-root=$modelRoot" "--worker=$worker" --resident-models
-& $test "--downloaded-runtime=$((Resolve-Path artifacts/snow-ocr-runtime-1.2.2-windows-x64.zip).Path)"
+& $test "--downloaded-runtime=$((Resolve-Path artifacts/snow-ocr-runtime-1.4.0-windows-x64.zip).Path)"
 ```
 
 The downloaded-runtime check copies the prepared archive and models through the
@@ -129,3 +132,26 @@ cancellation, session replacement,
 and hot start. `--validate-model-set <detector> <recognizer> <dictionary>` checks
 initialization independently. Performance measurements require a performance
 preset; do not use Debug or packaging presets for benchmarks.
+
+## On-demand paragraphs
+
+`paragraph_model` is separate from the three OCR model selections. Its pinned
+`line2para_1_2-epoch12-signed-1.625.onnx` (3,061,303 bytes) lives in
+`models/line2para-1-2-956253e`, with the
+same verified publication and completion-marker policy as OCR weights. Online
+and Mini packages include only its descriptor; offline, portable and development
+payloads include the weights. The macOS runtime-only package excludes them.
+
+Smart merge and Smart typesetting explicitly request grouping using the source
+image and original quadrilaterals. Recognition, prefetch and warm-up never run it
+or add groups to OCR output. Successful memberships are cached separately for the
+current source. Model membership is authoritative; Snow Shot's spatial ordering
+is independent of the model's output ordering. Downloads and inference have no
+automatic grouping retries. Failure uses the original unmerged lines and one
+Message, without action buttons. Translation-only source indices survive saving;
+older saved translations remain readable without running the model.
+
+The published export uses five ONNX inputs and the epoch-12 EMA checkpoint
+`5e5f3cda`. Its signed decoder uses threshold `1.625`, veto `-0.5` and support
+`-0.65`. The worker validates the input signature, checkpoint and policy
+together. Explicitly supplied legacy exports retain their own decoders.
