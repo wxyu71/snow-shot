@@ -20,6 +20,27 @@ foreach ($key in @($registration,$uninstall,$innoKey)) {
 }
 New-Item -ItemType Directory -Force -Path "$stage\bin","$install\bin","$badStage\bin",$build,$badBuild | Out-Null
 try {
+    # Compile the exact candidate script before the costly Rust dependency build.
+    # ISCC /O- runs the compiler without producing a distributable installer.
+    # These placeholders are used only for syntax checking, never for execution.
+    $syntaxRoot = Join-Path $base 'syntax-only'
+    $syntaxStage = Join-Path $syntaxRoot 'stage'
+    $syntaxZip = Join-Path $syntaxRoot 'placeholder.zip'
+    $syntaxManifest = Join-Path $syntaxRoot 'placeholder.json'
+    $syntaxOutput = Join-Path $syntaxRoot 'output'
+    New-Item -ItemType Directory -Force -Path "$syntaxStage\bin",$syntaxOutput | Out-Null
+    'syntax only' | Set-Content -LiteralPath "$syntaxStage\bin\snow-shot-updater.exe"
+    'syntax only' | Set-Content -LiteralPath "$syntaxStage\bin\snow_shot.exe"
+    'syntax only' | Set-Content -LiteralPath $syntaxZip
+    '{}' | Set-Content -LiteralPath $syntaxManifest
+    $syntaxSha = (Get-FileHash -LiteralPath $syntaxManifest -Algorithm SHA256).Hash.ToLowerInvariant()
+    $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+    $iss = Join-Path $repoRoot 'snow_shot/packaging/community/SnowShot.iss'
+    $icon = Join-Path $repoRoot 'snow_shot/resources/app-icon.ico'
+    & $env:SNOW_INNO_COMPILER /O- "/DStageDir=$syntaxStage" "/DUpdateZip=$syntaxZip" "/DLocalManifest=$syntaxManifest" "/DManifestSha=$syntaxSha" '/DAppVersion=1.6.3-beta.2' '/DVariant=online' "/DOutputDir=$syntaxOutput" "/DAppIcon=$icon" $iss
+    if ($LASTEXITCODE -ne 0) { throw 'Inno candidate syntax compilation failed before Rust build.' }
+    if (@(Get-ChildItem -LiteralPath $syntaxOutput -File -Recurse).Count -ne 0) { throw 'Syntax-only compilation unexpectedly produced an artifact.' }
+    Write-Output 'Inno candidate syntax compilation passed; building the real Rust fixture.'
     $manifest = 'snow_shot/rust/snow-shot-updater/Cargo.toml'
     cargo test --locked --manifest-path $manifest --target-dir $target --lib community_transaction_feed_requires_both_exact_variants_and_inventory
     if ($LASTEXITCODE -ne 0) { throw 'Signed update contract failed.' }

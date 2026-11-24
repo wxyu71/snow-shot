@@ -147,8 +147,8 @@ procedure CurPageChanged(CurPageID: Integer);
 begin
   if (CurPageID = wpReady) and not IsFreshInstall then begin
     WizardForm.ReadyMemo.Text := 'Upgrade Snow Shot to {#AppVersion}' + #13#10 +
-      'Keep the original directory, settings, and installation scope:' + #13#10 + ExistingRoot +
-      #13#10 + 'Full edition: {#Variant}';
+      'Keep the original directory, settings, and installation scope:' + #13#10 + ExistingRoot + #13#10 +
+      'Full edition: {#Variant}';
     WizardForm.NextButton.Caption := 'Upgrade';
   end;
 end;
