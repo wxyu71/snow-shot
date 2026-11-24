@@ -129,9 +129,16 @@ jobs:
         shell: pwsh
         run: ./scripts/bootstrap-community-nsis.ps1
 
+      # Test scripts deliberately exercise failing native commands. Run each
+      # in a separate PowerShell process so the step receives the suite's exit
+      # status rather than the last command's status inside the suite.
+      - name: Validate static Qt policies with executable fixtures
+        shell: pwsh
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/test-static-qt-features.ps1
+
       - name: Test Qt cache ABI fingerprinting
         shell: pwsh
-        run: ./scripts/test-qt-cache-identity.ps1
+        run: pwsh -NoProfile -NonInteractive -File ./scripts/test-qt-cache-identity.ps1
 
       # A runner label can move to a newer MSVC/SDK/CMake image while its
       # literal label remains unchanged. Include actual tool hashes.
@@ -188,10 +195,6 @@ jobs:
 
       # Qt binaries are derived from the resolved vcpkg ABI and the exact
       # host compiler, not from manually bumped cache generations.
-      - name: Validate static Qt policies with executable fixtures
-        shell: pwsh
-        run: ./scripts/test-static-qt-features.ps1
-
       - name: Compute static Qt cache identity
         id: qt-identity
         shell: pwsh
