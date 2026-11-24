@@ -27,6 +27,7 @@ jobs:
     timeout-minutes: 20
     outputs:
       native: ${{ steps.classify.outputs.native }}
+      release: ${{ steps.classify.outputs.release }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -35,37 +36,43 @@ jobs:
       - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
-      - name: Classify change
+      - name: Classify change and release intent
         id: classify
         shell: bash
+        env:
+          EVENT: ${{ github.event_name }}
+          PR_BASE: ${{ github.event.pull_request.base.sha }}
+          PUSH_BASE: ${{ github.event.before }}
+          PUBLISH: ${{ inputs.publish_prerelease || false }}
         run: |
           set -euo pipefail
-          case "${{ github.event_name }}" in
-            pull_request)
-              base="${{ github.event.pull_request.base.sha }}"
-              ;;
-            push)
-              base="${{ github.event.before }}"
-              # A new branch / missing before commit must receive full CI.
-              if [[ -z "$base" || "$base" == 0000000000000000000000000000000000000000 ]] ||
-                 ! git cat-file -e "$base^{commit}" 2>/dev/null; then
-                echo "native=true" >> "$GITHUB_OUTPUT"
-                exit 0
-              fi
-              ;;
-            *)
-              echo "native=true" >> "$GITHUB_OUTPUT"
-              exit 0
+          native=true
+          release=false
+          base=""
+          case "$EVENT" in
+            pull_request) base="$PR_BASE" ;;
+            push) base="$PUSH_BASE" ;;
+            workflow_dispatch)
+              if [[ "$PUBLISH" == true ]]; then release=true; fi
               ;;
           esac
-          native=false
-          while IFS= read -r -d '' path; do
-            case "$path" in
-              *.md|*.markdown|*.rst|docs/*) ;;
-              *) native=true ;;
-            esac
-          done < <(git diff --name-only -z "$base" "$GITHUB_SHA")
+          if [[ -n "$base" ]] && git cat-file -e "$base^{commit}" 2>/dev/null; then
+            native=false
+            while IFS= read -r -d '' path; do
+              case "$path" in
+                *.md|*.markdown|*.rst|docs/*) ;;
+                *) native=true ;;
+              esac
+            done < <(git diff --name-only -z "$base" "$GITHUB_SHA")
+            if [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main ]]; then
+              previous="$(python3 scripts/community_release.py version --ref "$base")"
+              current="$(python3 scripts/community_release.py version)"
+              if [[ "$previous" != "$current" ]]; then release=true; fi
+            fi
+          fi
+          if [[ "$release" == true ]]; then native=true; fi
           echo "native=$native" >> "$GITHUB_OUTPUT"
+          echo "release=$release" >> "$GITHUB_OUTPUT"
       - name: Ensure upstream ShellCheck is available to actionlint
         shell: bash
         run: |
@@ -83,7 +90,7 @@ jobs:
           go install github.com/rhysd/actionlint/cmd/actionlint@v1.7.12
           "$(go env GOPATH)/bin/actionlint" -color -shellcheck "$(command -v shellcheck)"
 
-      - name: Analyze actual PR-modified macOS Bash scripts with upstream ShellCheck
+      - name: Analyze changed Bash scripts with upstream ShellCheck
         shell: bash
         env:
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
@@ -101,7 +108,7 @@ jobs:
             printf 'ShellCheck on %s real changed Bash scripts\n' "${#scripts[@]}"
             shellcheck --severity=error --format=gcc "${scripts[@]}"
           else
-            echo 'No PR-modified Bash scripts.'
+            echo 'No changed Bash scripts.'
           fi
 
       - name: Check local documentation links with Lychee
@@ -242,7 +249,7 @@ jobs:
             --body-file "$RUNNER_TEMP/upstream-sync-pr-body.md" \
             --head "$SYNC_HEAD_SHA" --base "$SYNC_BASE_SHA"
       - name: Validate prerelease source
-        if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true
+        if: steps.classify.outputs.release == 'true'
         shell: bash
         run: |
           set -euo pipefail
@@ -559,7 +566,7 @@ jobs:
         shell: pwsh
         env:
           QT_QPA_FONTDIR: C:\Windows\Fonts
-        run: ctest --preset test-snow-shot-msvc-community --output-on-failure --output-junit "$env:RUNNER_TEMP/community-windows-native-junit.xml"
+        run: ctest --preset test-snow-shot-msvc-community --no-tests=error --output-on-failure --output-junit "$env:RUNNER_TEMP/community-windows-native-junit.xml"
       - name: Save complete Cargo sources
         if: steps.cargo-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
@@ -622,8 +629,8 @@ jobs:
             build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.manifest.json
 
   publish-prerelease:
-    needs: [windows]
-    if: github.event_name == 'workflow_dispatch' && inputs.publish_prerelease == true && needs.windows.result == 'success'
+    needs: [preflight, windows]
+    if: needs.preflight.outputs.release == 'true' && needs.windows.result == 'success' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -658,6 +665,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
           ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
           if [[ -n "$ref" && "$ref" != "$GITHUB_SHA" ]]; then
             echo "Tag $RELEASE_TAG already points to $ref." >&2
@@ -688,4 +696,5 @@ jobs:
           mkdir verified
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verified
           python3 scripts/community_release.py verify-assets --directory verified
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md

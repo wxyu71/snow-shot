@@ -1,19 +1,14 @@
-# Snow Shot Community — Beta changes
+# Community release history
 
-## v1.5.8-beta.1
+## 1.6.3-beta.1
 
-- Remove account/login/payment UI; no Snow Shot account is needed.
-- Use one user-triggered PaddleOCR-only Online OCR action; configure AI Studio credentials and model and receive Markdown with formulas as LaTeX.
-- Enable local screenshot and pinned-image histories by default; no automatic cloud upload.
-- Default Windows updating to manual GitHub Releases installs; no separate trust infrastructure for this personal testing prerelease.
-- Build and distribute one Community Windows x64 edition, without an extra Mini installer.
-- Remove analytics/telemetry upload paths and upstream hosted-service defaults; keep diagnostics local-only.
-- Keep local PP-OCRv6, screenshots, pinning and shortcuts.
-- Add guarded upstream sync and a Windows x64 beta build pipeline.
-- Replace unrelated original website, QQ support and purchase links.
+- Integrate upstream through 3de0da663c83a34e7b9cb4b62896ffcc80ecd8e6, including OCR runtime 1.4.0 and history retention migration.
+- Consolidate rolling upstream integration, ABI-addressed Qt caching and Windows installer acceptance.
+- Preserve Community OCR, local history defaults, opt-in privileges and independent release origin.
+- Publish Windows x64 full edition prereleases only.
 
-This is an independent test fork, **not an official Snow Shot release**.
-Source originally forked from [mg-chao/snow-shot](https://github.com/mg-chao/snow-shot).
-Required original copyright, GPL and third-party license notices are retained.
+## 1.5.8-beta.1
 
-Before publication the testing beta must pass a real Windows production build, NSIS packaging and automated installer smoke. Local-model OCR and an installed upgrade from 1.5.7 remain hands-on acceptance tests for the personal prerelease.
+Earlier Community integration candidate. See Git history for details.
+
+Published packages and release notes are listed on [GitHub Releases](https://github.com/wxyu71/snow-shot/releases).

@@ -6,18 +6,10 @@
 - `snow-crates/crates/*` – Rust workspace (`snow-capture`, `snow-ocr-process`, …); `snow_rust_ffi/` bundles the C FFI static library consumed by CMake.
 - `cmake/` – shared modules, `vcpkg-overlay-ports/`, `vcpkg-overlay-triplets/`, `test-support/`. `scripts/` – PowerShell entry points. `build/<preset>/` and `.tools/vcpkg/` are generated; never commit them.
 
-## Build, Test, and Development Commands
-- Toolchain: VS 2026 x64 or ARM64 developer tools, CMake 4.2+, MSVC 14.51, Rust 1.97.1, repository-managed vcpkg/Qt. Windows ARM64 requires the ARM64 compiler/SDK and host-matching Qt tools/libclang; see `docs-windows-arm64-build.md`.
-- `scripts/bootstrap.ps1` – installs vcpkg deps and validates Qt/MSVC once per machine.
-- `scripts/build.ps1 -Preset windows-msvc-debug [-Target snow_shot] [-Clean]` – configure + build (`snow-all` by default). Presets: `windows-msvc-debug`, `windows-msvc-performance`, `snow-shot-msvc-release`, `snow-shot-msvc-fast`.
-- `ctest --preset test-windows-msvc-debug -R <regex>` – run only matching tests after a change. Do not run unfiltered `ctest --preset …` (full suite) unless the user explicitly asks.
-- Performance benchmarks: build **Release** with `windows-msvc-performance` (e.g. `cmake --build --preset build-windows-msvc-performance --target <benchmark>`, or an existing `**/scripts/run-*-perf.ps1`). Do not use Debug, `snow-shot-msvc-release`, or `snow-shot-msvc-fast` (`SNOW_APPS_BUILD_BENCHMARKS=OFF`).
-- `scripts/run-snow-shot.ps1` / `scripts/run-snow-image-viewer.ps1` – launch from the build tree.
-- `scripts/check-cpp-format.ps1 [-Fix]`, `scripts/check-rust.ps1 [-Fix]` – format and lint (also CMake targets `snow-format`, `snow-lint`).
-- `scripts/package-snow-shot.ps1` – NSIS installer (`snow-shot-msvc-release`).
-- Windows ARM64: use `snow-shot-msvc-arm64-{debug|performance|release|fast}` and `-Architecture arm64` for bootstrap/Qt/package scripts. ARM64 benchmarks require `snow-shot-msvc-arm64-performance`. Cross builds require native ARM64 validation before production publication.
-- macOS: see `docs/platforms/macos-build.md`. Use `scripts/bootstrap-macos.sh`, `scripts/build.sh`, `scripts/run-snow-shot.sh`, and `scripts/package-snow-shot.sh`; presets are `snow-shot-macos-{arm64|x64}-{debug|performance|release|fast}`. macOS requires 15+, Xcode tools and shared Qt 6.12.0. Use only the `performance` preset for benchmarks.
-- macOS script regression checks: `python3 scripts/test-macos-build-support.py`. Native deployment fixture: `SNOW_TEST_MACOS_BUNDLE=1 python3 scripts/test-macos-build-support.py MacOSBundle` after provisioning Qt/FFmpeg and putting the build tools on PATH.
+## Build and test
+- Community production: Windows x64 full edition only. Use the pinned toolchain, presets and packaging instructions in `docs/community-windows.md`.
+- Use `scripts/bootstrap.ps1`, `scripts/build.ps1`, and focused CTest/Cargo tests. Benchmarks require the Release performance preset.
+- Preserve other platform sources for upstream compatibility, not Community distribution.
 
 ## Coding Style & Naming Conventions
 - C++: `.clang-format` (LLVM base, 4 spaces, 100 columns, attached braces, `T* ptr`, includes unsorted). Strict warnings are on; `.clang-tidy` is enforced when `SNOW_APPS_ENABLE_CLANG_TIDY=ON`.
@@ -41,18 +33,12 @@
 - Rust tests are mostly inline `#[cfg(test)]` modules (a few crates also have `tests/` integration tests). After a crate change, run `cargo test -p <crate>` (optionally `-- <test_name>`) inside `snow-crates/`. Do not run `cargo test --workspace` unless the user explicitly asks.
 - Cover every behavioral change with a deterministic, offscreen-capable test.
 
-## GitHub Actions Budget & Community Beta Acceptance
-- **A user goal is the CI unit, not a Git commit.** During implementation, make as many coherent commits as needed; run locally available formatting and the smallest related unit/contract tests, and let the automatic PR preflight catch policy regressions. Do not claim success from preflight alone.
-- **Every completed user goal MUST receive full Windows CI** on the exact final candidate. Once the implementation, code review and focused checks are ready, add the exact standalone `CI-Full: true` trailer to the final conventional commit on a same-repository PR. The `Community Windows x64` workflow uses that trailer to execute its complete Windows build, native acceptance tests, production x64 application, online/offline NSIS packaging, manifests/SHA-256, and real install/upgrade/uninstall smoke test. This includes documentation/configuration goals when they affect delivery. Alternatively, deliberately invoke `workflow_dispatch` at the final candidate ref with `publish_prerelease=false` when that mechanism is available.
-- **Four mandatory, ordered gates:** (1) early workflow, security and formatting validation using community tools; (2) **compiled** Qt/C++ contract tests with CMake/Ninja/Qt Test/CTest on Ubuntu; (3) full Windows MSVC/static-Qt native acceptance and production application compilation; (4) real online/offline NSIS packaging, checksums, installation, upgrade and uninstall. GitHub Actions `needs` prevents the expensive Windows job from starting after an early failure. A cheap successful preflight alone never satisfies goal acceptance.
-- **Never trigger full CI on intermediate commits just to see what happens.** Inspect the complete goal diff, run local native/formatting checks when available and batch preventable failures before marking the goal complete. The completion run is mandatory; record the tested SHA and all Windows/native/installer outcomes instead of borrowing green jobs from older commits.
-- If full CI fails, inspect the earliest actual compiler/dependency/CTest/NSIS error and fix related issues together. A corrected goal-completion commit may use `CI-Full: true` again; never suppress the failed checks, skip the native build or leave packaging failures unresolved. The PR job keeps per-PR `concurrency` and cancels obsolete runs.
-- No untrusted fork PR may request expensive Windows CI with the trailer; maintainers can dispatch it explicitly on a trusted branch. Keep the release job gated to an explicit manual `workflow_dispatch`, current reviewed `main` and `publish_prerelease=true`. Never tag, merge or publish merely because a PR build passed.
-- **Prefer community-maintained tools to custom Python text assertions.** Validate local documentation links with Lychee and actual sync ancestry with git merge-base. `actionlint` validates workflow syntax, expressions and embedded ShellCheck; `zizmor` checks workflow security and action pins; `PSScriptAnalyzer` checks edited PowerShell, and `clang-format` checks new native tests. Use real Qt Test/CTest, CMake/MSBuild, Cargo and NSIS for implementation behavior; never prove a C++ behavior by grepping for its text. Keep domain-specific Python only for genuine upstream-sync trust, privacy/permissions, immutable binary sources, protocol and release policy invariants that standard tools cannot establish.
-- **Warnings are Beta release blockers, not cosmetic failures.** Investigate Qt, CMake, MSVC, Rust, NSIS and runtime warnings at the originating code, port or upstream revision; apply an upstream-compatible targeted fix. Never add global `-Wno-*`, `QT_LOGGING_RULES`, no-warn CMake options, or `continue-on-error` to tests as a workaround. Windows CI captures JUnit, MSBuild structured `.binlog`, CMake configure logs and a production build transcript even after failure. A remaining warning means the release is **not** accepted, regardless of green jobs.
-- Keep the audited production `/MT` static Qt/MSVC/vcpkg toolchain unchanged. The Ubuntu system-Qt smoke stage is an early logic detector, not ABI proof. Use official vcpkg SHA-addressed asset caching and file/optional GitHub Packages NuGet binary caching; do not use the removed `x-gha` backend or reuse mutable CMake build trees. Keep Actions at reviewed immutable SHAs using supported Node runtimes, and avoid empty commits or duplicate dispatches.
-- **Release acceptance** is stronger than goal-completion CI: require a successful full Windows run for the final integrated head, no unresolved CI warnings, review of generated artifacts, and separate manual upgrade from a real installed official **1.5.7** (settings/shortcuts/offline OCR). Publish only from current reviewed `main` after those gates.
-- Documentation navigation lives in `docs/README.md` (Windows Beta: `docs/community-windows.md`; upstream sync: `docs/community-upstream-sync.md`; macOS: `docs/platforms/macos-build.md`), shared Agent guidance here, tests/scripts under `scripts/`, and vcpkg overlays under `cmake/`. Do not scatter redundant release runbooks in the root or `scripts/`.
+## CI and release
+- Draft PRs run fast checks; mark ready for full Windows acceptance. Merge only the tested integrated head and retain Git ancestry. Do not use commit trailers, empty commits or suppressed errors to trigger or bypass gates.
+- Prefer established linters and real native tests. Require full Windows build, CTest, NSIS packaging, checksums and installer smoke before releasing.
+- Main version changes request a prerelease. Only the reviewed main SHA may publish after successful acceptance; do not overwrite published releases.
+- Use exact toolchain/dependency ABI keys and validated immutable caches. Investigate failures at their source.
+- Keep docs under `docs/`; use the canonical navigation and avoid duplicate runbooks.
 
 ## Commit & Pull Request Guidelines
 - Conventional Commits, lowercase imperative: `fix(screenshot): stop cursor flicker during smart frame selection`. Types in use: `feat`, `fix`, `refactor`, `perf`, `test`, `style`, `build`. Scopes mirror features (`recording`, `pinned`, `dpi`, `ocr`, `toolbar`).
@@ -60,4 +46,4 @@
 
 ## Licensing & Configuration
 - Multi-license repo: keep Apache-2.0 code in `ant_design_qt/`, `snow_draw_engine_qt/`, and `snow_memory/`; keep GPL-3.0-or-later code in `snow_shot/`, `snow_image/`, `snow_image_viewer/`, `snow-crates/`, and `snow_rust_ffi/`. The independent `snow-crates/crates/simd-paddle-ocr-rs/` submodule retains Apache-2.0. After adding a dependency, run `scripts/collect-third-party-licenses.ps1` and update the project's `THIRD_PARTY_NOTICES.md` (`snow_shot/`, `ant_design_qt/`).
-- `SNOW_APPS_API_BASE_URL` is set per preset; never hard-code endpoints or secrets.
+- `SNOW_APPS_API_BASE_URL` is set per preset; never commit secrets; retain the fixed Community release origin.

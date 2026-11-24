@@ -23,7 +23,6 @@ from typing import Any
 ROOT = Path(__file__).resolve().parents[1]
 POLICY = ROOT / ".github" / "upstream-protection.json"
 COMMUNITY_UPDATE_KEYS = ROOT / "snow_shot" / "resources" / "update-trusted-keys.json"
-CONFIGURATION_SCHEMA = ROOT / "snow_shot" / "src" / "storage" / "configurationschema.cpp"
 BOT_START = "<!-- community-upstream-sync:begin -->"
 BOT_END = "<!-- community-upstream-sync:end -->"
 BRANCH_PREFIX = "automation/upstream-sync-"
@@ -212,43 +211,6 @@ def assert_community_update_signers_disabled() -> None:
             "Community updater must not embed remote release signing keys; "
             "publishers are disabled until the community establishes its own signer."
         )
-
-
-def assert_sensitive_local_control_defaults_disabled() -> None:
-    try:
-        schema = CONFIGURATION_SCHEMA.read_text(encoding="utf-8")
-    except OSError as error:
-        raise SystemExit(f"Community configuration schema is unavailable: {error}") from error
-    required = (
-        '{u"system/launch_as_administrator", booleanDefault(false), ConfigurationValueKind::Boolean}',
-        '{u"mcp/enabled", booleanDefault(false), ConfigurationValueKind::Boolean}',
-    )
-    missing = [entry for entry in required if entry not in schema]
-    if missing:
-        raise SystemExit(
-            "Sensitive local-control defaults must remain fail-closed in Community: " +
-            ", ".join(missing)
-        )
-
-
-def assert_community_local_history_defaults() -> None:
-    """User-approved policy: local histories ON; startup registration remains opt-in."""
-    try:
-        schema = CONFIGURATION_SCHEMA.read_text(encoding="utf-8")
-    except OSError as error:
-        raise SystemExit(f"Community configuration schema is unavailable: {error}") from error
-    required = (
-        '{u"system/auto_start_at_boot", booleanDefault(false), ConfigurationValueKind::Boolean}',
-        '{u"capture_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean}',
-        '{u"pinned_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean}',
-    )
-    missing = [entry for entry in required if entry not in schema]
-    if missing:
-        raise SystemExit(
-            "Community local-history/startup defaults differ from the reviewed policy: "
-            + ", ".join(missing)
-        )
-
 
 
 def immutable_git_dependency(specification: dict) -> bool:
@@ -627,8 +589,6 @@ def main() -> None:
         assert_deleted_files_absent()
         assert_forbidden_runtime_content_absent()
         assert_community_update_signers_disabled()
-        assert_sensitive_local_control_defaults_disabled()
-        assert_community_local_history_defaults()
         assert_external_source_pins()
         print("Community policy: PASS")
     elif args.command == "classify":

@@ -76,12 +76,6 @@ class ClassifierTests(unittest.TestCase):
     def test_community_updater_has_no_trusted_remote_signer(self):
         sync.assert_community_update_signers_disabled()
 
-    def test_sensitive_local_control_defaults_are_fail_closed(self):
-        sync.assert_sensitive_local_control_defaults_disabled()
-
-    def test_local_histories_default_on_while_startup_remains_opt_in(self):
-        sync.assert_community_local_history_defaults()
-
     def test_external_source_dependency_parser_rejects_mutable_refs(self):
         pinned = {
             "git": "https://example.invalid/dependency.git",

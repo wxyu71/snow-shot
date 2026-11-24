@@ -128,7 +128,10 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
     require(
         !ConfigurationSchema::defaultValue(QStringLiteral("system/auto_start_at_boot")).toBool(),
         "Community auto-start must default off in both editions on all platforms");
-    require(ConfigurationSchema::defaultValue(QStringLiteral("capture_history/enabled")) == QJsonValue(true) &&
+    require(ConfigurationSchema::defaultValue(QStringLiteral("system/launch_as_administrator")) == QJsonValue(false) &&
+                ConfigurationSchema::defaultValue(QStringLiteral("mcp/enabled")) == QJsonValue(false),
+            "Local administrator launch and MCP must require explicit opt-in");
+    require(ConfigurationSchema::defaultValue(QStringLiteral("capture_history/retention_mode")) == QJsonValue(QStringLiteral("full")) &&
                 ConfigurationSchema::defaultValue(QStringLiteral("pinned_history/enabled")) == QJsonValue(true),
             "Local screenshot and pinned histories default on; explicit user settings remain editable");
 
