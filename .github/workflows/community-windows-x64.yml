@@ -12,6 +12,11 @@ on:
         required: true
         default: false
         type: boolean
+      maintenance_only:
+        description: Disable retired workflow registrations without building or publishing
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: read
@@ -33,6 +38,7 @@ jobs:
       native: ${{ steps.classify.outputs.native }}
       release: ${{ steps.classify.outputs.release }}
       reuse: ${{ steps.classify.outputs.reuse }}
+      maintenance: ${{ steps.classify.outputs.maintenance }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -50,6 +56,7 @@ jobs:
           PUSH_BASE: ${{ github.event.before }}
           PUBLISH: ${{ inputs.publish_prerelease || false }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
+          MAINTENANCE: ${{ inputs.maintenance_only || false }}
         run: |
           set -euo pipefail
           native=true
@@ -77,6 +84,21 @@ jobs:
             fi
           fi
           if [[ "$release" == true ]]; then native=true; fi
+          maintenance=false
+          if [[ "$EVENT" == workflow_dispatch && "$MAINTENANCE" == true ]]; then
+            [[ "$GITHUB_REF" == refs/heads/main && "$PUBLISH" == false ]] || {
+              echo "Maintenance must run on main without publication." >&2
+              exit 1
+            }
+            maintenance=true
+            native=false
+          elif [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' && "$release" == false ]] &&
+               { [[ "$EVENT" == pull_request && "$GITHUB_HEAD_REF" == 'fix/community-actions-housekeeping' && "$PR_BASE" == '59a0ad778038fe264183240294ffeaba696d2e8b' ]] ||
+                 [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main && "$PUSH_BASE" == '59a0ad778038fe264183240294ffeaba696d2e8b' ]]; } &&
+               git diff --quiet '59a0ad778038fe264183240294ffeaba696d2e8b' "$GITHUB_SHA" -- . ':(exclude).github/workflows/community-windows-x64.yml'; then
+            maintenance=true
+            native=false
+          fi
           reuse=false
           # One-time promotion of fully accepted #214. No application, packaging,
           # configuration, dependency or submodule changes are permitted.
@@ -98,7 +120,7 @@ jobs:
               release=true
             fi
           fi
-          printf '%s\n' "native=$native" "release=$release" "reuse=$reuse" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "native=$native" "release=$release" "reuse=$reuse" "maintenance=$maintenance" >> "$GITHUB_OUTPUT"
       - name: Authenticate accepted run and artifact provenance
         if: steps.classify.outputs.reuse == 'true'
         shell: bash
@@ -473,14 +495,14 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
-          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc snow-shot-community-native-cloud-ocr-widget-tests
+          cmake --build build/ci-windows-contracts --config Release --parallel 4 --target snow-shot-community-native-settings-tests snow-shot-community-native-toolbar-policy-tests snow-shot-community-native-windows-qos snow-shot-community-native-canvas-moc snow-shot-community-native-cloud-ocr-widget-tests snow-shot-community-native-webdav-tests
           if ($LASTEXITCODE -ne 0) { throw 'Windows native C++/Qt contract compilation failed' }
       - name: Run real Windows Qt and platform policy CTests
         shell: pwsh
         env:
           QT_QPA_PLATFORM: offscreen
         run: |
-          ctest --test-dir build/ci-windows-contracts -C Release -R 'snow-shot-community-native-(settings|toolbar-policy|cloud-ocr-widget)-tests' --output-on-failure --output-junit "$env:RUNNER_TEMP/windows-fast-native-junit.xml"
+          ctest --test-dir build/ci-windows-contracts -C Release -R 'snow-shot-community-native-(settings|toolbar-policy|cloud-ocr-widget|webdav)-tests' --output-on-failure --output-junit "$env:RUNNER_TEMP/windows-fast-native-junit.xml"
           if ($LASTEXITCODE -ne 0) { throw 'Windows-native Qt contract tests failed' }
       - name: Upload Windows fast-gate CTest diagnostics
         if: always()
@@ -812,9 +834,49 @@ jobs:
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md
 
+  retire-obsolete-workflows:
+    needs: [preflight]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.preflight.outputs.maintenance == 'true' && github.ref == 'refs/heads/main' }}
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Disable only reviewed obsolete workflow registrations
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] || exit 0
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]]
+          gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows?per_page=100" --jq '.workflows[] | [.id,.name,.path,.state] | @tsv' > "$RUNNER_TEMP/workflows.tsv"
+          while IFS=$'\t' read -r id name path state; do
+            case "$name" in
+              'Community fork safety checks'|'Community quality'|'Offline Rust OCR license and dependency audit'|'Standalone Qt PaddleOCR API contract') ;;
+              *) continue ;;
+            esac
+            [[ "$id" =~ ^[0-9]+$ && "$path" == .github/workflows/* ]] || exit 1
+            if git cat-file -e "$GITHUB_SHA:$path" 2>/dev/null; then
+              echo "::warning::Preserving $name: workflow still exists on main."
+              continue
+            fi
+            if [[ "$state" == active ]]; then
+              gh api --method PUT "repos/$GITHUB_REPOSITORY/actions/workflows/$id/disable" >/dev/null
+              [[ "$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/$id" --jq .state)" == disabled_manually ]]
+              printf 'Disabled %s (%s)\n' "$name" "$id"
+            else
+              printf 'Already inactive: %s (%s)\n' "$name" "$state"
+            fi
+          done < "$RUNNER_TEMP/workflows.tsv"
+          echo 'Historical runs are intentionally preserved.'
+
   cleanup-integrated-branches:
-    needs: [publish-prerelease]
-    if: needs.publish-prerelease.result == 'success' && github.ref == 'refs/heads/main'
+    needs: [preflight, publish-prerelease]
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && github.ref == 'refs/heads/main' && (needs.publish-prerelease.result == 'success' || needs.preflight.outputs.maintenance == 'true') }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -833,6 +895,13 @@ jobs:
           # One-time cleanup of this migration, only after a verified release.
           [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] || exit 0
           [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] || exit 0
+          tag="$(python3 scripts/community_release.py tag)"
+          [[ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '.isDraft == false and .isPrerelease == true')" == true ]]
+          release_ref="$(git ls-remote --refs origin "refs/tags/$tag")"
+          git merge-base --is-ancestor "${release_ref%%$'\t'*}" "$GITHUB_SHA"
+          verified="$(mktemp -d)"
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$verified"
+          python3 scripts/community_release.py verify-assets --directory "$verified"
           pr="$(gh pr view 2 --repo "$GITHUB_REPOSITORY" --json state,headRefName,headRefOid,mergeCommit)"
           [[ "$(jq -r .state <<< "$pr")" == 'MERGED' ]]
           merged="$(jq -r .mergeCommit.oid <<< "$pr")"
@@ -869,7 +938,7 @@ jobs:
           retire 'automation/upstream-review' '88107f99667f9cefc30fbac2c4ccaf2fdcb29e77' report-only
           retire 'review/upstream-main-4cc4dfe-20261116' "$candidate" integrated
           # Retire only merged one-time publication repairs, never newer heads.
-          for branch in 'fix/promote-accepted-214' 'fix/prerelease-tag-lookup'; do
+          for branch in 'fix/promote-accepted-214' 'fix/prerelease-tag-lookup' 'fix/community-actions-housekeeping'; do
             repair="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --state merged --json headRefOid,mergeCommit)"
             if [[ "$(jq 'length' <<< "$repair")" == 1 ]]; then
               repair_merge="$(jq -r '.[0].mergeCommit.oid' <<< "$repair")"
