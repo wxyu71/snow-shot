@@ -83,7 +83,7 @@ entries = [{"Path": p.relative_to(stage).as_posix(), "Bytes": p.stat().st_size,
         (Get-FileHash "$install\bin\snow_shot.exe").Hash -ne (Get-FileHash "$stage\bin\snow_shot.exe").Hash) {
         throw 'In-place upgrade violated file, user-data or registry ownership contract.'
     }
-    Write-Host 'Synthetic legacy registration upgraded without running its uninstaller.'
+    Write-Output 'Synthetic legacy registration upgraded without running its uninstaller.'
 } finally {
     Remove-Item -LiteralPath $registration,$uninstall,$innoKey -Recurse -Force -ErrorAction SilentlyContinue
 }
