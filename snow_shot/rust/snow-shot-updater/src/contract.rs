@@ -303,7 +303,14 @@ fn verify_signed_payload(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result
 pub mod community_installer;
 
 pub fn verify_release(envelope: &[u8], trusted_keys: Option<&[u8]>) -> Result<UpdateRelease> {
-    verify_release_for_platform(envelope, trusted_keys, crate::edition::PLATFORM)
+    let release = verify_release_for_platform(envelope, trusted_keys, crate::edition::PLATFORM)?;
+    // Operational Community full-x64 builds require the four-package Community
+    // contract. Explicit fixture keys and offline legacy audits retain schema 1.
+    if trusted_keys.is_none() && !crate::edition::MINI && crate::edition::PLATFORM == "windows-x64" {
+        require(release.packages.len() == 4, "unsupported_update_release",
+                "Unsupported Community update release")?;
+    }
+    Ok(release)
 }
 
 pub fn verify_release_for_platform(
@@ -320,21 +327,36 @@ pub fn verify_release_for_platform(
     let object = signed.as_object().ok_or_else(|| {
         UpdateError::new("unsupported_update_release", "Unsupported update release")
     })?;
+    let community = object.get("schema").and_then(Value::as_u64) == Some(3);
     require(
-        crate::edition::product_matches(object.get("product")),
+        if community {
+            !crate::edition::MINI && platform == "windows-x64"
+                && object.len() == 7
+                && string(object, "product") == "snow-shot-community"
+                && string(object, "repository") == "wxyu71/snow-shot"
+        } else {
+            crate::edition::product_matches(object.get("product"))
+        },
         "update_product_mismatch",
         "The update belongs to a different product",
     )?;
     let published_at = string(object, "publishedAt");
     require(
-        object.get("schema").and_then(Value::as_u64) == Some(1)
+        (community || object.get("schema").and_then(Value::as_u64) == Some(1))
             && string(object, "platform") == platform
             && OffsetDateTime::parse(published_at, &Rfc3339).is_ok(),
         "unsupported_update_release",
         "Unsupported update release",
     )?;
     let version = string(object, "version").to_owned();
-    parse_version(&version)?;
+    let semver = parse_version(&version)?;
+    if community {
+        require(
+            semver.build.is_empty() && semver.pre.as_str().strip_prefix("beta.")
+                .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit())),
+            "unsupported_update_release", "Unsupported Community beta version",
+        )?;
+    }
     let packages = object
         .get("packages")
         .and_then(Value::as_array)
@@ -345,7 +367,7 @@ pub fn verify_release_for_platform(
             )
         })?;
     require(
-        packages.len() == if crate::edition::MINI { 3 } else { 5 },
+        packages.len() == if community { 4 } else if crate::edition::MINI { 3 } else { 5 },
         "incomplete_windows_release",
         "The release does not contain all required Windows packages",
     )?;
@@ -363,7 +385,7 @@ pub fn verify_release_for_platform(
         let sha256 = hash_value(package.get("sha256"))?;
         let portable = variant == "portable" && kind == "portable";
         require(
-            portable
+            (!community && portable)
                 || ((variant == "online" || (!crate::edition::MINI && variant == "offline"))
                     && matches!(kind.as_str(), "installer" | "update")),
             "unknown_package_variant",
@@ -421,7 +443,7 @@ pub fn verify_release_for_platform(
 }
 
 pub fn verify_release_file(path: &Path) -> Result<UpdateRelease> {
-    verify_release_file_for_platform(path, crate::edition::PLATFORM)
+    verify_release(&fsutil::read_limited(path, MAX_METADATA_BYTES as u64)?, None)
 }
 
 pub fn verify_release_file_for_platform(path: &Path, platform: &str) -> Result<UpdateRelease> {
@@ -734,6 +756,40 @@ pub(crate) mod tests {
         payload["packages"][if crate::edition::MINI { 2 } else { 4 }]["variant"] =
             Value::String("online".to_owned());
         assert!(verify_release(&sign_payload(&payload, &private, 32), Some(&trusted)).is_err());
+    }
+
+    #[cfg(all(not(feature = "mini"), not(target_arch = "aarch64")))]
+    #[test]
+    fn community_transaction_feed_requires_both_exact_variants_and_inventory() {
+        let key = RsaPrivateKey::new(&mut OsRng, 3072).unwrap();
+        let trust = trusted_key(&key, None);
+        let mut payload = valid_payload();
+        payload.as_object_mut().unwrap().remove("futureField");
+        payload["schema"] = json!(3);
+        payload["product"] = json!("snow-shot-community");
+        payload["repository"] = json!("wxyu71/snow-shot");
+        payload["version"] = json!("1.6.3-beta.2");
+        payload["packages"].as_array_mut().unwrap().retain(|p| p["variant"] != "portable");
+        let accepted = verify_release(&sign_payload(&payload, &key, 32), Some(&trust)).unwrap();
+        assert_eq!(accepted.packages.len(), 4);
+        assert_eq!(accepted.update_package("online").unwrap().kind, "update");
+        assert_eq!(accepted.update_package("offline").unwrap().kind, "update");
+        assert!(accepted.update_package("portable").is_err());
+        for (field, value) in [
+            ("repository", json!("mg-chao/snow-shot")),
+            ("version", json!("1.6.3")),
+            ("platform", json!("windows-arm64")),
+        ] {
+            let mut changed = payload.clone();
+            changed[field] = value;
+            assert!(verify_release(&sign_payload(&changed, &key, 32), Some(&trust)).is_err());
+        }
+        let mut changed = payload.clone();
+        changed["packages"][1]["files"] = json!([]);
+        assert!(verify_release(&sign_payload(&changed, &key, 32), Some(&trust)).is_err());
+        changed = payload.clone();
+        changed["packages"].as_array_mut().unwrap().push(valid_payload()["packages"][4].clone());
+        assert!(verify_release(&sign_payload(&changed, &key, 32), Some(&trust)).is_err());
     }
 
     proptest! {

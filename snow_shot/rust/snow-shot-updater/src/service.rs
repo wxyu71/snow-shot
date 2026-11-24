@@ -501,6 +501,14 @@ fn retain_release_payload(cache: &Path, accepted_hash: Option<&str>) {
 impl Service {
     fn initialize(options: ServiceOptions, dependencies: ServiceDependencies) -> Result<Self> {
         let github_api_url = validate_api_url(&options.github_api_url, options.allow_local_http)?;
+        if !cfg!(test) && !crate::edition::MINI && crate::edition::PLATFORM == "windows-x64" {
+            require(
+                github_api_url.as_str() == github::API
+                    || (options.allow_local_http && github_api_url.scheme() == "http"
+                        && matches!(github_api_url.host_str(), Some("127.0.0.1" | "localhost" | "::1"))),
+                "update_server_invalid", "The Community update server must be GitHub",
+            )?;
+        }
         let gitee_api_url = validate_api_url(&options.gitee_api_url, options.allow_local_http)?;
         transaction::validate_root(&options.root)?;
         let record = transaction::installation_record(&options.root)?;
@@ -1072,7 +1080,14 @@ async fn fetch_metadata_trusted(
     trusted_keys: Option<&[u8]>,
 ) {
     let mut tasks = tokio::task::JoinSet::new();
-    for source in [ReleaseSource::GitHub, ReleaseSource::Gitee] {
+    let community = trusted_keys.is_none() && !crate::edition::MINI
+        && crate::edition::PLATFORM == "windows-x64";
+    let sources: &[ReleaseSource] = if community {
+        &[ReleaseSource::GitHub]
+    } else {
+        &[ReleaseSource::GitHub, ReleaseSource::Gitee]
+    };
+    for &source in sources {
         let inputs = inputs.clone();
         let cancellation = cancellation.clone();
         let keys = trusted_keys.map(ToOwned::to_owned);
@@ -1090,7 +1105,7 @@ async fn fetch_metadata_trusted(
     }
     tokio::task::yield_now().await;
     let mut result = Err(github::error());
-    for _ in 0..2 {
+    for _ in 0..sources.len() {
         let next = tokio::select! {
             biased;
             _ = cancellation.cancelled() => { result = Err(cancelled()); break; }
@@ -1560,7 +1575,11 @@ fn start_download(
             saved_hash: service.persisted.partial_hash.clone(),
             saved_validator: service.persisted.validator.clone(),
             saved_url: service.persisted.partial_url.clone(),
-            source: service.persisted.source.unwrap_or(ReleaseSource::GitHub),
+            source: if !cfg!(test) && !crate::edition::MINI && crate::edition::PLATFORM == "windows-x64" {
+                ReleaseSource::GitHub
+            } else {
+                service.persisted.source.unwrap_or(ReleaseSource::GitHub)
+            },
             package_url: None,
         },
         cancellation,

@@ -399,7 +399,12 @@ class ApplicationController::Impl {
                 updateService->setProgressAppearance(
                     presentation::styles::ThemeManager::instance().updateProgressAppearance());
             });
+#ifdef Q_OS_WIN
+        // Community users explicitly check, download, and approve every update.
+        updates->setMode(QStringLiteral("manual"));
+#else
         updates->setMode(configuration.value(QStringLiteral("updates/mode")).toString());
+#endif
         updates->setProxyConfiguration(
             configuration.value(QStringLiteral("network/proxy")).toString(),
             configuration.value(QStringLiteral("network/http_proxy")).toString());
@@ -423,6 +428,11 @@ class ApplicationController::Impl {
             });
 #ifndef Q_OS_MACOS
         QObject::connect(updates, &update::UpdateService::updateReady, &q, [this] {
+#ifdef Q_OS_WIN
+            // The About page already exposes Ready; no duplicate toast for manual download.
+            if (!distribution::isStoreManaged())
+                return;
+#endif
             systemTray.showUpdateMessage(
                 (edition::isMini
                      ? ApplicationController::tr(
@@ -1357,14 +1367,8 @@ class ApplicationController::Impl {
 
     void finishStartup(std::function<void()> maintenance) {
         deferredStartup.start({[this] {
-#ifdef Q_OS_WIN
-                                   // Community Windows downloads are opened on GitHub.
-                                   // Never launch the legacy signed-update helper automatically.
-                                   if (distribution::isStoreManaged())
-                                       updates->start();
-#else
+                                   // In manual mode this is only a local cache/state probe.
                                    updates->start();
-#endif
                                }, std::move(maintenance),
                                [this] {
                                    if (auto* controller = ensureScreenshotController())
@@ -1499,7 +1503,11 @@ class ApplicationController::Impl {
         }
 #endif
         if (key == u"updates/mode" && updates != nullptr) {
+#ifdef Q_OS_WIN
+            updates->setMode(QStringLiteral("manual"));
+#else
             updates->setMode(value.toString());
+#endif
         } else if ((key == u"network/proxy" || key == u"network/http_proxy") &&
                    updates != nullptr) {
             const auto& configuration = storage::ApplicationStorage::instance().configuration();

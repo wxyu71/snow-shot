@@ -658,7 +658,9 @@ int main(int argc, char* argv[]) {
     snow_shot::presentation::LanguageManager::instance().initialize();
     snow_shot::presentation::styles::ThemeManager::instance().initialize(app);
 #ifdef Q_OS_WIN
-    if (!snow_shot::app::distribution::isStoreManaged() && !updaterRelaunch &&
+    // Keep the upstream startup-apply path for Mini source compatibility only.
+    // Community Full never installs merely because the application is launched.
+    if (snow_shot::app::edition::isMini && !snow_shot::app::distribution::isStoreManaged() && !updaterRelaunch &&
         snow_shot::update::startupUpdateMayDelayLaunch(launchArguments) &&
         applicationStorage.configuration().value(QStringLiteral("updates/mode")).toString() ==
             u"next_launch") {

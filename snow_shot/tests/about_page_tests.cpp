@@ -312,14 +312,6 @@ void projectLinksAreExplicitAccessibleAndRecoverable() {
         button->click();
         require(opened.last() == url, "legal links open the configured community destination");
     }
-#ifdef Q_OS_WIN
-    const QUrl releases(QStringLiteral("https://github.com/wxyu71/snow-shot/releases"));
-    auto* check = child<QAbstractButton>(page, "aboutUpdateAction");
-    require(check->isEnabled() && check->toolTip() == releases.toDisplayString(),
-            "Community Windows update control goes straight to the public GitHub Releases");
-    check->click();
-    require(opened.last() == releases, "GitHub update button opens the canonical fork URL");
-#endif
     snapshot(page, QStringLiteral("about-actions"));
     page.resize(360, 240);
     flushEvents();
@@ -405,20 +397,27 @@ void updatePolicyAndUnavailableCopy() {
     require(catalog.item({QStringLiteral("general"), QStringLiteral("system-general"),
                           QStringLiteral("updates.mode")}) == nullptr,
             "Community Windows has no inactive auto-update setting");
-    snow_shot::update::UpdateService updates({});
+    snow_shot::update::UpdateService::Options options;
+    options.storeManaged = false;
+    snow_shot::update::UpdateService updates(std::move(options));
+    updates.setMode(QStringLiteral("manual"));
+    auto& status = const_cast<snow_shot::update::UpdateStatus&>(updates.status());
+    status.state = snow_shot::update::UpdateState::Idle;
     QList<QUrl> opened;
     AboutPageWidget page(nullptr,
         [&opened](const QUrl& url) { opened.append(url); return true; }, &updates);
     auto* action = child<adqt::widgets::AdButton>(page, "aboutUpdateAction");
-    require(action->isEnabled() &&
-                action->text() == QStringLiteral("Check updates on GitHub") &&
-                child<QLabel>(page, "aboutUpdateStatus")->text().contains(
-                    QStringLiteral("Download and install manually")),
-            "Community Windows makes manual GitHub downloads explicit");
+    require(action->isEnabled() && action->text() == QStringLiteral("Check for updates"),
+            "Community exposes manual in-app checking without an external link");
+    status.state = snow_shot::update::UpdateState::Ready;
+    status.version = QStringLiteral("1.6.3-beta.2");
+    emit updates.statusChanged();
+    int requests = 0;
+    QObject::connect(&updates, &snow_shot::update::UpdateService::restartRequested,
+                     &page, [&] { ++requests; });
     action->click();
-    require(opened == QList<QUrl>{
-                QUrl(QStringLiteral("https://github.com/wxyu71/snow-shot/releases"))},
-            "Community update never starts the legacy signed updater");
+    require(requests == 1 && opened.isEmpty() && QApplication::activeModalWidget() == nullptr,
+            "verified Ready invokes restart handoff without an installer wizard");
 #else
     snow_shot::presentation::GlobalShortcutManager shortcuts;
     settings::BuiltInSettingsBackend backend(shortcuts);
@@ -494,29 +493,6 @@ void updatePolicyAndUnavailableCopy() {
 }
 
 void updateStatesFitTheVersionPanel() {
-#ifdef Q_OS_WIN
-    using namespace snow_shot::update;
-    UpdateService updates({});
-    QCoreApplication::setApplicationVersion(QStringLiteral(SNOW_SHOT_TEST_VERSION));
-    AboutPageWidget page(nullptr, [](const QUrl&) { return true; }, &updates);
-    auto* action = child<adqt::widgets::AdButton>(page, "aboutUpdateAction");
-    auto* progress = child<QProgressBar>(page, "aboutUpdateProgress");
-    auto* check = child<adqt::widgets::AdButton>(page, "aboutUpdateCheck");
-    page.show();
-    for (const auto state : {UpdateState::Idle, UpdateState::Checking,
-                             UpdateState::Available, UpdateState::Downloading,
-                             UpdateState::Verifying, UpdateState::Ready,
-                             UpdateState::Applying, UpdateState::Failed}) {
-        auto& snapshot = const_cast<UpdateStatus&>(updates.status());
-        snapshot.state = state;
-        emit updates.statusChanged();
-        flushEvents();
-        require(action->text() == QStringLiteral("Check updates on GitHub") &&
-                    action->isEnabled() && !check->isVisible() && !progress->isVisible(),
-                "GitHub-only Community updater is independent of legacy download states");
-    }
-    page.hide();
-#else
     using namespace snow_shot::update;
     using adqt::widgets::AdButton;
     UpdateService updates(aboutUpdateOptions());
@@ -688,27 +664,9 @@ void updateStatesFitTheVersionPanel() {
 #endif
     page.hide();
     styles::ThemeManager::instance().setThemeAppearance(styles::ThemeAppearance::Light);
-#endif
 }
 
 void checkLinkStartsManualUpdateCheck() {
-#ifdef Q_OS_WIN
-    using namespace snow_shot::update;
-    UpdateService::Options options;
-    options.storeManaged = false;
-    UpdateService updates(std::move(options));
-    QList<QUrl> opened;
-    AboutPageWidget page(nullptr,
-        [&opened](const QUrl& url) { opened.append(url); return true; }, &updates);
-    auto* action = child<adqt::widgets::AdButton>(page, "aboutUpdateAction");
-    require(child<adqt::widgets::AdButton>(page, "aboutUpdateCheck")->isHidden(),
-            "the old update check operation is no longer exposed");
-    action->click();
-    require(opened == QList<QUrl>{
-                QUrl(QStringLiteral("https://github.com/wxyu71/snow-shot/releases"))} &&
-                !updates.busy(),
-            "manual community update checks open the fixed GitHub HTTPS page");
-#else
     using namespace snow_shot::update;
     QTemporaryDir directory;
     require(directory.isValid(), "create isolated update directory");
@@ -736,7 +694,6 @@ void checkLinkStartsManualUpdateCheck() {
         loop.exec();
     }
     require(operation == QStringLiteral("check"), "the check link begins a manual update check");
-#endif
 }
 
 void updateModuleKeepsItsHeightAcrossStates() {

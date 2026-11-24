@@ -3,7 +3,6 @@ use crate::error::{Result, UpdateError, require};
 use reqwest::Url;
 use serde_json::Value;
 
-#[cfg(test)]
 pub const API: &str = "https://api.github.com/repos/wxyu71/snow-shot/releases";
 pub const REPOSITORY: &str = "https://github.com/wxyu71/snow-shot";
 
