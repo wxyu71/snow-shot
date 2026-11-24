@@ -216,7 +216,7 @@ def main() -> None:
         return
     token = os.getenv("PADDLEOCR_ACCESS_TOKEN", "").strip()
     if not token:
-        raise SystemExit("LIVE OCR TEST BLOCKED: set PADDLEOCR_ACCESS_TOKEN (GitHub secret)")
+        raise SystemExit("LIVE OCR TEST BLOCKED: set your local PADDLEOCR_ACCESS_TOKEN environment variable")
     base = os.getenv("PADDLEOCR_API_URL", JOB_URL).rstrip("/")
     if not base.endswith("/api/v2/ocr/jobs"):
         base += "/api/v2/ocr/jobs"

@@ -36,7 +36,8 @@
     "snow_shot/tests/macos_selected_files.md",
     "snow_shot/tests/macos_smart_selection.md",
     "snow_shot/tests/macos_toolbar_tests.md",
-    ".github/upstream-review-pending.md"
+    ".github/upstream-review-pending.md",
+    ".github/workflows/community-live-paddleocr.yml"
   ],
   "protected_globs": [
     ".gitmodules",
@@ -132,7 +133,6 @@
     "docs/community-privacy.md",
     "scripts/paddleocr_live_e2e.py",
     "scripts/package-snow-shot.ps1",
-    ".github/workflows/community-live-paddleocr.yml",
     "snow_shot/tests/image_conversion_tests.cpp",
     "CMakePresets.json",
     "scripts/build-static-qt.ps1",

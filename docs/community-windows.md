@@ -17,6 +17,10 @@ Follow the Qt builder's printed installation path and bootstrap instructions if 
 
 Follow [repository conventions](../AGENTS.md). Use small, reviewable changes, CTest labels/presets and focused Cargo tests. Runtime invariants belong in executable tests rather than source-text assertions; fail when an expected test is missing. Preserve upstream fixtures unless a reviewed behavior change requires migration. The independent Qt smoke project does not replace production ABI validation.
 
+## OCR validation
+
+The unified Community Windows x64 CI tests the real Qt/C++ PaddleOCR client against deterministic local HTTP responses for all three supported models, authentication, quotas and result parsing. The Python fixture self-test also runs without credentials. The optional live diagnostic remains local: install `requests` and `pillow`, supply your own `PADDLEOCR_ACCESS_TOKEN` in the environment, and run `python scripts/paddleocr_live_e2e.py --live`. It is not a release gate or a standalone workflow, and no repository credential is needed. Live provider behavior can change independently of the client.
+
 ## Verify and publish
 
 The Community Windows x64 workflow validates policy, source contracts and native smoke tests. Ready code PRs and relevant main pushes also run the full static Qt build, Windows CTest, packaging and real installer/upgrade smoke. Draft PRs receive fast feedback. The Qt binary cache is keyed by the actual toolchain, dependency ABI, source and feature policy; cache hits are validated rather than repaired silently.
