@@ -1,3 +1,3 @@
 # Development
 
-This is a personal-maintained fork. Follow [AGENTS.md](AGENTS.md), the [development guide](docs/development.md), and the Windows acceptance workflow. Preserve upstream attribution and licenses.
+Follow [repository conventions](AGENTS.md) and [Community documentation](docs/README.md). Use focused native tests for behavior changes and the Windows acceptance workflow for release candidates. Preserve upstream Git ancestry, attribution and licenses.

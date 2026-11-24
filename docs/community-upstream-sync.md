@@ -11,3 +11,5 @@ The scheduled workflow fetches official upstream and maintains at most one rolli
 After merging, delete integrated review branches. Subsequent synchronization starts from main and its actual upstream ancestor.
 
 See [Windows release policy](community-windows.md) for production acceptance.
+
+Keep the Community documentation index concise. Do not reintroduce retired release guides, historical reports or duplicate changelogs during synchronization; retain required build inputs, protocol references and legal notices.

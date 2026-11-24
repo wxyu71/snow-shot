@@ -13,6 +13,10 @@ The Community release is the full Windows x64 edition only. Use a recursive subm
 
 Follow the Qt builder's printed installation path and bootstrap instructions if using a nondefault prefix. Production artifacts are in `build/snow-shot-msvc-release`.
 
+## Development and testing
+
+Follow [repository conventions](../AGENTS.md). Use small, reviewable changes, CTest labels/presets and focused Cargo tests. Runtime invariants belong in executable tests rather than source-text assertions; fail when an expected test is missing. Preserve upstream fixtures unless a reviewed behavior change requires migration. The independent Qt smoke project does not replace production ABI validation.
+
 ## Verify and publish
 
 The Community Windows x64 workflow validates policy, source contracts and native smoke tests. Ready code PRs and relevant main pushes also run the full static Qt build, Windows CTest, packaging and real installer/upgrade smoke. Draft PRs receive fast feedback. The Qt binary cache is keyed by the actual toolchain, dependency ABI, source and feature policy; cache hits are validated rather than repaired silently.
