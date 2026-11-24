@@ -698,3 +698,60 @@ jobs:
           python3 scripts/community_release.py verify-assets --directory verified
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md
+
+  cleanup-integrated-branches:
+    needs: [publish-prerelease]
+    if: needs.publish-prerelease.result == 'success' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Retire the integrated 1.6.3-beta.1 branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # One-time cleanup of this migration, only after a verified release.
+          [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] || exit 0
+          [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] || exit 0
+          pr="$(gh pr view 2 --repo "$GITHUB_REPOSITORY" --json state,headRefName,headRefOid,mergeCommit)"
+          [[ "$(jq -r .state <<< "$pr")" == 'MERGED' ]]
+          merged="$(jq -r .mergeCommit.oid <<< "$pr")"
+          git merge-base --is-ancestor "$merged" "$GITHUB_SHA"
+          candidate="$(jq -r .headRefOid <<< "$pr")"
+          [[ "$(jq -r .headRefName <<< "$pr")" == 'review/upstream-main-4cc4dfe-20261116' ]]
+          git merge-base --is-ancestor "$candidate" "$GITHUB_SHA"
+          gh auth setup-git --hostname github.com
+          retire() {
+            local branch="$1" expected="$2" kind="$3" ref remote actual
+            ref="refs/heads/$branch"
+            remote="$(git ls-remote --heads origin "$ref")"
+            if [[ -z "$remote" ]]; then return 0; fi
+            actual="${remote%%$'\t'*}"
+            if [[ "$actual" != "$expected" ]]; then
+              echo "::warning::Preserving $branch because its head changed."
+              return 0
+            fi
+            if [[ "$kind" == 'integrated' ]]; then
+              if ! git merge-base --is-ancestor "$expected" "$GITHUB_SHA"; then
+                echo "::warning::Preserving $branch: its commits are not integrated."
+                return 0
+              fi
+            fi
+            # Explicit deletion with a lease: do not remove newer human commits.
+            git push --force-with-lease="$ref:$expected" origin ":$ref"
+          }
+          retire 'feat/community-paddleocr-windows' 'f8e49ee0f710dee1fa7f9c3b39b358189c9531ed' integrated
+          retire 'feat/solo-rolling-upstream-sync' 'ef5835b8092a08dbec86fa4150ee0fdd22c84a2d' integrated
+          retire 'fix/upstream-sync-conflict-pr' '91d62ea8886ed6deb646c47d9b73751f1abf1d58' integrated
+          retire 'review/beta-integrated-7f34f246-20261121' 'af6d8e1caab0b3b9b3e0138c75e46c81c15a900b' integrated
+          retire 'review/incoming-upstream-7f34f246-20261121' '7f34f24696c06200bc7d707eab4f35d0a7fbdae1' integrated
+          # This exact, reviewed commit contains only the retired conflict report.
+          retire 'automation/upstream-review' '88107f99667f9cefc30fbac2c4ccaf2fdcb29e77' report-only
+          retire 'review/upstream-main-4cc4dfe-20261116' "$candidate" integrated

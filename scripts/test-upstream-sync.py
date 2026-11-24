@@ -43,6 +43,18 @@ class ClassifierTests(unittest.TestCase):
     def test_community_ocr_is_protected(self):
         self.assertEqual(self.decision(["snow_shot/src/network/baidupaddleocrclient.cpp"])["mode"], "review")
 
+    def test_report_marker_and_retired_docs_are_protected(self):
+        for path in (".github/upstream-review-pending.md", "docs-macos-build.md"):
+            self.assertIn(path, self.policy["deleted_files"])
+            self.assertEqual(self.decision([path])["mode"], "review")
+
+    def test_publish_rejects_main_and_report_branches(self):
+        with patch.object(sync, "run") as runner:
+            for branch in ("main", "automation/upstream-review", "other-feature"):
+                with self.assertRaisesRegex(RuntimeError, "outside the rolling"):
+                    sync.publish_branch(branch)
+            runner.assert_not_called()
+
     def test_deleted_account_code_is_protected(self):
         self.assertEqual(self.decision(["snow_shot/src/app/accountsessionservice.cpp"])["mode"], "review")
 

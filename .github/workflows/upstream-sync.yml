@@ -57,21 +57,11 @@ jobs:
       - name: Update rolling upstream integration PR
         env:
           GH_TOKEN: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN || github.token }}
-          NON_DEFAULT_TOKEN: ${{ steps.app_token.outputs.token || secrets.UPSTREAM_SYNC_TOKEN }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          AUTO_MERGE: ${{ vars.UPSTREAM_SYNC_AUTO_MERGE || 'false' }}
         shell: bash
         run: |
           set -euo pipefail
           # Keep the temporary token out of the checkout's persisted git config.
           # The GitHub CLI credential helper authenticates fetch/push using GH_TOKEN.
           gh auth setup-git --hostname github.com
-          if [[ "$AUTO_MERGE" == "true" ]]; then
-            if [[ -z "$NON_DEFAULT_TOKEN" ]]; then
-              echo '::error::Automatic merge needs an App/PAT token so PR checks actually trigger.'
-              exit 1
-            fi
-            python3 scripts/upstream_sync.py sync --auto-merge
-          else
-            python3 scripts/upstream_sync.py sync
-          fi
+          python3 scripts/upstream_sync.py sync

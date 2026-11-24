@@ -35,7 +35,8 @@
     "snow_shot/tests/macos_screenshots.md",
     "snow_shot/tests/macos_selected_files.md",
     "snow_shot/tests/macos_smart_selection.md",
-    "snow_shot/tests/macos_toolbar_tests.md"
+    "snow_shot/tests/macos_toolbar_tests.md",
+    ".github/upstream-review-pending.md"
   ],
   "protected_globs": [
     ".gitmodules",

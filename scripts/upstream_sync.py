@@ -171,7 +171,7 @@ def assert_deleted_files_absent(policy: dict | None = None, tree: str | None = N
                   if tree else (ROOT / path).exists() or
                   run("git", "ls-files", "--error-unmatch", path, check=False).returncode == 0)
         if exists:
-            raise RuntimeError(f"Removed commercial file was restored: {path}")
+            raise RuntimeError(f"Intentionally deleted path was restored: {path}")
 
 
 def assert_forbidden_runtime_content_absent() -> None:
@@ -372,7 +372,9 @@ def merge_candidate(other: str) -> tuple[bool, list[str]]:
     return False, files
 
 
-def publish_branch(branch: str, expected: str | None = None) -> None:
+def publish_branch(branch: str) -> None:
+    if not re.fullmatch(re.escape(BRANCH_PREFIX) + r"[a-f0-9]{12}", branch):
+        raise RuntimeError("Refusing to push outside the rolling integration branch")
     # Normal push, never --force.  The remote rejects a race with manual edits.
     result = run("git", "push", "origin", f"HEAD:refs/heads/{branch}", check=False)
     if result.returncode:
@@ -388,7 +390,7 @@ def summary(message: str) -> None:
             f.write(message + "\n")
 
 
-def sync(auto_merge: bool = False) -> None:
+def sync() -> None:
     """Git orchestration executed only on the scheduled default-branch checkout."""
     repo = os.environ.get("GITHUB_REPOSITORY", "")
     if not repo or not os.environ.get("GH_TOKEN"):
@@ -471,11 +473,9 @@ def sync(auto_merge: bool = False) -> None:
             f.flush()
             creation = gh("pr", "create", "--repo", repo, "--base", "main", "--head", branch,
                           "--title", "sync: integrate official upstream", "--body-file", f.name,
-                          *(["--draft"] if (risk == "review" or not auto_merge) else []))
+                          "--draft")
         summary(f"### Upstream integration PR created\n- {creation}\n- Mode: {risk}\n"
                 + ("- Human conflict resolution is required.\n" if bootstrap else ""))
-        if risk == "auto" and auto_merge:
-            gh("pr", "merge", branch, "--repo", repo, "--auto", "--merge")
         return
 
     pr = managed[0]
@@ -583,7 +583,6 @@ def main() -> None:
     ap.add_argument("--body-file", type=Path)
     ap.add_argument("--head")
     ap.add_argument("--base")
-    ap.add_argument("--auto-merge", action="store_true")
     args = ap.parse_args()
     if args.command == "verify-deletions":
         assert_deleted_files_absent()
@@ -598,7 +597,7 @@ def main() -> None:
             ap.error("validate-pr needs --body-file, --head and --base")
         validate_pr(args.body_file.read_text(encoding="utf-8"), args.head, args.base)
     elif args.command == "sync":
-        sync(auto_merge=args.auto_merge)
+        sync()
 
 
 if __name__ == "__main__":

@@ -2,27 +2,65 @@
 param()
 
 $ErrorActionPreference = 'Stop'
-# CPack's NSIS generator requires NSIS >= 3.03. Keep the CI packaging
-# toolchain reproducible, rather than relying on hosted runner image contents.
-$version = '3.12.0'
-$choco = Get-Command choco.exe -ErrorAction Stop
-& $choco.Source install nsis "--version=$version" --yes --no-progress --limit-output
-if ($LASTEXITCODE -ne 0) {
-    throw "Chocolatey failed to install pinned NSIS $version (exit code $LASTEXITCODE)."
-}
-
+# Reuse a trusted runner installation only at the exact pinned version. If
+# absent, install the official, hash-pinned package without Chocolatey's feed.
+# SHA256 and URL: microsoft/winget-pkgs@bc23f96b968c037a79e8929f09654177dabe165a
+# manifests/n/NSIS/NSIS/3.12/NSIS.NSIS.installer.yaml
+$version = '3.12'
+$expectedHash = '3BC2B06253A7E4957111BE152AC6A536E0C7478A706E19DA814038DB5D706495'
 $nsisCandidates = @(
     "${env:ProgramFiles(x86)}\NSIS\makensis.exe",
     "${env:ProgramFiles}\NSIS\makensis.exe"
 )
-$makensis = $nsisCandidates |
-    Where-Object { Test-Path -LiteralPath $_ -PathType Leaf } |
-    Select-Object -First 1
+
+function Find-PinnedNsis {
+    foreach ($candidate in $nsisCandidates) {
+        if (-not (Test-Path -LiteralPath $candidate -PathType Leaf)) { continue }
+        $actual = (& $candidate -VERSION 2>&1 | Out-String).Trim()
+        if ($LASTEXITCODE -eq 0 -and $actual -match '(?i)^v?3\.12(?:\.0)?$') {
+            return $candidate
+        }
+        Write-Host "Ignoring unexpected NSIS version '$actual' at $candidate"
+    }
+}
+
+$makensis = Find-PinnedNsis
 if (-not $makensis) {
-    throw "Pinned NSIS installation succeeded but makensis.exe was not found."
+    $installer = Join-Path $env:RUNNER_TEMP "nsis-$version-setup.exe"
+    $urls = @(
+        'https://sourceforge.net/projects/nsis/files/NSIS%203/3.12/nsis-3.12-setup.exe/download',
+        'https://downloads.sourceforge.net/project/nsis/NSIS%203/3.12/nsis-3.12-setup.exe'
+    )
+    $verified = $false
+    for ($attempt = 1; $attempt -le 3 -and -not $verified; $attempt++) {
+        foreach ($url in $urls) {
+            try {
+                if (Test-Path -LiteralPath $installer) {
+                    Remove-Item -LiteralPath $installer -Force
+                }
+                Invoke-WebRequest -Uri $url -OutFile $installer -TimeoutSec 90
+                $hash = (Get-FileHash -LiteralPath $installer -Algorithm SHA256).Hash
+                if ($hash -ne $expectedHash) {
+                    throw "NSIS installer SHA-256 mismatch: $hash"
+                }
+                $verified = $true
+                break
+            } catch {
+                Write-Warning "NSIS download attempt $attempt from $url failed: $($_.Exception.Message)"
+            }
+        }
+        if (-not $verified -and $attempt -lt 3) { Start-Sleep -Seconds (5 * $attempt) }
+    }
+    if (-not $verified) { throw "Could not download verified NSIS $version." }
+    $process = Start-Process -FilePath $installer -ArgumentList '/S' -Wait -PassThru
+    if ($process.ExitCode -ne 0) {
+        throw "Verified NSIS installer failed with exit code $($process.ExitCode)."
+    }
+    $makensis = Find-PinnedNsis
+    if (-not $makensis) { throw "NSIS $version was not found after installation." }
 }
 $actual = (& $makensis -VERSION 2>&1 | Out-String).Trim()
-if ($LASTEXITCODE -ne 0 -or $actual -notmatch '(?i)\bv3\.12(?:\.0)?\b') {
+if ($LASTEXITCODE -ne 0 -or $actual -notmatch '(?i)^v?3\.12(?:\.0)?$') {
     throw "Expected pinned NSIS $version, found '$actual' at $makensis."
 }
 
