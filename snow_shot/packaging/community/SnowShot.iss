@@ -1,4 +1,8 @@
 ; Community candidate. Production packaging stays NSIS until Windows migration acceptance.
+; PREPROCVER is the official packed major/minor/revision/build value.
+#if PREPROCVER != 0x07010100
+  #error Inno Setup 7.1.1 required
+#endif
 #ifndef StageDir
   #error StageDir required
 #endif

@@ -10,9 +10,13 @@ param(
 $ErrorActionPreference = 'Stop'
 $root = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $compilerPath = (Resolve-Path -LiteralPath $Compiler).Path
-if ((Get-Item -LiteralPath $compilerPath).VersionInfo.ProductVersion -notmatch '^7\.1\.1(?:\.0)?$') {
-    throw 'Use the independently verified Inno Setup 7.1.1 compiler.'
+# ISCC --version is the official engine version interface; ProductVersion is
+# a resource string and need not have the same format.
+$engineVersion = (& $compilerPath --version | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $engineVersion -cne '7.1.1') {
+    throw "Expected Inno compiler engine 7.1.1; reported '$engineVersion'."
 }
+Write-Output "Building candidate with Inno compiler engine $engineVersion."
 $build = (Resolve-Path -LiteralPath $BuildDirectory).Path
 $stage = (Resolve-Path -LiteralPath $StageDirectory).Path
 $output = [IO.Path]::GetFullPath($OutputDirectory)

@@ -17,4 +17,10 @@ $p = Start-Process -FilePath $installer -ArgumentList @('/VERYSILENT','/SUPPRESS
 if ($p.ExitCode -ne 0) { throw "Inno installation failed: $($p.ExitCode)" }
 $compiler = Join-Path $directory 'ISCC.exe'
 if (-not (Test-Path -LiteralPath $compiler -PathType Leaf)) { throw 'Missing pinned ISCC.exe' }
+# Query the actual compiler engine, not the Windows resource description.
+$engineVersion = (& $compiler --version | Out-String).Trim()
+if ($LASTEXITCODE -ne 0 -or $engineVersion -cne $version) {
+    throw "Pinned Inno compiler engine mismatch: expected $version; reported '$engineVersion'."
+}
+Write-Output "Verified Inno compiler engine $engineVersion (SHA-256 pinned installer)."
 "SNOW_INNO_COMPILER=$compiler" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
