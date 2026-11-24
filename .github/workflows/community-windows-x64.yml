@@ -329,6 +329,7 @@ jobs:
           python3 scripts/test-qt-cmake-contract.py
           python3 scripts/test-test-runner-policy.py
           python3 scripts/community_release.py selftest
+          python3 scripts/community_installer_signing.py --selftest
           python3 scripts/paddleocr_live_e2e.py --selftest
       - name: Verify rolling upstream sync PR ancestry
         if: github.event_name == 'pull_request' && startsWith(github.head_ref, 'automation/upstream-sync-')
