@@ -108,7 +108,9 @@ jobs:
             .run_attempt == 1 and .repository.id == 1457922312 and .head_repository.id == 1457922312 and
             .head_sha == "495353ad20f5b0cdeb044fc79a8451483b327215" and
             any(.pull_requests[]; .number == 2 and .base.ref == "main" and
-              .base.sha == "5f3bd76282fc660968266bd957734b8b2fa05a06" and .head.sha == "495353ad20f5b0cdeb044fc79a8451483b327215")' >/dev/null
+              .head.ref == "review/upstream-main-4cc4dfe-20261116" and
+              .base.repo.id == 1457922312 and .head.repo.id == 1457922312)' >/dev/null
+          echo 'Accepted run identity verified.'
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/attempts/1/jobs?per_page=100" | jq -e '
             [.jobs[] | select(.id == 138318340033 or .id == 138319303566 or
               .id == 138319303711 or .id == 138320803545)] as $g |
@@ -118,12 +120,13 @@ jobs:
                 .name == "Package production installers" or .name == "Verify installer assets" or
                 .name == "Smoke-test real Windows installers and in-place upgrade" or
                 .name == "Upload release candidates")] | length == 5 and all(.[]; .conclusion == "success")))' >/dev/null
-          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/14914284776" | jq -e '
-            .id == 14914284776 and .expired == false and
+          echo 'Accepted job results verified.'
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/artifacts?per_page=100" | jq -e '
+            any(.artifacts[]; .id == 14914284776 and .expired == false and
             .name == "community-windows-x64-b9938c0201cfa7a2e9447745905a1e770ecda79c" and
             .digest == "sha256:fa03fedbc1a68041b5c90c25a311bf9e25dab6e08687352126dd3e17c2f28eb8" and
             .workflow_run.id == 45357342693 and .workflow_run.repository_id == 1457922312 and
-            .workflow_run.head_sha == "495353ad20f5b0cdeb044fc79a8451483b327215"' >/dev/null
+            .workflow_run.head_sha == "495353ad20f5b0cdeb044fc79a8451483b327215")' >/dev/null
           echo "Accepted #214 provenance, production tests, source tree and artifact identity verified."
       - name: Ensure upstream ShellCheck is available to actionlint
         shell: bash
