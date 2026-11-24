@@ -83,12 +83,19 @@ jobs:
           # Only this workflow may differ from the exact accepted source tree.
           if [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] &&
              { [[ "$EVENT" == pull_request && "$PR_NUMBER" == 2 && "$PR_BASE" == '5f3bd76282fc660968266bd957734b8b2fa05a06' ]] ||
-               [[ "$GITHUB_REF" == refs/heads/main && "$release" == true ]]; } &&
+               [[ "$EVENT" == pull_request && "$GITHUB_HEAD_REF" == 'fix/promote-accepted-214' && "$PR_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' ]] ||
+               [[ "$GITHUB_REF" == refs/heads/main && "$release" == true ]] ||
+               [[ "$GITHUB_REF" == refs/heads/main && "$EVENT" == push && "$PUSH_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' ]]; } &&
              [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] &&
              git merge-base --is-ancestor '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" &&
              git diff --quiet '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" -- . ':(exclude).github/workflows/community-windows-x64.yml'; then
             reuse=true
             native=false
+            # The original version bump has merged; retry only this precise
+            # workflow-only repair of that failed publication.
+            if [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main && "$PUSH_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' ]]; then
+              release=true
+            fi
           fi
           printf '%s\n' "native=$native" "release=$release" "reuse=$reuse" >> "$GITHUB_OUTPUT"
       - name: Authenticate accepted run and artifact provenance
@@ -105,9 +112,14 @@ jobs:
             .event == "pull_request" and .status == "completed" and .conclusion == "success" and
             .run_attempt == 1 and .repository.id == 1457922312 and .head_repository.id == 1457922312 and
             .head_sha == "495353ad20f5b0cdeb044fc79a8451483b327215" and
-            any(.pull_requests[]; .number == 2 and .base.ref == "main" and
-              .head.ref == "review/upstream-main-4cc4dfe-20261116" and
-              .base.repo.id == 1457922312 and .head.repo.id == 1457922312)' >/dev/null
+            .head_branch == "review/upstream-main-4cc4dfe-20261116"' >/dev/null
+          # GitHub clears the mutable pull_requests array after merge. Verify
+          # PR #2 directly, and use the immutable run head and artifact identity.
+          if git merge-base --is-ancestor 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' "$GITHUB_SHA"; then
+            gh api "repos/$GITHUB_REPOSITORY/pulls/2" | jq -e '
+              .merged == true and .merge_commit_sha == "f2339bf1b48ec1ee083cfc7f4bda08425d94d5be" and
+              .head.sha == "91cb3083ee9cd6a092978b8e203aa2bbeb87a80b" and .base.ref == "main"' >/dev/null
+          fi
           echo 'Accepted run identity verified.'
           gh api "repos/$GITHUB_REPOSITORY/actions/runs/$run_id/attempts/1/jobs?per_page=100" | jq -e '
             [.jobs[] | select(.id == 138318340033 or .id == 138319303566 or
@@ -846,3 +858,12 @@ jobs:
           # This exact, reviewed commit contains only the retired conflict report.
           retire 'automation/upstream-review' '88107f99667f9cefc30fbac2c4ccaf2fdcb29e77' report-only
           retire 'review/upstream-main-4cc4dfe-20261116' "$candidate" integrated
+          # Retire only the merged one-time publication repair, never a newer head.
+          repair="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head 'fix/promote-accepted-214' --state merged --json headRefOid,mergeCommit)"
+          if [[ "$(jq 'length' <<< "$repair")" == 1 ]]; then
+            repair_merge="$(jq -r '.[0].mergeCommit.oid' <<< "$repair")"
+            repair_head="$(jq -r '.[0].headRefOid' <<< "$repair")"
+            if git merge-base --is-ancestor "$repair_merge" "$GITHUB_SHA"; then
+              retire 'fix/promote-accepted-214' "$repair_head" integrated
+            fi
+          fi
