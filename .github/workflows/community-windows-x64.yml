@@ -90,9 +90,7 @@ jobs:
             reuse=true
             native=false
           fi
-          echo "native=$native" >> "$GITHUB_OUTPUT"
-          echo "release=$release" >> "$GITHUB_OUTPUT"
-          echo "reuse=$reuse" >> "$GITHUB_OUTPUT"
+          printf '%s\n' "native=$native" "release=$release" "reuse=$reuse" >> "$GITHUB_OUTPUT"
       - name: Authenticate accepted run and artifact provenance
         if: steps.classify.outputs.reuse == 'true'
         shell: bash
