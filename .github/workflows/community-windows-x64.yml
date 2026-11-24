@@ -84,8 +84,9 @@ jobs:
           if [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] &&
              { [[ "$EVENT" == pull_request && "$PR_NUMBER" == 2 && "$PR_BASE" == '5f3bd76282fc660968266bd957734b8b2fa05a06' ]] ||
                [[ "$EVENT" == pull_request && "$GITHUB_HEAD_REF" == 'fix/promote-accepted-214' && "$PR_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' ]] ||
+               [[ "$EVENT" == pull_request && "$GITHUB_HEAD_REF" == 'fix/prerelease-tag-lookup' && "$PR_BASE" == '070a3e58cd19314964320baab236b7e76d73ef60' ]] ||
                [[ "$GITHUB_REF" == refs/heads/main && "$release" == true ]] ||
-               [[ "$GITHUB_REF" == refs/heads/main && "$EVENT" == push && "$PUSH_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' ]]; } &&
+               [[ "$GITHUB_REF" == refs/heads/main && "$EVENT" == push && ( "$PUSH_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' || "$PUSH_BASE" == '070a3e58cd19314964320baab236b7e76d73ef60' ) ]]; } &&
              [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] &&
              git merge-base --is-ancestor '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" &&
              git diff --quiet '495353ad20f5b0cdeb044fc79a8451483b327215' "$GITHUB_SHA" -- . ':(exclude).github/workflows/community-windows-x64.yml'; then
@@ -93,7 +94,7 @@ jobs:
             native=false
             # The original version bump has merged; retry only this precise
             # workflow-only repair of that failed publication.
-            if [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main && "$PUSH_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' ]]; then
+            if [[ "$EVENT" == push && "$GITHUB_REF" == refs/heads/main && ( "$PUSH_BASE" == 'f2339bf1b48ec1ee083cfc7f4bda08425d94d5be' || "$PUSH_BASE" == '070a3e58cd19314964320baab236b7e76d73ef60' ) ]]; then
               release=true
             fi
           fi
@@ -769,7 +770,10 @@ jobs:
         run: |
           set -euo pipefail
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
-          ref="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$RELEASE_TAG" --jq '.object.sha' 2>/dev/null || true)"
+          # ls-remote returns empty output for an absent tag; a transport or
+          # authentication failure exits nonzero. Never interpret a 404 as SHA.
+          remote="$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG")"
+          ref="${remote%%$'\t'*}"
           if [[ -n "$ref" && "$ref" != "$GITHUB_SHA" ]]; then
             echo "Tag $RELEASE_TAG already points to $ref." >&2
             exit 1
@@ -777,6 +781,8 @@ jobs:
           if [[ -z "$ref" ]]; then
             gh api --method POST "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/tags/$RELEASE_TAG" -f sha="$GITHUB_SHA" >/dev/null
           fi
+
+          [[ "$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG")" == "$GITHUB_SHA"$'\t'"refs/tags/$RELEASE_TAG" ]] || { echo "Release tag verification failed." >&2; exit 1; }
 
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             [[ "$(gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq '.isDraft')" == "true" ]] || {
@@ -799,6 +805,10 @@ jobs:
           mkdir verified
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verified
           python3 scripts/community_release.py verify-assets --directory verified
+          for asset in dist/*; do
+            cmp -- "$asset" "verified/${asset##*/}"
+          done
+          [[ "$(git ls-remote --refs origin "refs/tags/$RELEASE_TAG")" == "$GITHUB_SHA"$'\t'"refs/tags/$RELEASE_TAG" ]] || { echo "Release tag verification failed." >&2; exit 1; }
           [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]] || { echo "Release source is no longer main." >&2; exit 1; }
           gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --draft=false --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md
 
@@ -858,12 +868,14 @@ jobs:
           # This exact, reviewed commit contains only the retired conflict report.
           retire 'automation/upstream-review' '88107f99667f9cefc30fbac2c4ccaf2fdcb29e77' report-only
           retire 'review/upstream-main-4cc4dfe-20261116' "$candidate" integrated
-          # Retire only the merged one-time publication repair, never a newer head.
-          repair="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head 'fix/promote-accepted-214' --state merged --json headRefOid,mergeCommit)"
-          if [[ "$(jq 'length' <<< "$repair")" == 1 ]]; then
-            repair_merge="$(jq -r '.[0].mergeCommit.oid' <<< "$repair")"
-            repair_head="$(jq -r '.[0].headRefOid' <<< "$repair")"
-            if git merge-base --is-ancestor "$repair_merge" "$GITHUB_SHA"; then
-              retire 'fix/promote-accepted-214' "$repair_head" integrated
+          # Retire only merged one-time publication repairs, never newer heads.
+          for branch in 'fix/promote-accepted-214' 'fix/prerelease-tag-lookup'; do
+            repair="$(gh pr list --repo "$GITHUB_REPOSITORY" --base main --head "$branch" --state merged --json headRefOid,mergeCommit)"
+            if [[ "$(jq 'length' <<< "$repair")" == 1 ]]; then
+              repair_merge="$(jq -r '.[0].mergeCommit.oid' <<< "$repair")"
+              repair_head="$(jq -r '.[0].headRefOid' <<< "$repair")"
+              if git merge-base --is-ancestor "$repair_merge" "$GITHUB_SHA"; then
+                retire "$branch" "$repair_head" integrated
+              fi
             fi
-          fi
+          done
