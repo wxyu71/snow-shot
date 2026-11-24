@@ -238,6 +238,7 @@ jobs:
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          REUSE_ACCEPTED: ${{ steps.classify.outputs.reuse }}
         run: |
           $ErrorActionPreference = 'Stop'
           $head = if ($env:PR_HEAD_SHA) { $env:PR_HEAD_SHA } else { $env:GITHUB_SHA }
@@ -247,7 +248,10 @@ jobs:
           # Warning gate for scripts changed in the latest commit.
           $paths = @(& git diff --name-only --diff-filter=ACMR $base $head -- scripts |
               Where-Object { $_ -match '\.(ps1|psm1|psd1)$' -and (Test-Path $_) })
-          $recentPaths = @(& git diff --name-only --diff-filter=ACMR "$head^" $head -- scripts |
+          # The accepted source already passed the latest-commit gate in #214.
+          # On promotion, a merge commit must not reclassify old warnings as new.
+          $recentBase = if ($env:REUSE_ACCEPTED -eq 'true') { '495353ad20f5b0cdeb044fc79a8451483b327215' } else { "$head^" }
+          $recentPaths = @(& git diff --name-only --diff-filter=ACMR $recentBase $head -- scripts |
               Where-Object { $_ -match '\.(ps1|psm1|psd1)$' -and (Test-Path $_) } |
               ForEach-Object { Split-Path -Leaf $_ })
           if ($paths.Count -eq 0) {
@@ -272,12 +276,17 @@ jobs:
         shell: bash
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REUSE_ACCEPTED: ${{ steps.classify.outputs.reuse }}
         run: |
           set -euo pipefail
           # Review newly committed lines, not pre-existing whitespace in
           # frozen third-party license text from prior upstream history.
           head="${PR_HEAD_SHA:-HEAD}"
-          git diff --check "$head^" "$head"
+          if [[ "$REUSE_ACCEPTED" == true ]]; then
+            git diff --check 495353ad20f5b0cdeb044fc79a8451483b327215 "$head"
+          else
+            git diff --check "$head^" "$head"
+          fi
           python3 scripts/test-upstream-sync.py
           python3 scripts/upstream_sync.py verify-deletions
           python3 scripts/test-qt-cmake-contract.py
@@ -699,7 +708,7 @@ jobs:
 
   publish-prerelease:
     needs: [preflight, windows]
-    if: always() && needs.preflight.result == 'success' && needs.preflight.outputs.release == 'true' && github.ref == 'refs/heads/main' && (needs.windows.result == 'success' || (needs.preflight.outputs.reuse == 'true' && needs.windows.result == 'skipped'))
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.preflight.outputs.release == 'true' && github.ref == 'refs/heads/main' && (needs.windows.result == 'success' || (needs.preflight.outputs.reuse == 'true' && needs.windows.result == 'skipped')) }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
