@@ -150,20 +150,15 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
                 (snow_shot::app::edition::isMini ? QStringLiteral("mini") : QStringLiteral("full")),
             "the reference must match the linked storage edition");
     const auto expected = fixture.value(QStringLiteral("entries")).toArray();
-    // Preserve the original-author fixture. The Community-only shortcut for
-    // cycling annotation options is a new field, not an upstream field change.
-    // Validate its full contract and exclude only this known addition when
-    // comparing all frozen original fields against the historical baseline.
+    // Both frozen Windows fixtures already contain the annotation cycle shortcut.
+    // Validate its runtime contract independently and compare every baseline row.
     const QString communityKey =
         QStringLiteral("drawing_shortcuts/cycle_annotation_tool_options");
-    QJsonArray originalEntries;
     bool foundCommunityKey = false;
     for (const auto& value : actual) {
         const auto entry = value.toObject();
-        if (entry.value(QStringLiteral("key")).toString() != communityKey) {
-            originalEntries.append(value);
+        if (entry.value(QStringLiteral("key")).toString() != communityKey)
             continue;
-        }
         require(!foundCommunityKey, "Community shortcut schema key must be unique");
         foundCommunityKey = true;
         // The raw descriptor stores "Tab" as a StringList, but buildEntries()
@@ -181,8 +176,8 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
             "Community annotation cycle shortcut must retain its typed Tab default");
     }
     require(foundCommunityKey, "Community annotation cycle shortcut must be present");
-    if (originalEntries.size() != expected.size()) {
-        std::cerr << "schema entries: actual=" << originalEntries.size() << " expected=" << expected.size()
+    if (actual.size() != expected.size()) {
+        std::cerr << "schema entries: actual=" << actual.size() << " expected=" << expected.size()
                   << '\n';
         const auto keys = [](const QJsonArray& entries) {
             QSet<QString> result;
@@ -190,15 +185,15 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
                 result.insert(entry.toObject().value(QStringLiteral("key")).toString());
             return result;
         };
-        const auto actualKeys = keys(originalEntries);
+        const auto actualKeys = keys(actual);
         const auto expectedKeys = keys(expected);
         for (const auto& key : actualKeys - expectedKeys)
             std::cerr << "missing fixture key: " << key.toStdString() << '\n';
         for (const auto& key : expectedKeys - actualKeys)
             std::cerr << "unexpected fixture key: " << key.toStdString() << '\n';
     }
-    require(originalEntries.size() == expected.size(),
-            "original schema entry counts must match after the checked Community addition");
+    require(actual.size() == expected.size(),
+            "original schema entry counts must match");
     int changedEntries = 0;
     for (qsizetype i = 0; i < expected.size(); ++i) {
         QJsonObject expectedEntry = communityToolbarBaseline(expected.at(i).toObject());
@@ -216,14 +211,14 @@ void publicMetadataMatchesOriginal(const QJsonArray& actual) {
                     "the upstream update default must remain next_launch");
             expectedEntry.insert(QStringLiteral("defaultValue"), QStringLiteral("manual"));
         }
-        if (originalEntries.at(i).toObject() != expectedEntry) {
+        if (actual.at(i).toObject() != expectedEntry) {
             ++changedEntries;
             // Show multiple independent schema mismatches in a single native CI
             // run instead of iterating through one failing fixture row per run.
             if (changedEntries <= 12) {
                 std::cerr << "schema metadata changed at entry " << i << ": "
                           << key.toStdString() << "\nactual: "
-                          << QJsonDocument(originalEntries.at(i).toObject()).toJson().constData()
+                          << QJsonDocument(actual.at(i).toObject()).toJson().constData()
                           << "expected: " << QJsonDocument(expectedEntry).toJson().constData();
             }
         }
