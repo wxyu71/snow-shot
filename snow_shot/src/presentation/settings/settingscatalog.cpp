@@ -1135,15 +1135,9 @@ SettingsItemDefinition memoryOptimizationPolicyItem() {
     return {
         QStringLiteral("system.memory-optimization-policy"),
         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Memory optimization policy")),
-#ifdef Q_OS_MACOS
         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
                                        "Smart control releases unused heap memory while the app is "
                                        "idle. Active captures and pinned images are kept")),
-#else
-        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
-                                       "Smart control trims resident memory while the app is idle. "
-                                       "The next use may briefly take longer")),
-#endif
         {},
         QStringLiteral("system/memory_optimization_policy"),
         payload,
@@ -1259,15 +1253,24 @@ SettingsItemDefinition windowElementApiItem() {
 
 #endif
 
-SettingsItemDefinition historyEnabledItem() {
+SettingsItemDefinition historyRetentionModeItem() {
     return {
         QStringLiteral("history.enabled"),
-        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Persistent screenshot history")),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Retain screenshot history")),
         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog",
-                                       "Keep screenshots available after the application closes")),
+                                       "Choose whether to keep editable screenshot "
+                                       "sessions, only final images, or no new history")),
         {settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Save history"))},
-        QStringLiteral("capture_history/enabled"),
-        SettingsSwitchDefinition{},
+        QStringLiteral("capture_history/retention_mode"),
+        SettingsSelectDefinition{
+            SettingsSelectBinding::HistoryRetentionMode,
+            SettingsSelectSource::Fixed,
+            {{QStringLiteral("full"),
+              settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Keep full history"))},
+             {QStringLiteral("results_only"),
+              settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Keep results only"))},
+             {QStringLiteral("disabled"),
+              settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Disabled"))}}},
     };
 }
 
@@ -1922,23 +1925,23 @@ SettingsItemDefinition screenshotCaptureUiInScrollingScreenshotItem() {
 }
 
 SettingsItemDefinition screenshotShutterSoundNotificationItem() {
-    return switchItem(
+    SettingsMultiSelectDefinition payload;
+    payload.binding = SettingsMultiSelectBinding::ScreenshotShutterSoundNotification;
+    payload.placeholder = settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Select scenarios"));
+    payload.options = {
+        {QStringLiteral("direct_capture"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Focused window and current display"))},
+        {QStringLiteral("normal_screenshot"),
+         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Normal screenshot"))},
+    };
+    return {
         QStringLiteral("screenshot.shutter-sound-notification"),
-        QT_TRANSLATE_NOOP("SettingsCatalog", "Shutter sound notification"),
-        QT_TRANSLATE_NOOP(
-            "SettingsCatalog",
-            "Play a shutter sound when capturing the focused window or current display"),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Shutter sound notification")),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Choose when to play the shutter sound")),
+        {},
         QStringLiteral("screenshot/shutter_sound_notification"),
-        SettingsSwitchBinding::ScreenshotShutterSoundNotification);
-}
-
-SettingsItemDefinition screenshotSoundNotificationItem() {
-    return switchItem(
-        QStringLiteral("screenshot.screenshot-sound-notification"),
-        QT_TRANSLATE_NOOP("SettingsCatalog", "Screenshot sound notification"),
-        QT_TRANSLATE_NOOP("SettingsCatalog", "Play a shutter sound when screenshot capture starts"),
-        QStringLiteral("screenshot/screenshot_sound_notification"),
-        SettingsSwitchBinding::ScreenshotSoundNotification);
+        std::move(payload),
+    };
 }
 
 #if SNOW_SHOT_ENABLE_QR_RECOGNITION
@@ -4357,7 +4360,6 @@ constexpr CatalogItemFactory catalogPageScreenshotsSectionScreenshotSettingsItem
     {hiDpiImageScalingItem},
     {nullptr, &catalogItemScreenshotKeepAnnotationsEditableAfterPinningToScreen},
     {screenshotShutterSoundNotificationItem},
-    {screenshotSoundNotificationItem},
     {screenshotConfirmBeforeExitingViaShortcutItem},
 #if SNOW_SHOT_ENABLE_QR_RECOGNITION
     {screenshotAutoRecognizeQrCodeItem},
@@ -5017,7 +5019,7 @@ constexpr CatalogRelatedLinkRecord catalogPageDesktopToolsLinks[] = {
 };
 
 constexpr CatalogItemFactory catalogPageFilesHistorySectionHistoryItems[] = {
-    {historyEnabledItem},
+    {historyRetentionModeItem},
     {nullptr, &catalogItemHistoryKeepPermanently},
     {nullptr, &catalogItemHistoryCompressionLevel},
     {nullptr, &catalogItemHistoryRetentionDays},
@@ -6470,6 +6472,9 @@ QStringList SettingsCatalog::validationErrors() const {
                     case SettingsSelectBinding::ScreenshotCompressionLevel:
                         expectedKey = QStringLiteral("screenshot/compression_level");
                         break;
+                    case SettingsSelectBinding::HistoryRetentionMode:
+                        expectedKey = QStringLiteral("capture_history/retention_mode");
+                        break;
                     case SettingsSelectBinding::HistoryCompressionLevel:
                         expectedKey = QStringLiteral("capture_history/compression_level");
                         break;
@@ -6552,9 +6557,6 @@ QStringList SettingsCatalog::validationErrors() const {
                         std::get_if<SettingsSwitchDefinition>(&itemDefinition.payload)) {
                     QString expectedKey;
                     switch (switchDefinition->binding) {
-                    case SettingsSwitchBinding::HistoryEnabled:
-                        expectedKey = QStringLiteral("capture_history/enabled");
-                        break;
                     case SettingsSwitchBinding::PinnedHistoryEnabled:
                         expectedKey = QStringLiteral("pinned_history/enabled");
                         break;
@@ -6603,12 +6605,6 @@ QStringList SettingsCatalog::validationErrors() const {
                     case SettingsSwitchBinding::ScreenshotCaptureUiInScrollingScreenshot:
                         expectedKey =
                             QStringLiteral("screenshot/capture_ui_in_scrolling_screenshot");
-                        break;
-                    case SettingsSwitchBinding::ScreenshotShutterSoundNotification:
-                        expectedKey = QStringLiteral("screenshot/shutter_sound_notification");
-                        break;
-                    case SettingsSwitchBinding::ScreenshotSoundNotification:
-                        expectedKey = QStringLiteral("screenshot/screenshot_sound_notification");
                         break;
                     case SettingsSwitchBinding::ScreenshotConfirmBeforeExitingViaShortcut:
                         expectedKey =
@@ -6778,6 +6774,9 @@ QStringList SettingsCatalog::validationErrors() const {
                     default:
                         if (const auto trigger = exportTriggerForBinding(multi->binding))
                             expectedKey = storage::exportTaskRow(*trigger).key.toString();
+                        break;
+                    case SettingsMultiSelectBinding::ScreenshotShutterSoundNotification:
+                        expectedKey = QStringLiteral("screenshot/shutter_sound_notification");
                         break;
                     case SettingsMultiSelectBinding::FullscreenDisableScope:
                         expectedKey = QStringLiteral("global_shortcuts/fullscreen_disable_scope");

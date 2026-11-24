@@ -2664,6 +2664,10 @@ if(SNOW_SHOT_BUILD_TESTS)
     set_tests_properties(snow-shot-translation-confidence-storage-tests PROPERTIES
         LABELS "unit" TIMEOUT 30
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+    add_test(NAME snow-shot-shutter-sound-migration-tests
+        COMMAND snow-shot-application-storage-tests --shutter-sound-only)
+    set_tests_properties(snow-shot-shutter-sound-migration-tests PROPERTIES LABELS unit
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-application-storage-tests
         COMMAND snow-shot-application-storage-tests)
     add_test(NAME snow-shot-configuration-version-tests
@@ -3517,6 +3521,8 @@ if(SNOW_SHOT_BUILD_TESTS)
         snow_shot_settings snow_shot_image_codec Qt6::Test)
     snow_shot_import_offscreen_platform(snow-shot-settings-page-loading-tests)
     snow_shot_add_translations(snow-shot-settings-page-loading-tests)
+    add_test(NAME snow-shot-shutter-sound-settings-tests
+        COMMAND snow-shot-settings-page-loading-tests --shutter-sound-only)
     add_test(NAME snow-shot-settings-select-tests
         COMMAND snow-shot-settings-page-loading-tests --selects-only)
     add_test(NAME snow-shot-pinned-text-color-settings-tests
@@ -3525,7 +3531,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         LABELS "unit" TIMEOUT 60
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
-    set_tests_properties(snow-shot-settings-select-tests PROPERTIES
+    set_tests_properties(snow-shot-settings-select-tests snow-shot-shutter-sound-settings-tests PROPERTIES
         TIMEOUT 60
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>"
@@ -4346,6 +4352,7 @@ if(SNOW_SHOT_BUILD_TESTS)
         "${CMAKE_CURRENT_SOURCE_DIR}/include")
     target_link_libraries(snow-shot-direct-capture-workflow-tests PRIVATE
         snow_shot_image_codec
+        snow_shot_storage
         Qt6::Gui
     )
     add_test(NAME snow-shot-direct-capture-workflow-tests

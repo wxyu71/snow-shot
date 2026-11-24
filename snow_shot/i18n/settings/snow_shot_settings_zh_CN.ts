@@ -1859,12 +1859,20 @@
             <translation>选择何时可以在固定到屏幕的截图上选择识别出的文本</translation>
         </message>
         <message>
+            <source>Choose when to play the shutter sound</source>
+            <translation>选择在哪些截图场景播放快门声</translation>
+        </message>
+        <message>
             <source>Choose where images are written for automatic save and copy-file actions</source>
             <translation>选择自动保存和复制文件操作写入图像的位置</translation>
         </message>
         <message>
             <source>Choose where recording output files are written</source>
             <translation>选择录制输出文件的保存位置</translation>
+        </message>
+        <message>
+            <source>Choose whether to keep editable screenshot sessions, only final images, or no new history</source>
+            <translation>选择保留可编辑的截图会话、仅保留最终图像或停用新历史记录</translation>
         </message>
         <message>
             <source>Choose which fullscreen windows trigger automatic disabling</source>
@@ -2575,6 +2583,10 @@
             <translation>焦点窗口</translation>
         </message>
         <message>
+            <source>Focused window and current display</source>
+            <translation>焦点窗口和当前显示器</translation>
+        </message>
+        <message>
             <source>Follow mouse movement</source>
             <translation>跟随鼠标移动</translation>
         </message>
@@ -2879,6 +2891,10 @@
             <translation>保留已关闭窗口以便恢复；禁用不会删除现有记录</translation>
         </message>
         <message>
+            <source>Keep full history</source>
+            <translation>保留完整历史</translation>
+        </message>
+        <message>
             <source>Keep group main buttons visible</source>
             <translation>保持显示分组主按钮</translation>
         </message>
@@ -2887,12 +2903,12 @@
             <translation>永久保留记录</translation>
         </message>
         <message>
-            <source>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</source>
-            <translation>保留截图标注的可编辑状态及撤销、重做历史。固定的图像保留原始布局，不使用紧凑布局</translation>
+            <source>Keep results only</source>
+            <translation>仅保留结果</translation>
         </message>
         <message>
-            <source>Keep screenshots available after the application closes</source>
-            <translation>关闭应用程序后仍保留可用的截图</translation>
+            <source>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</source>
+            <translation>保留截图标注的可编辑状态及撤销、重做历史。固定的图像保留原始布局，不使用紧凑布局</translation>
         </message>
         <message>
             <source>Keep selection width and height consistent</source>
@@ -3224,6 +3240,10 @@
             <translation>正常</translation>
         </message>
         <message>
+            <source>Normal screenshot</source>
+            <translation>普通截图</translation>
+        </message>
+        <message>
             <source>Notify after export completes</source>
             <translation>导出完成后通知</translation>
         </message>
@@ -3368,10 +3388,6 @@
             <translation>权限状态与授权</translation>
         </message>
         <message>
-            <source>Persistent screenshot history</source>
-            <translation>持久化截图历史</translation>
-        </message>
-        <message>
             <source>Pin clipboard content to screen</source>
             <translation>将剪贴板内容固定到屏幕</translation>
         </message>
@@ -3474,14 +3490,6 @@
         <message>
             <source>Play / pause</source>
             <translation>播放 / 暂停</translation>
-        </message>
-        <message>
-            <source>Play a shutter sound when capturing the focused window or current display</source>
-            <translation>截取焦点窗口或当前显示器时播放快门声音</translation>
-        </message>
-        <message>
-            <source>Play a shutter sound when screenshot capture starts</source>
-            <translation>开始截图时播放快门声音</translation>
         </message>
         <message>
             <source>Play saved GIF, APNG, and WebP recordings repeatedly</source>
@@ -3780,6 +3788,10 @@
             <translation>保留已关闭窗口</translation>
         </message>
         <message>
+            <source>Retain screenshot history</source>
+            <translation>保留截图历史</translation>
+        </message>
+        <message>
             <source>Retention limits apply only to closed windows; retained windows are always protected</source>
             <translation>存储限制仅适用于已关闭窗口；保留中的窗口始终受到保护</translation>
         </message>
@@ -4056,10 +4068,6 @@
             <translation>截图快捷键和操作</translation>
         </message>
         <message>
-            <source>Screenshot sound notification</source>
-            <translation>截图声音通知</translation>
-        </message>
-        <message>
             <source>Screenshot toolbar</source>
             <translation>截图工具栏</translation>
         </message>
@@ -4094,6 +4102,10 @@
         <message>
             <source>Select image save directory</source>
             <translation>选择图像保存目录</translation>
+        </message>
+        <message>
+            <source>Select scenarios</source>
+            <translation>选择场景</translation>
         </message>
         <message>
             <source>Select skin image</source>
@@ -4450,10 +4462,6 @@
         <message>
             <source>Smart control releases unused heap memory while the app is idle. Active captures and pinned images are kept</source>
             <translation>智能控制会在应用空闲时释放未使用的堆内存。正在进行的捕获和已固定到屏幕的图像会保留</translation>
-        </message>
-        <message>
-            <source>Smart control trims resident memory while the app is idle. The next use may briefly take longer</source>
-            <translation>智能控制会在应用空闲时缩减驻留内存。下次使用时可能会短暂增加响应时间</translation>
         </message>
         <message>
             <source>Smart merge</source>
@@ -5110,24 +5118,64 @@
     <context>
         <name>SettingsVariableHelp</name>
         <message>
-            <source>%1: Application name</source>
-            <translation>%1：应用程序名称</translation>
+            <source>Application name</source>
+            <translation>应用程序名称</translation>
         </message>
         <message>
-            <source>%1: Current time</source>
-            <translation>%1: 当前时间</translation>
+            <source>Date and time</source>
+            <translation>日期和时间</translation>
         </message>
         <message>
-            <source>%1: Window name</source>
-            <translation>%1：窗口名称</translation>
+            <source>Desktop</source>
+            <translation>桌面</translation>
+        </message>
+        <message>
+            <source>Documents</source>
+            <translation>文档</translation>
+        </message>
+        <message>
+            <source>Downloads</source>
+            <translation>下载</translation>
+        </message>
+        <message>
+            <source>Home</source>
+            <translation>主目录</translation>
         </message>
         <message>
             <source>OK</source>
             <translation>确定</translation>
         </message>
         <message>
+            <source>Path prefix only</source>
+            <translation>仅用于路径开头</translation>
+        </message>
+        <message>
+            <source>Pictures</source>
+            <translation>图片</translation>
+        </message>
+        <message>
+            <source>Source display (Display-1, Display-2, or Multi)</source>
+            <translation>来源显示器（Display-1、Display-2 或 Multi）</translation>
+        </message>
+        <message>
+            <source>System folders</source>
+            <translation>系统目录</translation>
+        </message>
+        <message>
+            <source>Time and source</source>
+            <translation>时间与来源</translation>
+        </message>
+        <message>
             <source>Variable description</source>
             <translation>变量说明</translation>
+        </message>
+        <message>
+            <source>Videos</source>
+            <translation>视频</translation>
+        </message>
+        <message>
+            <source>Window name</source>
+            <translation>窗口名称</translation>
         </message>
     </context>
     <context>

@@ -250,10 +250,10 @@
       "allowedStringValues": [],
       "defaultJsonType": 2,
       "defaultStringIsNull": false,
-      "defaultValue": 8,
+      "defaultValue": 9,
       "integerRange": [
-        8,
-        8,
+        9,
+        9,
         1
       ],
       "key": "storage/schema_version",
@@ -2693,6 +2693,20 @@
       "defaultStringIsNull": false,
       "defaultValue": [
         {
+          "portable": "Tab"
+        }
+      ],
+      "integerRange": null,
+      "key": "drawing_shortcuts/cycle_annotation_tool_options",
+      "maximumListItems": 2,
+      "valueKind": "ShortcutList"
+    },
+    {
+      "allowedStringValues": [],
+      "defaultJsonType": 4,
+      "defaultStringIsNull": false,
+      "defaultValue": [
+        {
           "portable": "M"
         },
         {
@@ -5086,24 +5100,19 @@
       "valueKind": "Boolean"
     },
     {
-      "allowedStringValues": [],
-      "defaultJsonType": 1,
+      "allowedStringValues": [
+        "direct_capture",
+        "normal_screenshot"
+      ],
+      "defaultJsonType": 4,
       "defaultStringIsNull": false,
-      "defaultValue": true,
+      "defaultValue": [
+        "direct_capture"
+      ],
       "integerRange": null,
       "key": "screenshot/shutter_sound_notification",
       "maximumListItems": -1,
-      "valueKind": "Boolean"
-    },
-    {
-      "allowedStringValues": [],
-      "defaultJsonType": 1,
-      "defaultStringIsNull": false,
-      "defaultValue": false,
-      "integerRange": null,
-      "key": "screenshot/screenshot_sound_notification",
-      "maximumListItems": -1,
-      "valueKind": "Boolean"
+      "valueKind": "StringList"
     },
     {
       "allowedStringValues": [],
@@ -5737,14 +5746,18 @@
       "valueKind": "Structured"
     },
     {
-      "allowedStringValues": [],
-      "defaultJsonType": 1,
+      "allowedStringValues": [
+        "full",
+        "results_only",
+        "disabled"
+      ],
+      "defaultJsonType": 3,
       "defaultStringIsNull": false,
-      "defaultValue": true,
+      "defaultValue": "full",
       "integerRange": null,
-      "key": "capture_history/enabled",
+      "key": "capture_history/retention_mode",
       "maximumListItems": -1,
-      "valueKind": "Boolean"
+      "valueKind": "String"
     },
     {
       "allowedStringValues": [],

@@ -1050,20 +1050,16 @@ bool GlobalShortcutSettings::setFullscreenDisableScope(const QStringList& scope)
                             QJsonArray::fromStringList(scope));
 }
 
-bool ScreenshotSettings::shutterSoundNotification() const {
-    return cache().value(QStringLiteral("screenshot/shutter_sound_notification")).toBool();
+QStringList ScreenshotSettings::shutterSoundTargets() const {
+    return cache()
+        .value(QStringLiteral("screenshot/shutter_sound_notification"))
+        .toVariant()
+        .toStringList();
 }
 
-bool ScreenshotSettings::setShutterSoundNotification(bool enabled) const {
-    return cache().setValue(QStringLiteral("screenshot/shutter_sound_notification"), enabled);
-}
-
-bool ScreenshotSettings::screenshotSoundNotification() const {
-    return cache().value(QStringLiteral("screenshot/screenshot_sound_notification")).toBool();
-}
-
-bool ScreenshotSettings::setScreenshotSoundNotification(bool enabled) const {
-    return cache().setValue(QStringLiteral("screenshot/screenshot_sound_notification"), enabled);
+bool ScreenshotSettings::setShutterSoundTargets(const QStringList& targets) const {
+    return cache().setValue(QStringLiteral("screenshot/shutter_sound_notification"),
+                            QJsonArray::fromStringList(targets));
 }
 
 #if SNOW_SHOT_ENABLE_QR_RECOGNITION
@@ -1686,6 +1682,15 @@ shortcuts::ShortcutBindingMap ScreenshotShortcutSettings::allShortcuts() const {
     shortcuts::ShortcutBindingMap result;
     for (const QString& actionId : screenshotShortcutActionIds()) {
         result.insert(actionId, shortcutValue(screenshotShortcutKey(actionId)));
+    }
+    return result;
+}
+
+shortcuts::ShortcutBindingMap ScreenshotShortcutSettings::activeShortcuts() const {
+    auto result = allShortcuts();
+    if (ApplicationStorage::instance().captureHistoryPolicy().mode != CaptureHistoryMode::Full) {
+        result[QStringLiteral("previous_screenshot_history")].clear();
+        result[QStringLiteral("next_screenshot_history")].clear();
     }
     return result;
 }

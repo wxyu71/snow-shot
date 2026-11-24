@@ -4,9 +4,12 @@
 #include "snow_shot/presentation/screenshotpdfexport.h"
 #include "snow_shot/presentation/screenshotimagefileservice.h"
 #include "snow_shot/presentation/screenshothidpiimagescaling.h"
+#include "snow_shot/storage/screenshotexportvariables.h"
+#include "snow_shot/storage/capturehistorymode.h"
 #include <QDateTime>
 #include <QImage>
 #include <QObject>
+#include <QPointF>
 #include <QRect>
 #include <QSize>
 #include <QStringList>
@@ -36,7 +39,7 @@ struct DirectCaptureRequest {
     QDateTime requestedAt;
     std::function<void(const DirectCaptureFrame&)> afterCopy;
     bool copyFile = false;
-    bool historyEnabled = false;
+    storage::CaptureHistoryMode historyMode = storage::CaptureHistoryMode::Disabled;
     QString imageFormat;
     ScreenshotImageEncodingOptions encoding;
     ScreenshotCompressionLevel historyDisplayCompressionLevel = ScreenshotCompressionLevel::Medium;
@@ -50,6 +53,10 @@ struct DirectCaptureRequest {
     std::function<bool(QSize)> admitRaster;
     QString hiDpiImageScaling = QStringLiteral("disabled");
     QVector<ScreenshotHiDpiDisplay> scalingDisplays;
+    storage::ScreenshotExportContext exportContext;
+    bool nameSourceScreen = false;
+
+    void snapshotWindowNames(const QString& directory, const QPointF& monitorCursor);
 };
 
 struct DirectCaptureFrame {

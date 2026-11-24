@@ -10,6 +10,7 @@
 #include "snow_shot/presentation/screenshotclipboardcontent.h"
 #include "../src/presentation/pinned/screenshotclipboardplacementgeometry.h"
 #include <QClipboard>
+#include <QColorSpace>
 #include <QMimeData>
 #include "snowimageqtcodec.h"
 
@@ -26,6 +27,8 @@
 #include "widgets/scroll_area.h"
 #include "history_sticky_selection_test_support.h"
 #include "history_viewport_test_support.h"
+#include "history_drag_test_support.h"
+#include "widgets/carousel.h"
 #include "snow_shot/storage/storageusagetracker.h"
 
 #include <QApplication>
@@ -448,6 +451,106 @@ class PreviewHistoryDataSource final : public MutableHistoryDataSource {
     }
 };
 
+void cardsDragOnlyTheirFinalImage() {
+    using namespace history_drag_test;
+    QTemporaryDir directory;
+    MutableHistoryDataSource source;
+    auto records = historyRecords(3);
+    QImage finalImage(401, 213, QImage::Format_RGB32);
+    finalImage.setColorSpace(QColorSpace::SRgb);
+    finalImage.fill(Qt::red);
+    QImage display(500, 300, QImage::Format_RGB32);
+    display.fill(Qt::blue);
+    const auto finalPath = directory.filePath(QStringLiteral("final.png"));
+    const auto displayPath = directory.filePath(QStringLiteral("display.png"));
+    require(finalImage.save(finalPath) && display.save(displayPath), "save card drag fixtures");
+    for (int i = 0; i < records.size(); ++i) {
+        auto& record = records[i];
+        auto& assets = source.assets[record.id];
+        assets.recordId = record.id;
+        storage::CaptureHistoryDisplayRecord monitor;
+        monitor.stableId = QStringLiteral("monitor");
+        monitor.imageSize = display.size();
+        record.displays.push_back(monitor);
+        assets.displays.push_back(
+            {record.id, monitor.stableId, {}, display.size(), QUrl::fromLocalFile(displayPath)});
+        if (i != 1) {
+            record.result = storage::CaptureHistoryResultRecord{finalImage.size(), 100};
+            assets.result = storage::CaptureHistoryResultAsset{
+                record.id, finalImage.size(),
+                QUrl::fromLocalFile(i == 0 ? finalPath : directory.filePath("missing.png"))};
+        }
+    }
+    source.setRecords(records);
+    ScreenshotHistoryPageWidget page(&source, nullptr);
+    page.resize(1000, 900);
+    page.show();
+    page.setActive(true);
+    history_sticky_test::settleLayout();
+    const auto card = [&](int index) {
+        return page.findChild<QFrame*>(
+            QStringLiteral("screenshotHistoryEntry-record-%1").arg(index));
+    };
+    auto* row = card(0);
+    require(row && card(1) && card(2), "all drag fixture cards are materialized");
+    auto* checkbox = row->findChild<adqt::widgets::AdCheckbox*>();
+    auto* otherCheckbox = card(1)->findChild<adqt::widgets::AdCheckbox*>();
+    checkbox->click();
+    otherCheckbox->click();
+    int requests = 0;
+    QPointer<QObject> gesture;
+    QObject::connect(&page, &ScreenshotHistoryPageWidget::imageDragRequested, &page,
+                     [&](QObject* active, const QImage& image) {
+                         ++requests;
+                         gesture = active;
+                         require(image.convertToFormat(QImage::Format_RGB32) == finalImage,
+                                 "history drags the full final image of the pressed card");
+                     });
+    auto* carousel = row->findChild<adqt::widgets::AdCarousel*>();
+    carousel->setTransitionDuration(0);
+    auto* preview = row->findChildren<adqt::widgets::AdImage*>().front();
+    const QPoint center = preview->rect().center();
+    mouse(preview, QEvent::MouseButtonPress, center);
+    mouse(preview, QEvent::MouseMove, center - QPoint(90, 0));
+    mouse(preview, QEvent::MouseButtonRelease, center - QPoint(90, 0));
+    require(waitFor([&] { return carousel->currentIndex() == 1; }) && requests == 0,
+            "a horizontal swipe switches to the display slide");
+    auto* details = row->findChild<QLabel*>(QStringLiteral("screenshotHistoryEntrySummary"));
+    const QPoint origin = details->rect().center();
+    mouse(details, QEvent::MouseButtonPress, origin);
+    mouse(details, QEvent::MouseMove, origin + QPoint(QApplication::startDragDistance() - 1, 0));
+    mouse(details, QEvent::MouseButtonRelease, origin);
+    start(details, origin);
+    require(waitFor([&] { return requests == 1; }) && gesture && checkbox->isChecked() &&
+                otherCheckbox->isChecked(),
+            "dragging detail text preserves the checked records");
+    mouse(details, QEvent::MouseMove, origin + QPoint(60, 0));
+    mouse(details, QEvent::MouseButtonRelease, origin);
+    require(!gesture && requests == 1, "one press exports once and release retires the gesture");
+    checkbox->click();
+    start(row, QPoint(3, 3));
+    require(waitFor([&] { return requests == 2; }) && !checkbox->isChecked() &&
+                otherCheckbox->isChecked(),
+            "empty space on an unchecked card drags that card");
+    mouse(row, QEvent::MouseButtonRelease, QPoint(3, 3));
+
+    for (auto* control : {static_cast<QWidget*>(checkbox),
+                          static_cast<QWidget*>(row->findChild<adqt::widgets::AdButton*>())}) {
+        mouse(control, QEvent::MouseButtonPress, control->rect().center());
+        const auto outside = control->mapFromGlobal(row->mapToGlobal(QPoint(3, 3)));
+        mouse(control, QEvent::MouseMove, outside);
+        mouse(control, QEvent::MouseButtonRelease, outside);
+    }
+    start(card(1), QPoint(3, 3));
+    mouse(card(1), QEvent::MouseButtonRelease, QPoint(3, 3));
+    const int failures = source.readFailures;
+    start(card(2), QPoint(3, 3));
+    require(waitFor([&] { return source.readFailures > failures; }),
+            "unreadable final image reports a load failure");
+    mouse(card(2), QEvent::MouseButtonRelease, QPoint(3, 3));
+    require(requests == 2, "controls and display-only or unreadable records cannot export");
+}
+
 void continuousHistoryPreview() {
     QTemporaryDir directory;
     PreviewHistoryDataSource source;
@@ -665,14 +768,19 @@ void entriesUseBordersAndSupportCrossPageSelection() {
                 selectAll != nullptr && batchActions != nullptr && deselectAll != nullptr &&
                 pagination != nullptr && sourceFilter != nullptr && dateFilter != nullptr,
             "history selection controls must be discoverable");
-    require(!selectionBar->isVisible(), "selection bar must be hidden before selection");
-    require(!batchActions->isVisible(),
-            "Batch Actions must be hidden when no history entry is selected");
+    const auto selectionIsEmpty = [&] {
+        return selectionBar->isVisible() && summary->text() == QStringLiteral("Selected 0 items") &&
+               batchActions->isVisible() && !batchActions->isEnabled() &&
+               !deleteSelected->isEnabled() && !deselectAll->isEnabled();
+    };
+    require(selectionIsEmpty() && selectAll->isEnabled(),
+            "the inline selection bar starts with only Select all enabled");
     QWidget* firstEntry = checkboxes.first()->parentWidget()->parentWidget();
     require(verticalLayoutGap(page, filters, firstEntry) > 0,
             "history entries must retain a gap below the filters when selection is empty");
-    require(selectionActions->layout() != nullptr && selectionActions->layout()->spacing() == 0,
-            "selection actions must not add redundant spacing between link buttons");
+    require(!deleteSelected->contentPaddingEnabled() && !selectAll->contentPaddingEnabled() &&
+                !batchActions->contentPaddingEnabled() && !deselectAll->contentPaddingEnabled(),
+            "selection actions use text-sized links");
     require(selectionActions->layout()->indexOf(batchActions) + 1 ==
                 selectionActions->layout()->indexOf(selectAll),
             "Batch Actions must appear immediately to the left of Select all");
@@ -780,22 +888,21 @@ void entriesUseBordersAndSupportCrossPageSelection() {
     deselectAll->click();
     flushEvents();
     checkboxes = entryCheckboxes(page);
-    require(!selectionBar->isVisible() &&
+    require(selectionIsEmpty() &&
                 std::none_of(checkboxes.cbegin(), checkboxes.cend(),
                              [](const auto* checkbox) { return checkbox->isChecked(); }),
             "Deselect all must clear the complete cross-page selection");
-    require(!batchActions->isVisible(), "clearing history selection hides Batch Actions");
 
     entryCheckboxes(page).first()->click();
     sourceFilter->setCurrentValues({QStringLiteral("clipboard")});
     flushEvents();
-    require(!selectionBar->isVisible(), "changing the source filter must clear selection");
+    require(selectionIsEmpty(), "changing the source filter must clear selection");
     sourceFilter->setCurrentValues({});
     flushEvents();
     entryCheckboxes(page).first()->click();
     dateFilter->setRange(QDate::currentDate(), QDate::currentDate());
     flushEvents();
-    require(!selectionBar->isVisible(), "changing the date filter must clear selection");
+    require(selectionIsEmpty(), "changing the date filter must clear selection");
 
     dateFilter->clear();
     flushEvents();
@@ -851,8 +958,7 @@ void entriesUseBordersAndSupportCrossPageSelection() {
         require(dataSource.removedBatches.first()[index] == records[index].id,
                 "bulk deletion IDs must follow deterministic repository order");
     }
-    require(!selectionBar->isVisible(),
-            "an accepted bulk deletion request must clear the selection bar");
+    require(selectionIsEmpty(), "an accepted bulk deletion request must clear selection");
 }
 
 void emptyStateRemainsVisibleAfterFilteringEmptyHistory() {
@@ -955,11 +1061,13 @@ void pageTextAndEmptyStateMatchPinnedWindowManagement() {
                     historyIcon->pixmap().toImage() == pinnedIcon->pixmap().toImage(),
                 "the empty-state icon must use identical colors on both pages in each theme");
         for (QLabel* label : {historyCount, pinnedCount, historySelection, pinnedSelection}) {
-            require(
-                label->font().pixelSize() == scheme.metricAlias.fontSize &&
-                    label->font().weight() == QFont::Normal &&
-                    label->palette().color(QPalette::WindowText) == scheme.map.colorTextSecondary,
-                "both page subtitles and selection summaries must use the same theme text style");
+            require(label->font().pixelSize() == scheme.metricAlias.fontSize &&
+                        label->font().weight() == QFont::Normal,
+                    "both page subtitles and selection summaries use the body font");
+        }
+        for (QLabel* label : {historySelection, pinnedSelection}) {
+            require(label->palette().color(QPalette::WindowText) == scheme.map.colorTextTertiary,
+                    "both selection summaries use the alert text color");
         }
     }
 }
@@ -1888,7 +1996,7 @@ std::optional<ScreenshotClipboardContentSnapshot> historyClipboardSnapshot() {
 
 void historyCopiesPreservePositionAndAppearance() {
     auto& repository = storage::ApplicationStorage::instance().captureHistory();
-    for (int mode : {0, 1, 2}) {
+    for (int mode : {0, 1, 2, 3}) {
         storage::CaptureHistoryDraft draft;
         draft.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
         draft.createdUtc = QDateTime::currentDateTimeUtc();
@@ -1914,6 +2022,11 @@ void historyCopiesPreservePositionAndAppearance() {
         const ScreenshotResultStyle style{12, 8, Qt::black};
         draft.resultImage =
             ScreenshotResultCompositor::compose(display.copy(draft.selection.rectangle), style);
+        if (mode == 3) {
+            draft.contentKind = storage::CaptureHistoryContentKind::ResultOnly;
+            draft.canvasHistory.clear();
+            draft.displays.clear();
+        }
         const auto published = repository.publish(draft).get();
         require(published.storage.success, "publish clipboard history fixture");
         const auto stored = repository.loadResultPng(published.record);
@@ -2145,6 +2258,7 @@ int main(int argc, char** argv) {
     historyRowsRespectSkinMask();
     selectionPanelSticksWhileScrolling();
     continuousHistoryPreview();
+    cardsDragOnlyTheirFinalImage();
     emptyStateRemainsVisibleAfterFilteringEmptyHistory();
     pageTextAndEmptyStateMatchPinnedWindowManagement();
     entryLayoutsMatchAcrossManagementPages();

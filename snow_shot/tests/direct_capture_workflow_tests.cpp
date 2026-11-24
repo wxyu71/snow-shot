@@ -1,4 +1,5 @@
 #include "snow_shot/presentation/directcaptureworkflow.h"
+#include "snow_shot/platform/screenshotwindownames.h"
 
 #include <QCoreApplication>
 
@@ -6,6 +7,31 @@
 #include <iostream>
 
 using namespace snow_shot::presentation;
+
+namespace {
+struct WindowNameLookup {
+    std::uintptr_t window = 0;
+    QPointF point;
+    snow_shot::storage::ScreenshotWindowNameFields fields;
+    int calls = 0;
+};
+WindowNameLookup nameLookup;
+} // namespace
+
+namespace snow_shot::platform {
+storage::ScreenshotExportContext
+screenshotWindowNamesForWindow(std::uintptr_t window, storage::ScreenshotWindowNameFields fields) {
+    nameLookup = {window, {}, fields, nameLookup.calls + 1};
+    return {QStringLiteral("Focused App"), QStringLiteral("Focused Title")};
+}
+
+storage::ScreenshotExportContext
+screenshotWindowNamesAtPoint(const QPointF& point, std::span<const std::uintptr_t>,
+                             storage::ScreenshotWindowNameFields fields) {
+    nameLookup = {0, point, fields, nameLookup.calls + 1};
+    return {QStringLiteral("Monitor App"), QStringLiteral("Monitor Title")};
+}
+} // namespace snow_shot::platform
 
 namespace {
 void require(bool condition, const char* message) {
@@ -126,7 +152,7 @@ void outputsKeepRawPixelsAndProcessEveryRequest() {
         require(result.image == frame().image, "follow-up tasks lost the captured pixels");
         f.events << "tasks";
     };
-    first.historyEnabled = true;
+    first.historyMode = snow_shot::storage::CaptureHistoryMode::Full;
     first.encoding.quality = 35;
     first.encoding.compressionLevel = ScreenshotCompressionLevel::High;
     first.filenameFormat = QStringLiteral("first");
@@ -170,7 +196,7 @@ void tasksRequireAConfirmedCopy() {
             DirectCaptureRequest request;
             request.target = target;
             request.afterCopy = [&](const auto&) { f.events << "tasks"; };
-            request.historyEnabled = true;
+            request.historyMode = snow_shot::storage::CaptureHistoryMode::Full;
             f.acceptCopy = outcome != 0;
             f.workflow.enqueue(request);
             f.workflow.enqueue({});
@@ -193,7 +219,7 @@ void fileCopyHistoryFailureAndLateCallbacks() {
     Fixture f;
     DirectCaptureRequest request;
     request.copyFile = true;
-    request.historyEnabled = true;
+    request.historyMode = snow_shot::storage::CaptureHistoryMode::Full;
     f.workflow.enqueue(request);
     auto oldAcquired = f.acquired;
     f.acquired(frame());
@@ -223,7 +249,7 @@ void rejectedOperationsFinishAndDestroyedReceiversIgnoreResults() {
         f.acceptHistory = stage != 2;
         DirectCaptureRequest request;
         request.copyFile = true;
-        request.historyEnabled = true;
+        request.historyMode = snow_shot::storage::CaptureHistoryMode::Full;
         f.workflow.enqueue(request);
         if (stage > 0)
             f.acquired(frame());
@@ -247,7 +273,7 @@ void queuedRequestsRetainTargetsAndOutputSettings() {
     request.window = 8765;
     request.requestedAt = QDateTime::fromMSecsSinceEpoch(123456).toUTC();
     request.copyFile = true;
-    request.historyEnabled = true;
+    request.historyMode = snow_shot::storage::CaptureHistoryMode::Full;
     request.imageFormat = QStringLiteral("pdf");
     request.encoding.quality = 42;
     request.encoding.compressionLevel = ScreenshotCompressionLevel::High;
@@ -267,7 +293,8 @@ void queuedRequestsRetainTargetsAndOutputSettings() {
         const auto& queued = f.requests.back();
         require(queued.target == DirectCaptureTarget::FocusedWindow &&
                     queued.window == static_cast<quintptr>(8765 + i) && queued.copyFile &&
-                    queued.historyEnabled && queued.requestedAt.toMSecsSinceEpoch() == 123456 &&
+                    queued.historyMode == snow_shot::storage::CaptureHistoryMode::Full &&
+                    queued.requestedAt.toMSecsSinceEpoch() == 123456 &&
                     queued.imageFormat == QStringLiteral("pdf") && queued.encoding.quality == 42 &&
                     queued.encoding.compressionLevel == ScreenshotCompressionLevel::High &&
                     queued.pdf.pageSize == ScreenshotPdfPageSize::LandscapeA4 &&
@@ -282,6 +309,62 @@ void queuedRequestsRetainTargetsAndOutputSettings() {
             "burst requests were coalesced or dropped");
 }
 
+void queuedExportsKeepNamesFromTheirCaptureTarget() {
+    using namespace snow_shot::storage;
+    Fixture f;
+    f.workflow.enqueue({});
+    const QPointF cursor(-1800, -210);
+    DirectCaptureRequest focused;
+    focused.target = DirectCaptureTarget::FocusedWindow;
+    focused.window = 1234;
+    focused.filenameFormat = QStringLiteral("{WN}");
+    const QString folder = QStringLiteral("captures/{AN}");
+    focused.snapshotWindowNames(folder, cursor);
+    require(nameLookup.calls == 1 && nameLookup.window == focused.window &&
+                nameLookup.fields == ScreenshotWindowNameFields{true, true},
+            "focused capture must look up its exact window and include directory variables");
+    f.workflow.enqueue(focused);
+
+    DirectCaptureRequest monitor;
+    monitor.monitorName = QStringLiteral("monitor");
+    monitor.filenameFormat = QStringLiteral("{AN}_{WN}");
+    monitor.snapshotWindowNames({}, cursor);
+    require(nameLookup.calls == 2 && nameLookup.window == 0 && nameLookup.point == cursor &&
+                nameLookup.fields == ScreenshotWindowNameFields{true, true},
+            "monitor capture must look up both names at the cursor point");
+    f.workflow.enqueue(monitor);
+
+    focused.filenameFormat = QStringLiteral("{YYYY}");
+    focused.snapshotWindowNames({}, cursor);
+    monitor.monitorName.clear();
+    monitor.snapshotWindowNames({}, cursor);
+    require(nameLookup.calls == 2 && focused.exportContext == ScreenshotExportContext{} &&
+                monitor.exportContext == ScreenshotExportContext{},
+            "unused variables or a missing target must skip window metadata lookup");
+
+    f.acquired(frame());
+    f.copied(true, {});
+    QCoreApplication::processEvents();
+    f.acquired(frame());
+    const auto& focusedOutput = f.copyRequests.back();
+    require(expandScreenshotExportVariables(folder, {}, focusedOutput.exportContext) ==
+                    QStringLiteral("captures/Focused App") &&
+                expandScreenshotExportVariables(focusedOutput.filenameFormat, {},
+                                                focusedOutput.exportContext) ==
+                    QStringLiteral("Focused Title"),
+            "queued focused exports must keep application and window names");
+    f.copied(true, {});
+    QCoreApplication::processEvents();
+    f.acquired(frame());
+    const auto& monitorOutput = f.copyRequests.back();
+    require(expandScreenshotExportVariables(monitorOutput.filenameFormat, {},
+                                            monitorOutput.exportContext) ==
+                    QStringLiteral("Monitor App_Monitor Title") &&
+                nameLookup.calls == 2,
+            "queued monitor exports must keep the names found at invocation");
+    f.copied(true, {});
+}
+
 void shutdownDuringNotificationsStopsOutputs() {
     {
         Fixture f;
@@ -294,7 +377,7 @@ void shutdownDuringNotificationsStopsOutputs() {
         Fixture f;
         f.stopOnReport = true;
         DirectCaptureRequest request;
-        request.historyEnabled = true;
+        request.historyMode = snow_shot::storage::CaptureHistoryMode::Full;
         f.workflow.enqueue(request);
         f.workflow.enqueue({});
         if (stage == 0)
@@ -322,6 +405,7 @@ int main(int argc, char** argv) {
     fileCopyHistoryFailureAndLateCallbacks();
     rejectedOperationsFinishAndDestroyedReceiversIgnoreResults();
     queuedRequestsRetainTargetsAndOutputSettings();
+    queuedExportsKeepNamesFromTheirCaptureTarget();
     shutdownDuringNotificationsStopsOutputs();
     return 0;
 }

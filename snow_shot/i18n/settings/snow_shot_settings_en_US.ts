@@ -1859,12 +1859,20 @@
             <translation>Choose when recognized text can be selected on pinned screenshots</translation>
         </message>
         <message>
+            <source>Choose when to play the shutter sound</source>
+            <translation>Choose when to play the shutter sound</translation>
+        </message>
+        <message>
             <source>Choose where images are written for automatic save and copy-file actions</source>
             <translation>Choose where images are written for automatic save and copy-file actions</translation>
         </message>
         <message>
             <source>Choose where recording output files are written</source>
             <translation>Choose where recording output files are written</translation>
+        </message>
+        <message>
+            <source>Choose whether to keep editable screenshot sessions, only final images, or no new history</source>
+            <translation>Choose whether to keep editable screenshot sessions, only final images, or no new history</translation>
         </message>
         <message>
             <source>Choose which fullscreen windows trigger automatic disabling</source>
@@ -2575,6 +2583,10 @@
             <translation>Focused window</translation>
         </message>
         <message>
+            <source>Focused window and current display</source>
+            <translation>Focused window and current display</translation>
+        </message>
+        <message>
             <source>Follow mouse movement</source>
             <translation>Follow mouse movement</translation>
         </message>
@@ -2879,6 +2891,10 @@
             <translation>Keep closed windows available for restoration; disabling does not delete existing records</translation>
         </message>
         <message>
+            <source>Keep full history</source>
+            <translation>Keep full history</translation>
+        </message>
+        <message>
             <source>Keep group main buttons visible</source>
             <translation>Keep group main buttons visible</translation>
         </message>
@@ -2887,12 +2903,12 @@
             <translation>Keep records permanently</translation>
         </message>
         <message>
-            <source>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</source>
-            <translation>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</translation>
+            <source>Keep results only</source>
+            <translation>Keep results only</translation>
         </message>
         <message>
-            <source>Keep screenshots available after the application closes</source>
-            <translation>Keep screenshots available after the application closes</translation>
+            <source>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</source>
+            <translation>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</translation>
         </message>
         <message>
             <source>Keep selection width and height consistent</source>
@@ -3224,6 +3240,10 @@
             <translation>Normal</translation>
         </message>
         <message>
+            <source>Normal screenshot</source>
+            <translation>Normal screenshot</translation>
+        </message>
+        <message>
             <source>Notify after export completes</source>
             <translation>Notify after export completes</translation>
         </message>
@@ -3368,10 +3388,6 @@
             <translation>Permission status and access</translation>
         </message>
         <message>
-            <source>Persistent screenshot history</source>
-            <translation>Persistent screenshot history</translation>
-        </message>
-        <message>
             <source>Pin clipboard content to screen</source>
             <translation>Pin clipboard content to screen</translation>
         </message>
@@ -3474,14 +3490,6 @@
         <message>
             <source>Play / pause</source>
             <translation>Play / pause</translation>
-        </message>
-        <message>
-            <source>Play a shutter sound when capturing the focused window or current display</source>
-            <translation>Play a shutter sound when capturing the focused window or current display</translation>
-        </message>
-        <message>
-            <source>Play a shutter sound when screenshot capture starts</source>
-            <translation>Play a shutter sound when screenshot capture starts</translation>
         </message>
         <message>
             <source>Play saved GIF, APNG, and WebP recordings repeatedly</source>
@@ -3780,6 +3788,10 @@
             <translation>Retain closed windows</translation>
         </message>
         <message>
+            <source>Retain screenshot history</source>
+            <translation>Retain screenshot history</translation>
+        </message>
+        <message>
             <source>Retention limits apply only to closed windows; retained windows are always protected</source>
             <translation>Retention limits apply only to closed windows; retained windows are always protected</translation>
         </message>
@@ -4056,10 +4068,6 @@
             <translation>Screenshot shortcuts and actions</translation>
         </message>
         <message>
-            <source>Screenshot sound notification</source>
-            <translation>Screenshot sound notification</translation>
-        </message>
-        <message>
             <source>Screenshot toolbar</source>
             <translation>Screenshot toolbar</translation>
         </message>
@@ -4094,6 +4102,10 @@
         <message>
             <source>Select image save directory</source>
             <translation>Select image save directory</translation>
+        </message>
+        <message>
+            <source>Select scenarios</source>
+            <translation>Select scenarios</translation>
         </message>
         <message>
             <source>Select skin image</source>
@@ -4450,10 +4462,6 @@
         <message>
             <source>Smart control releases unused heap memory while the app is idle. Active captures and pinned images are kept</source>
             <translation>Smart control releases unused heap memory while the app is idle. Active captures and pinned images are kept</translation>
-        </message>
-        <message>
-            <source>Smart control trims resident memory while the app is idle. The next use may briefly take longer</source>
-            <translation>Smart control trims resident memory while the app is idle. The next use may briefly take longer</translation>
         </message>
         <message>
             <source>Smart merge</source>
@@ -5110,24 +5118,64 @@
     <context>
         <name>SettingsVariableHelp</name>
         <message>
-            <source>%1: Application name</source>
-            <translation>%1: Application name</translation>
+            <source>Application name</source>
+            <translation>Application name</translation>
         </message>
         <message>
-            <source>%1: Current time</source>
-            <translation>%1: Current time</translation>
+            <source>Date and time</source>
+            <translation>Date and time</translation>
         </message>
         <message>
-            <source>%1: Window name</source>
-            <translation>%1: Window name</translation>
+            <source>Desktop</source>
+            <translation>Desktop</translation>
+        </message>
+        <message>
+            <source>Documents</source>
+            <translation>Documents</translation>
+        </message>
+        <message>
+            <source>Downloads</source>
+            <translation>Downloads</translation>
+        </message>
+        <message>
+            <source>Home</source>
+            <translation>Home</translation>
         </message>
         <message>
             <source>OK</source>
             <translation>OK</translation>
         </message>
         <message>
+            <source>Path prefix only</source>
+            <translation>Path prefix only</translation>
+        </message>
+        <message>
+            <source>Pictures</source>
+            <translation>Pictures</translation>
+        </message>
+        <message>
+            <source>Source display (Display-1, Display-2, or Multi)</source>
+            <translation>Source display (Display-1, Display-2, or Multi)</translation>
+        </message>
+        <message>
+            <source>System folders</source>
+            <translation>System folders</translation>
+        </message>
+        <message>
+            <source>Time and source</source>
+            <translation>Time and source</translation>
+        </message>
+        <message>
             <source>Variable description</source>
             <translation>Variable description</translation>
+        </message>
+        <message>
+            <source>Videos</source>
+            <translation>Videos</translation>
+        </message>
+        <message>
+            <source>Window name</source>
+            <translation>Window name</translation>
         </message>
     </context>
     <context>

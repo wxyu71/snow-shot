@@ -1859,12 +1859,20 @@
             <translation>選擇何時可以在固定到螢幕的截圖上選取辨識出的文字</translation>
         </message>
         <message>
+            <source>Choose when to play the shutter sound</source>
+            <translation>選擇在哪些截圖情境播放快門聲</translation>
+        </message>
+        <message>
             <source>Choose where images are written for automatic save and copy-file actions</source>
             <translation>選擇自動儲存和複製檔案操作寫入影像的位置</translation>
         </message>
         <message>
             <source>Choose where recording output files are written</source>
             <translation>選擇錄製輸出檔案的儲存位置</translation>
+        </message>
+        <message>
+            <source>Choose whether to keep editable screenshot sessions, only final images, or no new history</source>
+            <translation>選擇保留可編輯的螢幕擷取工作階段、僅保留最終影像或停用新歷史記錄</translation>
         </message>
         <message>
             <source>Choose which fullscreen windows trigger automatic disabling</source>
@@ -2575,6 +2583,10 @@
             <translation>焦點視窗</translation>
         </message>
         <message>
+            <source>Focused window and current display</source>
+            <translation>焦點視窗和目前顯示器</translation>
+        </message>
+        <message>
             <source>Follow mouse movement</source>
             <translation>跟隨滑鼠移動</translation>
         </message>
@@ -2879,6 +2891,10 @@
             <translation>保留已關閉視窗以便還原；停用不會刪除現有記錄</translation>
         </message>
         <message>
+            <source>Keep full history</source>
+            <translation>保留完整歷史記錄</translation>
+        </message>
+        <message>
             <source>Keep group main buttons visible</source>
             <translation>保持顯示群組主按鈕</translation>
         </message>
@@ -2887,12 +2903,12 @@
             <translation>永久保留記錄</translation>
         </message>
         <message>
-            <source>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</source>
-            <translation>保留螢幕擷取標註的可編輯狀態及復原、重做記錄。固定的影像保留原始版面配置，不使用緊湊配置</translation>
+            <source>Keep results only</source>
+            <translation>僅保留結果</translation>
         </message>
         <message>
-            <source>Keep screenshots available after the application closes</source>
-            <translation>關閉應用程式後仍保留可用的截圖</translation>
+            <source>Keep screenshot annotations editable with undo and redo history. Pinned images retain the original layout without layout compaction</source>
+            <translation>保留螢幕擷取標註的可編輯狀態及復原、重做記錄。固定的影像保留原始版面配置，不使用緊湊配置</translation>
         </message>
         <message>
             <source>Keep selection width and height consistent</source>
@@ -3224,6 +3240,10 @@
             <translation>正常</translation>
         </message>
         <message>
+            <source>Normal screenshot</source>
+            <translation>一般截圖</translation>
+        </message>
+        <message>
             <source>Notify after export completes</source>
             <translation>匯出完成後通知</translation>
         </message>
@@ -3368,10 +3388,6 @@
             <translation>權限狀態與授權</translation>
         </message>
         <message>
-            <source>Persistent screenshot history</source>
-            <translation>持久化截圖歷史</translation>
-        </message>
-        <message>
             <source>Pin clipboard content to screen</source>
             <translation>將剪貼簿內容固定到螢幕</translation>
         </message>
@@ -3474,14 +3490,6 @@
         <message>
             <source>Play / pause</source>
             <translation>播放 / 暫停</translation>
-        </message>
-        <message>
-            <source>Play a shutter sound when capturing the focused window or current display</source>
-            <translation>擷取焦點視窗或目前顯示器時播放快門聲音</translation>
-        </message>
-        <message>
-            <source>Play a shutter sound when screenshot capture starts</source>
-            <translation>開始截圖時播放快門聲音</translation>
         </message>
         <message>
             <source>Play saved GIF, APNG, and WebP recordings repeatedly</source>
@@ -3780,6 +3788,10 @@
             <translation>保留已關閉視窗</translation>
         </message>
         <message>
+            <source>Retain screenshot history</source>
+            <translation>保留螢幕擷取歷史記錄</translation>
+        </message>
+        <message>
             <source>Retention limits apply only to closed windows; retained windows are always protected</source>
             <translation>儲存限制僅適用於已關閉視窗；保留中的視窗始終受到保護</translation>
         </message>
@@ -4056,10 +4068,6 @@
             <translation>截圖快速鍵和操作</translation>
         </message>
         <message>
-            <source>Screenshot sound notification</source>
-            <translation>截圖聲音通知</translation>
-        </message>
-        <message>
             <source>Screenshot toolbar</source>
             <translation>截圖工具列</translation>
         </message>
@@ -4094,6 +4102,10 @@
         <message>
             <source>Select image save directory</source>
             <translation>選擇影像儲存目錄</translation>
+        </message>
+        <message>
+            <source>Select scenarios</source>
+            <translation>選擇場景</translation>
         </message>
         <message>
             <source>Select skin image</source>
@@ -4450,10 +4462,6 @@
         <message>
             <source>Smart control releases unused heap memory while the app is idle. Active captures and pinned images are kept</source>
             <translation>智慧控制會在應用程式閒置時釋放未使用的堆積記憶體。進行中的擷取和已固定到螢幕的影像會保留</translation>
-        </message>
-        <message>
-            <source>Smart control trims resident memory while the app is idle. The next use may briefly take longer</source>
-            <translation>智慧控制會在應用程式閒置時縮減常駐記憶體。下次使用時可能會短暫增加回應時間</translation>
         </message>
         <message>
             <source>Smart merge</source>
@@ -5110,24 +5118,64 @@
     <context>
         <name>SettingsVariableHelp</name>
         <message>
-            <source>%1: Application name</source>
-            <translation>%1：應用程式名稱</translation>
+            <source>Application name</source>
+            <translation>應用程式名稱</translation>
         </message>
         <message>
-            <source>%1: Current time</source>
-            <translation>%1：目前時間</translation>
+            <source>Date and time</source>
+            <translation>日期和時間</translation>
         </message>
         <message>
-            <source>%1: Window name</source>
-            <translation>%1：視窗名稱</translation>
+            <source>Desktop</source>
+            <translation>桌面</translation>
+        </message>
+        <message>
+            <source>Documents</source>
+            <translation>文件</translation>
+        </message>
+        <message>
+            <source>Downloads</source>
+            <translation>下載</translation>
+        </message>
+        <message>
+            <source>Home</source>
+            <translation>個人目錄</translation>
         </message>
         <message>
             <source>OK</source>
             <translation>確定</translation>
         </message>
         <message>
+            <source>Path prefix only</source>
+            <translation>僅用於路徑開頭</translation>
+        </message>
+        <message>
+            <source>Pictures</source>
+            <translation>圖片</translation>
+        </message>
+        <message>
+            <source>Source display (Display-1, Display-2, or Multi)</source>
+            <translation>來源顯示器（Display-1、Display-2 或 Multi）</translation>
+        </message>
+        <message>
+            <source>System folders</source>
+            <translation>系統目錄</translation>
+        </message>
+        <message>
+            <source>Time and source</source>
+            <translation>時間與來源</translation>
+        </message>
+        <message>
             <source>Variable description</source>
             <translation>變數說明</translation>
+        </message>
+        <message>
+            <source>Videos</source>
+            <translation>影片</translation>
+        </message>
+        <message>
+            <source>Window name</source>
+            <translation>視窗名稱</translation>
         </message>
     </context>
     <context>

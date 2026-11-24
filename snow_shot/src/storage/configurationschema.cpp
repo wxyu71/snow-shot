@@ -466,7 +466,7 @@ constexpr SchemaString kFloatingToolbarDropBehaviors[] = {u"pin_to_screen", u"im
                                                           u"image_splitting", u"image_editing"};
 constexpr SchemaAllowedValues kFloatingToolbarDropBehaviorValues = {
     kFloatingToolbarDropBehaviors, std::size(kFloatingToolbarDropBehaviors)};
-constexpr int kConfigurationSchemaVersion = 8;
+constexpr int kConfigurationSchemaVersion = 9;
 constexpr ConfigurationIntegerRange kSchemaRange1{kConfigurationSchemaVersion,
                                                   kConfigurationSchemaVersion, 1};
 constexpr SchemaString kSchemaStrings4[] = {u"system", u"light", u"dark"};
@@ -525,6 +525,10 @@ constexpr SchemaString kSchemaStrings21[] = {u"Ctrl+F1"};
 constexpr SchemaString kSchemaStrings22[] = {u"F3"};
 constexpr SchemaString kSchemaStrings23[] = {u"Ctrl+F3"};
 constexpr SchemaString kSchemaStrings24[] = {u"all_windows", u"game_windows"};
+constexpr SchemaString kDefaultShutterSoundTargets[] = {u"direct_capture"};
+constexpr SchemaString kShutterSoundTargets[] = {u"direct_capture", u"normal_screenshot"};
+constexpr SchemaAllowedValues kShutterSoundTargetsAllowed = {kShutterSoundTargets,
+                                                             std::size(kShutterSoundTargets)};
 constexpr SchemaString kDefaultFullscreenDisableScope[] = {u"global_shortcuts"};
 constexpr SchemaString kFullscreenDisableScopeValues[] = {u"global_shortcuts", u"global_mouse"};
 constexpr SchemaAllowedValues kFullscreenDisableScopeAllowed = {
@@ -787,6 +791,8 @@ constexpr SchemaString kSchemaStrings120[] = {u"quick.screenshot",
 constexpr SchemaAllowedValues kSchemaAllowed51 = {kSchemaStrings120, std::size(kSchemaStrings120)};
 constexpr SchemaString kSchemaStrings121[] = {u"rectangle", u"polyline", u"curve", u"freehand"};
 constexpr SchemaAllowedValues kSchemaAllowed52 = {kSchemaStrings121, std::size(kSchemaStrings121)};
+constexpr SchemaString kHistoryModes[] = {u"full", u"results_only", u"disabled"};
+constexpr SchemaAllowedValues kAllowedHistoryModes{kHistoryModes, std::size(kHistoryModes)};
 constexpr SchemaString kSchemaStrings122[] = {u"window_sub_element", u"window", u"disabled"};
 constexpr SchemaAllowedValues kSchemaAllowed53 = {kSchemaStrings122, std::size(kSchemaStrings122)};
 constexpr ConfigurationIntegerRange kSchemaRange17{0, ScreenshotLayoutCompaction::maximumSpacing,
@@ -1659,10 +1665,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
     {u"screenshot/capture_cursor", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"screenshot/capture_ui_in_scrolling_screenshot", booleanDefault(true),
      ConfigurationValueKind::Boolean},
-    {u"screenshot/shutter_sound_notification", booleanDefault(true),
-     ConfigurationValueKind::Boolean},
-    {u"screenshot/screenshot_sound_notification", booleanDefault(false),
-     ConfigurationValueKind::Boolean},
+    {u"screenshot/shutter_sound_notification", stringsDefault(kDefaultShutterSoundTargets),
+     ConfigurationValueKind::StringList, nullptr, &kShutterSoundTargetsAllowed},
 #if SNOW_SHOT_ENABLE_QR_RECOGNITION
     {u"screenshot/auto_recognize_qr_code", booleanDefault(true), ConfigurationValueKind::Boolean},
 #endif
@@ -1747,7 +1751,8 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      ConfigurationValueKind::String},
     {u"screenshot_selection/selection_rect_presets", emptyArrayDefault(),
      ConfigurationValueKind::Structured},
-    {u"capture_history/enabled", booleanDefault(true), ConfigurationValueKind::Boolean},
+    {u"capture_history/retention_mode", stringDefault(u"full"), ConfigurationValueKind::String,
+     nullptr, &kAllowedHistoryModes},
     {u"capture_history/keep_permanently", booleanDefault(false), ConfigurationValueKind::Boolean},
     {u"capture_history/compression_level", stringDefault(u"medium"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed69},
@@ -3070,6 +3075,23 @@ bool ConfigurationSchema::parseIntegerVersion(const QJsonValue& value, int* vers
 
 QMap<QString, QJsonValue>
 ConfigurationSchema::migrateLegacyValues(QMap<QString, QJsonValue> values) {
+    const QString shutterKey = QStringLiteral("screenshot/shutter_sound_notification");
+    const auto directSound = values.value(shutterKey);
+    const auto normalSound =
+        values.take(QStringLiteral("screenshot/screenshot_sound_notification"));
+    if (!directSound.isArray() && (directSound.isBool() || normalSound.isBool())) {
+        QJsonArray targets;
+        if (directSound.toBool(true))
+            targets.append(QStringLiteral("direct_capture"));
+        if (normalSound.toBool())
+            targets.append(QStringLiteral("normal_screenshot"));
+        values.insert(shutterKey, targets);
+    }
+    const auto legacyHistory = values.take(QStringLiteral("capture_history/enabled"));
+    const auto modeKey = QStringLiteral("capture_history/retention_mode");
+    if (!values.contains(modeKey) && legacyHistory.isBool())
+        values.insert(modeKey,
+                      legacyHistory.toBool() ? QStringLiteral("full") : QStringLiteral("disabled"));
     const QString smartSelectionKey = QStringLiteral("screenshot_selection/smart_selection");
     const QJsonValue legacyTarget =
         values.take(QStringLiteral("screenshot_selection/selection_target"));
