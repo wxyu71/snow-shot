@@ -126,3 +126,14 @@ if(WIN32)
         "${SNOW_SHOT_ROOT}/snow_shot/include")
     target_link_libraries(snow-shot-community-native-windows-qos PRIVATE Qt6::Core)
 endif()
+
+# WebDAV sync core is compiled from production sources, without live credentials.
+add_executable(snow-shot-community-native-webdav-tests
+    "${SNOW_SHOT_ROOT}/snow_shot/tests/webdav_settings_sync_tests.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/network/webdavsettingssync.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/include/snow_shot/network/webdavsettingssync.h")
+target_include_directories(snow-shot-community-native-webdav-tests PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include")
+target_link_libraries(snow-shot-community-native-webdav-tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME snow-shot-community-native-webdav-tests COMMAND snow-shot-community-native-webdav-tests)
+set_tests_properties(snow-shot-community-native-webdav-tests PROPERTIES TIMEOUT 30 LABELS "native;community;webdav")

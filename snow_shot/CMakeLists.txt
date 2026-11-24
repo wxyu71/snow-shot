@@ -1211,6 +1211,13 @@ add_library(snow_shot_cloud_upload STATIC
 target_include_directories(snow_shot_cloud_upload PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
 target_link_libraries(snow_shot_cloud_upload PUBLIC snow_shot_storage Qt6::Network Qt6::Concurrent)
 
+# User-owned settings sync core; UI and persistence are reviewed separately.
+add_library(snow_shot_webdav_settings STATIC
+    include/snow_shot/network/webdavsettingssync.h
+    src/network/webdavsettingssync.cpp)
+target_include_directories(snow_shot_webdav_settings PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(snow_shot_webdav_settings PUBLIC Qt6::Core Qt6::Network)
+
 add_library(snow_shot_settings STATIC ${SNOW_SHOT_SETTINGS_SOURCES}
     include/snow_shot/presentation/permissionguidecontroller.h
     include/snow_shot/presentation/components/permissionguidewidget.h

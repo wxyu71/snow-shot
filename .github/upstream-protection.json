@@ -36,7 +36,10 @@
     "snow_shot/tests/macos_selected_files.md",
     "snow_shot/tests/macos_smart_selection.md",
     "snow_shot/tests/macos_toolbar_tests.md",
-    ".github/upstream-review-pending.md"
+    ".github/upstream-review-pending.md",
+    "snow_shot/include/snow_shot/app/cloudsettingssyncservice.h",
+    "snow_shot/src/app/cloudsettingssyncservice.cpp",
+    "snow_shot/tests/cloud_settings_sync_tests.cpp"
   ],
   "protected_globs": [
     ".gitmodules",
@@ -155,6 +158,10 @@
     "AGENTS.md",
     "CONTRIBUTING.md",
     "docs/images/readme/README.md",
-    "snow-crates/docs/macos-media.md"
+    "snow-crates/docs/macos-media.md",
+    "snow_shot/include/snow_shot/network/webdavsettingssync.h",
+    "snow_shot/src/network/webdavsettingssync.cpp",
+    "snow_shot/tests/webdav_settings_sync_tests.cpp",
+    "ci/native-smoke/CMakeLists.txt"
   ]
 }
