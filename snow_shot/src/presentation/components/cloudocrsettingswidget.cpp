@@ -239,6 +239,6 @@ void CloudOcrSettingsWidget::testConnection() {
         else if (result.trimmed().isEmpty())
             m_status->setText(tr("The OCR service returned an empty result."));
         else
-            m_status->setText(tr("Connection successful. PaddleOCR returned recognized text."));
+            m_status->setText(tr("Connection successful. Model: %1").arg(probe->actualModel()));
     });
 }

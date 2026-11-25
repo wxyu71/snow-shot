@@ -2,6 +2,9 @@
 
 #include <QBuffer>
 #include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDeadlineTimer>
+#include <QHash>
 #include <QHttpMultiPart>
 #include <QIODevice>
 #include <QJsonArray>
@@ -20,6 +23,38 @@ constexpr int kTimeoutMs = 30000;
 constexpr int kPollIntervalMs = 5000;
 constexpr int kMaxPolls = 120;
 constexpr qsizetype kMaxResultBytes = 8 * 1024 * 1024;
+// No quota-query/reset-time endpoint is documented. Remember explicit
+// exhaustion briefly in this process only, then allow a fresh server check.
+constexpr qint64 kQuotaCooldownMs = 15 * 60 * 1000;
+constexpr qsizetype kMaxQuotaEntries = 128;
+
+QHash<QByteArray, QDeadlineTimer>& exhaustedModels() {
+    static thread_local QHash<QByteArray, QDeadlineTimer> entries;
+    for (auto it = entries.begin(); it != entries.end();) {
+        if (it.value().hasExpired())
+            it = entries.erase(it);
+        else
+            ++it;
+    }
+    return entries;
+}
+
+QByteArray quotaKey(const QUrl& endpoint, const QString& token, const QString& model) {
+    return QCryptographicHash::hash(endpoint.toEncoded() + '\n' + token.toUtf8() + '\n' +
+                                        model.toUtf8(),
+                                    QCryptographicHash::Sha256);
+}
+
+bool quotaCoolingDown(const QUrl& endpoint, const QString& token, const QString& model) {
+    return exhaustedModels().contains(quotaKey(endpoint, token, model));
+}
+
+void rememberQuotaExhaustion(const QUrl& endpoint, const QString& token, const QString& model) {
+    auto& entries = exhaustedModels();
+    if (entries.size() >= kMaxQuotaEntries)
+        entries.clear();
+    entries.insert(quotaKey(endpoint, token, model), QDeadlineTimer(kQuotaCooldownMs));
+}
 
 QString responseError(const QJsonObject& object) {
     const auto data = object.value(QStringLiteral("data")).toObject();
@@ -247,8 +282,16 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
 }
 
 void BaiduPaddleOcrClient::submit() {
-    if (!m_completion || m_pendingPng.isEmpty() || m_candidateIndex >= m_candidates.size())
+    if (!m_completion || m_pendingPng.isEmpty())
         return;
+    while (m_automatic && m_candidateIndex < m_candidates.size() &&
+           quotaCoolingDown(m_endpoint, m_token, m_candidates.at(m_candidateIndex)))
+        ++m_candidateIndex;
+    if (m_candidateIndex >= m_candidates.size()) {
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient",
+                                                "All compatible PaddleOCR models reached their daily quota (12001)"));
+        return;
+    }
     m_actualModel = m_candidates.at(m_candidateIndex);
     auto* multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     QHttpPart modelPart;
@@ -293,13 +336,18 @@ void BaiduPaddleOcrClient::submit() {
         const int code = object.value(QStringLiteral("code")).toInt(-1);
         // Only explicit pre-admission refusals are safe to resubmit. Never
         // repeat an ambiguous timeout/network failure or a job with an ID.
-        if (code == 12001 && m_automatic && m_candidateIndex + 1 < m_candidates.size()) {
-            ++m_candidateIndex;
-            m_submitRetries = 0;
-            m_pollTimer.start(m_pollIntervalMs);
-            return;
+        const bool refused = object.value(QStringLiteral("data")).toObject()
+                                 .value(QStringLiteral("jobId")).toVariant().toString().isEmpty();
+        if (refused && code == 12001) {
+            rememberQuotaExhaustion(m_endpoint, m_token, m_actualModel);
+            if (m_automatic) {
+                ++m_candidateIndex;
+                m_submitRetries = 0;
+                m_pollTimer.start(m_pollIntervalMs);
+                return;
+            }
         }
-        if ((code == 10010 || code == 12002) && m_submitRetries < 3) {
+        if (refused && (code == 10010 || code == 12002) && m_submitRetries < 3) {
             m_pollTimer.start(m_pollIntervalMs * (1 << m_submitRetries++));
             return;
         }

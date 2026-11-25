@@ -5853,6 +5853,10 @@ Unavailable: %2</source>
     <context>
         <name>CloudOcrSettingsWidget</name>
         <message>
+            <source>Connection successful. Model: %1</source>
+            <translation>連線成功，辨識模型：%1</translation>
+        </message>
+        <message>
             <source>Automatic</source>
             <translation>自動選擇</translation>
         </message>

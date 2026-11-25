@@ -45,7 +45,8 @@ struct RunResult {
 };
 
 RunResult runCase(const QString& model, ReplyMode mode,
-                  const QString& output = QStringLiteral("markdown")) {
+                  const QString& output = QStringLiteral("markdown"),
+                  int repetitions = 1) {
     QTcpServer server;
     require(server.listen(QHostAddress::LocalHost), "local fake AI Studio server listens");
     const QString root = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
@@ -171,26 +172,31 @@ RunResult runCase(const QString& model, ReplyMode mode,
         }
     });
 
-    snow_shot::network::BaiduPaddleOcrClient client;
     QImage image(48, 32, QImage::Format_RGBA8888);
     image.fill(Qt::white);
     QEventLoop loop;
     QTimer deadline;
     deadline.setSingleShot(true);
     QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
-    client.recognize(image, {root, QStringLiteral("test-token"), model, output},
-                     [&](QString markdown, QString error) {
-        outcome.finished = true;
-        outcome.markdown = std::move(markdown);
-        outcome.error = std::move(error);
-        loop.quit();
-    });
-    if (!outcome.finished) {
-        deadline.start(4000);
-        loop.exec();
+    for (int run = 0; run < repetitions; ++run) {
+        snow_shot::network::BaiduPaddleOcrClient client;
+        outcome.finished = false;
+        outcome.polls = 0;
+        client.recognize(image, {root, QStringLiteral("test-token"), model, output},
+                         [&](QString markdown, QString error) {
+            outcome.finished = true;
+            outcome.markdown = std::move(markdown);
+            outcome.error = std::move(error);
+            loop.quit();
+        });
+        if (!outcome.finished) {
+            deadline.start(4000);
+            loop.exec();
+            deadline.stop();
+        }
+        require(outcome.finished, "OCR request completes, never hangs");
+        require(outcome.submitAuthenticated, "POST uses the configured token and model");
     }
-    require(outcome.finished, "OCR request completes, never hangs");
-    require(outcome.submitAuthenticated, "POST uses the configured token and model");
     return outcome;
 }
 
@@ -265,6 +271,10 @@ void checkAutomaticRouting() {
     const auto quota = runCase(automatic, ReplyMode::AutoQuotaThenSuccess);
     require(quota.error.isEmpty() && quota.submittedModels == QStringList{vl, structure},
             "document quota fallback preserves document capabilities");
+    const auto nextJob = runCase(automatic, ReplyMode::AutoQuotaThenSuccess,
+                                 QStringLiteral("markdown"), 2);
+    require(nextJob.error.isEmpty() && nextJob.submittedModels == QStringList{vl, structure, structure},
+            "a new client skips the recently exhausted model for the same endpoint and token");
     const auto all = runCase(automatic, ReplyMode::AutoAllQuota);
     require(!all.error.isEmpty() && all.submittedModels == QStringList{vl, structure},
             "document requests never silently downgrade to generic OCR");

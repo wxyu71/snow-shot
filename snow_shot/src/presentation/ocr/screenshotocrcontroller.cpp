@@ -618,9 +618,13 @@ bool ScreenshotOcrController::startBackgroundOnlineOcr() {
                  jobGuard->actualModel() != QStringLiteral("PP-OCRv6"))) {
                 // Derive alternate text representations locally from the same
                 // recognition result. Do not send a second cloud request.
-                QTextDocument document;
-                document.setMarkdown(markdown, QTextDocument::MarkdownDialectGitHub |
-                                               QTextDocument::MarkdownNoHTML);
+                // Qt parses the Markdown locally, including supported embedded
+                // HTML tables; no remote image or file resource is loaded.
+                class OutputDocument final : public QTextDocument {
+                  protected:
+                    QVariant loadResource(int, const QUrl&) override { return {}; }
+                } document;
+                document.setMarkdown(markdown, QTextDocument::MarkdownDialectGitHub);
                 if (outputFormat == QStringLiteral("html")) {
                     const QString html = document.toHtml();
                     mime->setHtml(html);
@@ -631,9 +635,10 @@ bool ScreenshotOcrController::startBackgroundOnlineOcr() {
             } else {
                 mime->setText(markdown);
             }
+            const QString actualModel = jobGuard->actualModel();
             static_cast<void>(ScreenshotClipboardService::commitMimeData(
                 QApplication::clipboard(), jobGuard.data(), mime, publication,
-                [complete](ScreenshotClipboardCommitResult result) {
+                [complete, actualModel](ScreenshotClipboardCommitResult result) {
                     if (result.superseded) {
                         complete(tr("Online OCR completed. A newer copy operation was preserved."),
                                  BackgroundMessageKind::Warning);
@@ -642,7 +647,8 @@ bool ScreenshotOcrController::startBackgroundOnlineOcr() {
                                      .arg(result.errorString()),
                                  BackgroundMessageKind::Warning);
                     } else {
-                        complete(tr("Online OCR completed. The result was copied to the clipboard."),
+                        complete(tr("Online OCR completed (%1). The result was copied to the clipboard.")
+                                     .arg(actualModel),
                                  BackgroundMessageKind::Success);
                     }
                 }));

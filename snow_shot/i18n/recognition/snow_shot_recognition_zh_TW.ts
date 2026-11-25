@@ -89,6 +89,10 @@
     <context>
         <name>ScreenshotOcrController</name>
         <message>
+            <source>Online OCR completed (%1). The result was copied to the clipboard.</source>
+            <translation>線上辨識完成（%1），結果已複製到剪貼簿。</translation>
+        </message>
+        <message>
             <source>An online OCR job is already running in the background.</source>
             <translation>已有一個線上辨識工作正在背景執行。</translation>
         </message>
@@ -479,6 +483,10 @@
     </context>
     <context>
         <name>BaiduPaddleOcrClient</name>
+        <message>
+            <source>All compatible PaddleOCR models reached their daily quota (12001)</source>
+            <translation>所有相容的 PaddleOCR 模型均已達每日額度（12001）</translation>
+        </message>
         <message>
             <source>AI Studio job queue is full (10010); retry later</source>
             <translation>AI Studio 工作佇列已滿（10010），請稍後重試</translation>
