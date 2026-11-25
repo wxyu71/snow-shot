@@ -2,6 +2,93 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_TW" sourcelanguage="en_US">
     <context>
+        <name>BaiduPaddleOcrClient</name>
+        <message>
+            <source>A screenshot and PaddleOCR Access Token are required</source>
+            <translation>需要截圖和 PaddleOCR 存取權杖</translation>
+        </message>
+        <message>
+            <source>AI Studio Access Token rejected (HTTP 401)</source>
+            <translation>AI Studio 存取權杖無效（HTTP 401）</translation>
+        </message>
+        <message>
+            <source>AI Studio daily OCR quota exhausted (12001 / HTTP 403)</source>
+            <translation>AI Studio 今日辨識額度已用完（12001 / HTTP 403）</translation>
+        </message>
+        <message>
+            <source>AI Studio does not support the selected model (10007)</source>
+            <translation>AI Studio 不支援所選模型（10007）</translation>
+        </message>
+        <message>
+            <source>AI Studio job queue is full (10010); retry later</source>
+            <translation>AI Studio 工作佇列已滿（10010），請稍後重試</translation>
+        </message>
+        <message>
+            <source>AI Studio rate limit (12002 / HTTP 429), retry later</source>
+            <translation>AI Studio 請求過於頻繁（12002 / HTTP 429），請稍後重試</translation>
+        </message>
+        <message>
+            <source>All compatible PaddleOCR models reached their daily quota (12001)</source>
+            <translation>所有相容的 PaddleOCR 模型均已達每日額度（12001）</translation>
+        </message>
+        <message>
+            <source>Invalid PaddleOCR JSONL document</source>
+            <translation>PaddleOCR JSONL 文件無效</translation>
+        </message>
+        <message>
+            <source>PaddleOCR API URL must be HTTPS (or localhost for testing)</source>
+            <translation>PaddleOCR API 位址必須使用 HTTPS（本機測試除外）</translation>
+        </message>
+        <message>
+            <source>PaddleOCR API failed (HTTP %1, code %2): %3</source>
+            <translation>PaddleOCR API 請求失敗（HTTP %1，錯誤碼 %2）：%3</translation>
+        </message>
+        <message>
+            <source>PaddleOCR JSONL has no recognized text or document Markdown</source>
+            <translation>PaddleOCR JSONL 不包含辨識文字或文件 Markdown</translation>
+        </message>
+        <message>
+            <source>PaddleOCR job timed out</source>
+            <translation>PaddleOCR 辨識工作逾時</translation>
+        </message>
+        <message>
+            <source>PaddleOCR response exceeds 8 MiB</source>
+            <translation>PaddleOCR 回應超過 8 MiB</translation>
+        </message>
+        <message>
+            <source>PaddleOCR response has no jobId</source>
+            <translation>PaddleOCR 回應缺少工作 ID</translation>
+        </message>
+        <message>
+            <source>PaddleOCR result download failed (HTTP %1): %2</source>
+            <translation>PaddleOCR 結果下載失敗（HTTP %1）：%2</translation>
+        </message>
+        <message>
+            <source>PaddleOCR returned empty Markdown</source>
+            <translation>PaddleOCR 傳回的 Markdown 為空</translation>
+        </message>
+        <message>
+            <source>PaddleOCR returned no valid JSONL or Markdown URL</source>
+            <translation>PaddleOCR 未傳回有效的 JSONL 或 Markdown 位址</translation>
+        </message>
+        <message>
+            <source>The PaddleOCR service returned an error</source>
+            <translation>PaddleOCR 服務傳回錯誤</translation>
+        </message>
+        <message>
+            <source>Unable to prepare PNG image (15 MiB limit)</source>
+            <translation>無法準備 PNG 影像（上限 15 MiB）</translation>
+        </message>
+        <message>
+            <source>Unsupported PaddleOCR model</source>
+            <translation>不支援的 PaddleOCR 模型</translation>
+        </message>
+        <message>
+            <source>Unsupported PaddleOCR output format</source>
+            <translation>不支援的 PaddleOCR 輸出格式</translation>
+        </message>
+    </context>
+    <context>
         <name>OcrTextOptions</name>
         <message>
             <source>Full-width</source>
@@ -89,24 +176,28 @@
     <context>
         <name>ScreenshotOcrController</name>
         <message>
-            <source>Online OCR completed (%1). The result was copied to the clipboard.</source>
-            <translation>線上辨識完成（%1），結果已複製到剪貼簿。</translation>
-        </message>
-        <message>
             <source>An online OCR job is already running in the background.</source>
             <translation>已有一個線上辨識工作正在背景執行。</translation>
+        </message>
+        <message>
+            <source>Barcode recognition components are missing or damaged</source>
+            <translation>條碼辨識元件缺失或已損毀</translation>
+        </message>
+        <message>
+            <source>Barcode recognition failed</source>
+            <translation>條碼辨識失敗</translation>
         </message>
         <message>
             <source>Configure the PaddleOCR Access Token in Settings before online OCR.</source>
             <translation>請先在設定中設定 PaddleOCR 存取權杖，再執行線上辨識。</translation>
         </message>
         <message>
-            <source>Online OCR is running in the background. You can continue using Snow Shot.</source>
-            <translation>線上辨識正在背景處理，你可以繼續使用 Snow Shot。</translation>
+            <source>Online OCR completed (%1). The result was copied to the clipboard.</source>
+            <translation>線上辨識完成（%1），結果已複製到剪貼簿。</translation>
         </message>
         <message>
-            <source>Online OCR failed: %1</source>
-            <translation>線上辨識失敗：%1</translation>
+            <source>Online OCR completed, but copying failed: %1</source>
+            <translation>線上辨識完成，但複製失敗：%1</translation>
         </message>
         <message>
             <source>Online OCR completed, but the clipboard is unavailable.</source>
@@ -117,20 +208,12 @@
             <translation>線上辨識完成，已保留較新的剪貼簿內容。</translation>
         </message>
         <message>
-            <source>Online OCR completed, but copying failed: %1</source>
-            <translation>線上辨識完成，但複製失敗：%1</translation>
+            <source>Online OCR failed: %1</source>
+            <translation>線上辨識失敗：%1</translation>
         </message>
         <message>
-            <source>Online OCR completed. The result was copied to the clipboard.</source>
-            <translation>線上辨識完成，結果已複製到剪貼簿。</translation>
-        </message>
-        <message>
-            <source>Barcode recognition components are missing or damaged</source>
-            <translation>條碼辨識元件缺失或已損毀</translation>
-        </message>
-        <message>
-            <source>Barcode recognition failed</source>
-            <translation>條碼辨識失敗</translation>
+            <source>Online OCR is running in the background. You can continue using Snow Shot.</source>
+            <translation>線上辨識正在背景處理，你可以繼續使用 Snow Shot。</translation>
         </message>
         <message>
             <source>Select an area to recognize</source>
@@ -479,93 +562,6 @@
         <message>
             <source>The pasted cells do not fit inside the recognized table</source>
             <translation>貼上的儲存格超出辨識表格範圍</translation>
-        </message>
-    </context>
-    <context>
-        <name>BaiduPaddleOcrClient</name>
-        <message>
-            <source>All compatible PaddleOCR models reached their daily quota (12001)</source>
-            <translation>所有相容的 PaddleOCR 模型均已達每日額度（12001）</translation>
-        </message>
-        <message>
-            <source>AI Studio job queue is full (10010); retry later</source>
-            <translation>AI Studio 工作佇列已滿（10010），請稍後重試</translation>
-        </message>
-        <message>
-            <source>Unsupported PaddleOCR output format</source>
-            <translation>不支援的 PaddleOCR 輸出格式</translation>
-        </message>
-        <message>
-            <source>Invalid PaddleOCR JSONL document</source>
-            <translation>PaddleOCR JSONL 文件無效</translation>
-        </message>
-        <message>
-            <source>PaddleOCR JSONL has no recognized text or document Markdown</source>
-            <translation>PaddleOCR JSONL 不包含辨識文字或文件 Markdown</translation>
-        </message>
-        <message>
-            <source>AI Studio Access Token rejected (HTTP 401)</source>
-            <translation>AI Studio 存取權杖無效（HTTP 401）</translation>
-        </message>
-        <message>
-            <source>AI Studio rate limit (12002 / HTTP 429), retry later</source>
-            <translation>AI Studio 請求過於頻繁（12002 / HTTP 429），請稍後重試</translation>
-        </message>
-        <message>
-            <source>AI Studio daily OCR quota exhausted (12001 / HTTP 403)</source>
-            <translation>AI Studio 今日辨識額度已用完（12001 / HTTP 403）</translation>
-        </message>
-        <message>
-            <source>AI Studio does not support the selected model (10007)</source>
-            <translation>AI Studio 不支援所選模型（10007）</translation>
-        </message>
-        <message>
-            <source>PaddleOCR API failed (HTTP %1, code %2): %3</source>
-            <translation>PaddleOCR API 請求失敗（HTTP %1，錯誤碼 %2）：%3</translation>
-        </message>
-        <message>
-            <source>The PaddleOCR service returned an error</source>
-            <translation>PaddleOCR 服務傳回錯誤</translation>
-        </message>
-        <message>
-            <source>PaddleOCR response exceeds 8 MiB</source>
-            <translation>PaddleOCR 回應超過 8 MiB</translation>
-        </message>
-        <message>
-            <source>A screenshot and PaddleOCR Access Token are required</source>
-            <translation>需要截圖和 PaddleOCR 存取權杖</translation>
-        </message>
-        <message>
-            <source>Unsupported PaddleOCR model</source>
-            <translation>不支援的 PaddleOCR 模型</translation>
-        </message>
-        <message>
-            <source>PaddleOCR API URL must be HTTPS (or localhost for testing)</source>
-            <translation>PaddleOCR API 位址必須使用 HTTPS（本機測試除外）</translation>
-        </message>
-        <message>
-            <source>Unable to prepare PNG image (15 MiB limit)</source>
-            <translation>無法準備 PNG 影像（上限 15 MiB）</translation>
-        </message>
-        <message>
-            <source>PaddleOCR response has no jobId</source>
-            <translation>PaddleOCR 回應缺少工作 ID</translation>
-        </message>
-        <message>
-            <source>PaddleOCR job timed out</source>
-            <translation>PaddleOCR 辨識工作逾時</translation>
-        </message>
-        <message>
-            <source>PaddleOCR returned no valid JSONL or Markdown URL</source>
-            <translation>PaddleOCR 未傳回有效的 JSONL 或 Markdown 位址</translation>
-        </message>
-        <message>
-            <source>PaddleOCR result download failed (HTTP %1): %2</source>
-            <translation>PaddleOCR 結果下載失敗（HTTP %1）：%2</translation>
-        </message>
-        <message>
-            <source>PaddleOCR returned empty Markdown</source>
-            <translation>PaddleOCR 傳回的 Markdown 為空</translation>
         </message>
     </context>
 </TS>

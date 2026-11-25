@@ -52,7 +52,8 @@
     "snow_shot::presentation::GlobalMouseManager",
     "snow_shot::storage::ApplicationStorage",
     "snow_shot::storage::ConfigurationArchive",
-    "snow_shot::storage::ConfigurationStore"
+    "snow_shot::storage::ConfigurationStore",
+    "CloudOcrSettingsWidget"
   ],
   "capture": [
     "DirectCaptureController",
@@ -114,7 +115,8 @@
     "ScreenshotRecognitionWindow",
     "ScreenshotRecognitionSessionController",
     "ScreenshotTableConversionController",
-    "ScreenshotTableEditor"
+    "ScreenshotTableEditor",
+    "BaiduPaddleOcrClient"
   ],
   "translation": [
     "FreeTranslation",

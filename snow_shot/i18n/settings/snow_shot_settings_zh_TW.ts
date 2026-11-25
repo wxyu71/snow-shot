@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_TW" sourcelanguage="en_US">
-    
-    
     <context>
         <name>AdministratorLaunch</name>
         <message>
@@ -150,6 +148,101 @@
         <message>
             <source>Windows startup settings are unavailable</source>
             <translation>Windows 啟動設定無法使用</translation>
+        </message>
+    </context>
+    <context>
+        <name>CloudOcrSettingsWidget</name>
+        <message>
+            <source>Access Token</source>
+            <translation>存取權杖</translation>
+        </message>
+        <message>
+            <source>Automatic</source>
+            <translation>自動選擇</translation>
+        </message>
+        <message>
+            <source>Automatic selects a compatible model and switches on daily quota exhaustion.</source>
+            <translation>自動選擇相容模型，達到每日配額後切換。</translation>
+        </message>
+        <message>
+            <source>Baidu PaddleOCR (AI Studio)</source>
+            <translation>百度 PaddleOCR（AI Studio）</translation>
+        </message>
+        <message>
+            <source>Connection failed: %1</source>
+            <translation>連線失敗：%1</translation>
+        </message>
+        <message>
+            <source>Connection successful. Model: %1</source>
+            <translation>連線成功，辨識模型：%1</translation>
+        </message>
+        <message>
+            <source>Could not securely save PaddleOCR configuration.</source>
+            <translation>無法安全儲存 PaddleOCR 設定。</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token before testing.</source>
+            <translation>請先輸入有效的 HTTPS 位址和存取權杖。</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>
+            <translation>請輸入有效的 PaddleOCR HTTPS 位址和存取權杖。</translation>
+        </message>
+        <message>
+            <source>Get Access Token</source>
+            <translation>取得存取權杖</translation>
+        </message>
+        <message>
+            <source>HTML (local conversion)</source>
+            <translation>HTML（本機轉換）</translation>
+        </message>
+        <message>
+            <source>OCR engine</source>
+            <translation>辨識引擎</translation>
+        </message>
+        <message>
+            <source>Open the official AI Studio Access Token page</source>
+            <translation>開啟 AI Studio 官方存取權杖頁面</translation>
+        </message>
+        <message>
+            <source>Output format</source>
+            <translation>輸出格式</translation>
+        </message>
+        <message>
+            <source>PaddleOCR AI Studio API URL</source>
+            <translation>PaddleOCR AI Studio API 位址</translation>
+        </message>
+        <message>
+            <source>PaddleOCR configuration saved.</source>
+            <translation>PaddleOCR 設定已儲存。</translation>
+        </message>
+        <message>
+            <source>PaddleOCR model</source>
+            <translation>PaddleOCR 模型</translation>
+        </message>
+        <message>
+            <source>Plain text</source>
+            <translation>純文字</translation>
+        </message>
+        <message>
+            <source>Save</source>
+            <translation>儲存</translation>
+        </message>
+        <message>
+            <source>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</source>
+            <translation>將一張小型測試影像直接傳送至 PaddleOCR，可能消耗 API 額度。</translation>
+        </message>
+        <message>
+            <source>Test connection</source>
+            <translation>測試連線</translation>
+        </message>
+        <message>
+            <source>Testing the OCR service...</source>
+            <translation>正在測試辨識服務…</translation>
+        </message>
+        <message>
+            <source>The OCR service returned an empty result.</source>
+            <translation>辨識服務傳回空結果。</translation>
         </message>
     </context>
     <context>
@@ -1205,7 +1298,6 @@
             <source>Accessibility</source>
             <translation>輔助使用</translation>
         </message>
-        
         <message>
             <source>Accuracy first</source>
             <translation>準確優先</translation>
@@ -3106,7 +3198,6 @@
             <source>Medium V6</source>
             <translation>中型 V6</translation>
         </message>
-        
         <message>
             <source>Memory optimization policy</source>
             <translation>記憶體最佳化策略</translation>
@@ -5769,7 +5860,6 @@ Unavailable: %2</source>
             <translation>有道</translation>
         </message>
     </context>
-    
     <context>
         <name>snow_shot::presentation::GlobalMouseManager</name>
         <message>
@@ -5848,109 +5938,6 @@ Unavailable: %2</source>
         <message>
             <source>Some custom API configurations are invalid and were ignored</source>
             <translation>部分自訂 API 設定無效，已被忽略</translation>
-        </message>
-    </context>
-    <context>
-        <name>CloudOcrSettingsWidget</name>
-        <message>
-            <source>Connection successful. Model: %1</source>
-            <translation>連線成功，辨識模型：%1</translation>
-        </message>
-        <message>
-            <source>Automatic</source>
-            <translation>自動選擇</translation>
-        </message>
-        <message>
-            <source>Plain text</source>
-            <translation>純文字</translation>
-        </message>
-        <message>
-            <source>HTML (local conversion)</source>
-            <translation>HTML（本機轉換）</translation>
-        </message>
-        <message>
-            <source>Test connection</source>
-            <translation>測試連線</translation>
-        </message>
-        <message>
-            <source>Get Access Token</source>
-            <translation>取得存取權杖</translation>
-        </message>
-        <message>
-            <source>Open the official AI Studio Access Token page</source>
-            <translation>開啟 AI Studio 官方存取權杖頁面</translation>
-        </message>
-        <message>
-            <source>Automatic selects a compatible model and switches on daily quota exhaustion.</source>
-            <translation>自動選擇相容模型，達到每日配額後切換。</translation>
-        </message>
-        <message>
-            <source>OCR engine</source>
-            <translation>辨識引擎</translation>
-        </message>
-        <message>
-            <source>Output format</source>
-            <translation>輸出格式</translation>
-        </message>
-        <message>
-            <source>PaddleOCR AI Studio API URL</source>
-            <translation>PaddleOCR AI Studio API 位址</translation>
-        </message>
-        <message>
-            <source>Access Token</source>
-            <translation>存取權杖</translation>
-        </message>
-        <message>
-            <source>PaddleOCR model</source>
-            <translation>PaddleOCR 模型</translation>
-        </message>
-        <message>
-            <source>Save</source>
-            <translation>儲存</translation>
-        </message>
-        <message>
-            <source>Test PaddleOCR connection</source>
-            <translation>測試 PaddleOCR 連線</translation>
-        </message>
-        <message>
-            <source>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</source>
-            <translation>將一張小型測試影像直接傳送至 PaddleOCR，可能消耗 API 額度。</translation>
-        </message>
-        <message>
-            <source>Baidu PaddleOCR (AI Studio)</source>
-            <translation>百度 PaddleOCR（AI Studio）</translation>
-        </message>
-        <message>
-            <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>
-            <translation>請輸入有效的 PaddleOCR HTTPS 位址和存取權杖。</translation>
-        </message>
-        <message>
-            <source>PaddleOCR configuration saved.</source>
-            <translation>PaddleOCR 設定已儲存。</translation>
-        </message>
-        <message>
-            <source>Could not securely save PaddleOCR configuration.</source>
-            <translation>無法安全儲存 PaddleOCR 設定。</translation>
-        </message>
-        <message>
-            <source>Enter a valid HTTPS URL and Access Token before testing.</source>
-            <translation>請先輸入有效的 HTTPS 位址和存取權杖。</translation>
-        </message>
-        <message>
-            <source>Testing the OCR service...</source>
-            <translation>正在測試辨識服務…</translation>
-        </message>
-        <message>
-            <source>Connection failed: %1</source>
-            <translation>連線失敗：%1</translation>
-        </message>
-        <message>
-            <source>The OCR service returned an empty result.</source>
-            <translation>辨識服務傳回空結果。</translation>
-        </message>
-        <message>
-            <source>Connection successful. PaddleOCR returned recognized text.</source>
-            <translation>連線成功，PaddleOCR 已傳回辨識文字。</translation>
         </message>
     </context>
 </TS>

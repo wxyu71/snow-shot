@@ -15,18 +15,6 @@
     <context>
         <name>HistoryEntryWidget</name>
         <message>
-            <source>Unable to read the history screenshot</source>
-            <translation>无法读取历史截图</translation>
-        </message>
-        <message>
-            <source>Screenshot history is unavailable</source>
-            <translation>截图历史不可用</translation>
-        </message>
-        <message>
-            <source>Online OCR</source>
-            <translation>在线识别</translation>
-        </message>
-        <message>
             <source>%1 x %2 px</source>
             <translation>%1 × %2 像素</translation>
         </message>
@@ -99,6 +87,10 @@
             <translation>更多操作</translation>
         </message>
         <message>
+            <source>Online OCR</source>
+            <translation>在线识别</translation>
+        </message>
+        <message>
             <source>Pin this screenshot to the screen</source>
             <translation>将此截图固定到屏幕</translation>
         </message>
@@ -123,6 +115,10 @@
             <translation>截图显示器</translation>
         </message>
         <message>
+            <source>Screenshot history is unavailable</source>
+            <translation>截图历史不可用</translation>
+        </message>
+        <message>
             <source>Screenshot result</source>
             <translation>截图结果</translation>
         </message>
@@ -137,6 +133,10 @@
         <message>
             <source>This screenshot cannot be pinned</source>
             <translation>此截图无法固定到屏幕</translation>
+        </message>
+        <message>
+            <source>Unable to read the history screenshot</source>
+            <translation>无法读取历史截图</translation>
         </message>
     </context>
     <context>

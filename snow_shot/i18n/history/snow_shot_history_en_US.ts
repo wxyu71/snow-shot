@@ -87,6 +87,10 @@
             <translation>More actions</translation>
         </message>
         <message>
+            <source>Online OCR</source>
+            <translation>Online OCR</translation>
+        </message>
+        <message>
             <source>Pin this screenshot to the screen</source>
             <translation>Pin this screenshot to the screen</translation>
         </message>
@@ -111,6 +115,10 @@
             <translation>Screenshot display</translation>
         </message>
         <message>
+            <source>Screenshot history is unavailable</source>
+            <translation>Screenshot history is unavailable</translation>
+        </message>
+        <message>
             <source>Screenshot result</source>
             <translation>Screenshot result</translation>
         </message>
@@ -125,6 +133,10 @@
         <message>
             <source>This screenshot cannot be pinned</source>
             <translation>This screenshot cannot be pinned</translation>
+        </message>
+        <message>
+            <source>Unable to read the history screenshot</source>
+            <translation>Unable to read the history screenshot</translation>
         </message>
     </context>
     <context>

@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US" sourcelanguage="en_US">
-    
-    
     <context>
         <name>AdministratorLaunch</name>
         <message>
@@ -150,6 +148,101 @@
         <message>
             <source>Windows startup settings are unavailable</source>
             <translation>Windows startup settings are unavailable</translation>
+        </message>
+    </context>
+    <context>
+        <name>CloudOcrSettingsWidget</name>
+        <message>
+            <source>Access Token</source>
+            <translation>Access Token</translation>
+        </message>
+        <message>
+            <source>Automatic</source>
+            <translation>Automatic</translation>
+        </message>
+        <message>
+            <source>Automatic selects a compatible model and switches on daily quota exhaustion.</source>
+            <translation>Automatic selects a compatible model and switches on daily quota exhaustion.</translation>
+        </message>
+        <message>
+            <source>Baidu PaddleOCR (AI Studio)</source>
+            <translation>Baidu PaddleOCR (AI Studio)</translation>
+        </message>
+        <message>
+            <source>Connection failed: %1</source>
+            <translation>Connection failed: %1</translation>
+        </message>
+        <message>
+            <source>Connection successful. Model: %1</source>
+            <translation>Connection successful. Model: %1</translation>
+        </message>
+        <message>
+            <source>Could not securely save PaddleOCR configuration.</source>
+            <translation>Could not securely save PaddleOCR configuration.</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token before testing.</source>
+            <translation>Enter a valid HTTPS URL and Access Token before testing.</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>
+            <translation>Enter a valid HTTPS URL and Access Token for PaddleOCR.</translation>
+        </message>
+        <message>
+            <source>Get Access Token</source>
+            <translation>Get Access Token</translation>
+        </message>
+        <message>
+            <source>HTML (local conversion)</source>
+            <translation>HTML (local conversion)</translation>
+        </message>
+        <message>
+            <source>OCR engine</source>
+            <translation>OCR engine</translation>
+        </message>
+        <message>
+            <source>Open the official AI Studio Access Token page</source>
+            <translation>Open the official AI Studio Access Token page</translation>
+        </message>
+        <message>
+            <source>Output format</source>
+            <translation>Output format</translation>
+        </message>
+        <message>
+            <source>PaddleOCR AI Studio API URL</source>
+            <translation>PaddleOCR AI Studio API URL</translation>
+        </message>
+        <message>
+            <source>PaddleOCR configuration saved.</source>
+            <translation>PaddleOCR configuration saved.</translation>
+        </message>
+        <message>
+            <source>PaddleOCR model</source>
+            <translation>PaddleOCR model</translation>
+        </message>
+        <message>
+            <source>Plain text</source>
+            <translation>Plain text</translation>
+        </message>
+        <message>
+            <source>Save</source>
+            <translation>Save</translation>
+        </message>
+        <message>
+            <source>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</source>
+            <translation>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</translation>
+        </message>
+        <message>
+            <source>Test connection</source>
+            <translation>Test connection</translation>
+        </message>
+        <message>
+            <source>Testing the OCR service...</source>
+            <translation>Testing the OCR service...</translation>
+        </message>
+        <message>
+            <source>The OCR service returned an empty result.</source>
+            <translation>The OCR service returned an empty result.</translation>
         </message>
     </context>
     <context>
@@ -1205,7 +1298,6 @@
             <source>Accessibility</source>
             <translation>Accessibility</translation>
         </message>
-        
         <message>
             <source>Accuracy first</source>
             <translation>Accuracy first</translation>
@@ -3106,7 +3198,6 @@
             <source>Medium V6</source>
             <translation>Medium V6</translation>
         </message>
-        
         <message>
             <source>Memory optimization policy</source>
             <translation>Memory optimization policy</translation>
@@ -5769,7 +5860,6 @@ Unavailable: %2</translation>
             <translation>Youdao</translation>
         </message>
     </context>
-    
     <context>
         <name>snow_shot::presentation::GlobalMouseManager</name>
         <message>
