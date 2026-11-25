@@ -705,6 +705,7 @@ set(SNOW_SHOT_STORAGE_SOURCES
     include/snow_shot/storage/capturehistoryrepository.h
     include/snow_shot/storage/capturehistorytypes.h
     include/snow_shot/storage/configurationarchive.h
+    include/snow_shot/storage/cloudsyncconfiguration.h
     include/snow_shot/storage/configurationstore.h
     include/snow_shot/storage/configurationschema.h
     include/snow_shot/storage/exportfilename.h
@@ -722,6 +723,7 @@ set(SNOW_SHOT_STORAGE_SOURCES
     src/storage/capturehistorypolicy_p.h
     src/storage/capturehistoryrepository.cpp
     src/storage/configurationarchive.cpp
+    src/storage/cloudsyncconfiguration.cpp
     src/storage/configurationstore.cpp
     src/storage/configurationsecretprotection.cpp
     src/storage/configurationsecretprotection_p.h
@@ -847,6 +849,14 @@ target_compile_definitions(snow_shot_translation PRIVATE
     SNOW_SHOT_API_BASE_URL=\"${SNOW_SHOT_API_BASE_URL}\"
     SNOW_SHOT_FREE_TRANSLATION_API_BASE_URL=\"${SNOW_SHOT_FREE_TRANSLATION_API_BASE_URL}\"
 )
+
+add_library(snow_shot_cloud_settings_sync STATIC
+    include/snow_shot/app/cloudsettingssyncservice.h
+    src/app/cloudsettingslayout_p.h
+    src/app/cloudsettingssyncservice.cpp
+)
+target_include_directories(snow_shot_cloud_settings_sync PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/include")
+target_link_libraries(snow_shot_cloud_settings_sync PUBLIC snow_shot_translation)
 
 add_library(snow_shot_window_shortcuts STATIC
     include/snow_shot/presentation/mousereleaseactioncontroller.h
@@ -1311,6 +1321,7 @@ endif()
 add_library(snow_shot_collage_core STATIC
     include/snow_shot/presentation/collagedocument.h
     src/presentation/collage/collagedocument.cpp
+    src/presentation/collage/collagefreelayout.cpp
     src/presentation/collage/collagetransformedrows_p.h
     src/presentation/collage/collageresourcebudget.cpp
     src/presentation/collage/collageresourcebudget_p.h)
@@ -2248,6 +2259,7 @@ if(WIN32)
     )
 endif()
 target_link_libraries(snow_shot PRIVATE
+    snow_shot_cloud_settings_sync
     snow_shot_export_naming
     snow_shot_collage
     snow_shot_image_split
@@ -3557,6 +3569,12 @@ if(SNOW_SHOT_BUILD_TESTS)
         COMMAND snow-shot-settings-page-loading-tests --shutter-sound-only)
     add_test(NAME snow-shot-settings-select-tests
         COMMAND snow-shot-settings-page-loading-tests --selects-only)
+    add_test(NAME snow-shot-cloud-settings-sync-ui-tests
+        COMMAND snow-shot-settings-page-loading-tests --cloud-settings-sync-only)
+    set_tests_properties(snow-shot-cloud-settings-sync-ui-tests PROPERTIES
+        LABELS "unit" TIMEOUT 60
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
+        ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
     add_test(NAME snow-shot-pinned-text-color-settings-tests
         COMMAND snow-shot-settings-page-loading-tests --pinned-text-colors-only)
     set_tests_properties(snow-shot-pinned-text-color-settings-tests PROPERTIES
@@ -10154,6 +10172,16 @@ if(SNOW_SHOT_BUILD_TESTS)
     set_tests_properties(snow-shot-paddleocr-client-tests PROPERTIES
         LABELS "unit;ocr;community;community-fast" TIMEOUT 60)
 
+    add_executable(snow-shot-cloud-settings-sync-tests
+        tests/cloud_settings_sync_tests.cpp tests/cloud_settings_layout_tests.cpp)
+    target_link_libraries(snow-shot-cloud-settings-sync-tests PRIVATE
+        snow_shot_cloud_settings_sync Qt6::Gui)
+    snow_shot_import_offscreen_platform(snow-shot-cloud-settings-sync-tests)
+    add_test(NAME snow-shot-cloud-settings-sync-tests
+        COMMAND snow-shot-cloud-settings-sync-tests -platform offscreen)
+    set_tests_properties(snow-shot-cloud-settings-sync-tests PROPERTIES LABELS unit TIMEOUT 45
+        ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}")
+
     add_executable(snow-shot-api-client-tests
         tests/snowshot_api_client_tests.cpp
     )
@@ -11854,7 +11882,7 @@ if(WIN32 AND NOT SNOW_SHOT_QT_STATIC)
     install(SCRIPT "${SNOW_SHOT_QT_DEPLOY_SCRIPT}")
 
     # Qt's deployment helper copies every Qt base translation catalog. Snow
-    # Shot ships only en_US, zh_CN, and zh_TW application catalogs, so retain
+    # Shot ships only en_US, zh_CN, zh_TW, and ru application catalogs, so retain
     # only the corresponding Qt catalogs in the final install tree.
     install(CODE [=[
         set(_snow_shot_qt_translation_dir
@@ -11863,6 +11891,8 @@ if(WIN32 AND NOT SNOW_SHOT_QT_STATIC)
             qt_en.qm
             qt_zh_CN.qm
             qt_zh_TW.qm
+            qt_ru.qm
+            qt_ru_RU.qm
         )
         if(IS_DIRECTORY "${_snow_shot_qt_translation_dir}")
             file(GLOB _snow_shot_qt_translation_catalogs

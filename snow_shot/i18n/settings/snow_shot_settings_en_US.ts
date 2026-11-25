@@ -1184,6 +1184,10 @@
             <translation>Enter a valid HTTP proxy address, for example http://127.0.0.1:7890</translation>
         </message>
         <message>
+            <source>Language %1 is unavailable on this device</source>
+            <translation>Language %1 is unavailable on this device</translation>
+        </message>
+        <message>
             <source>The clipboard is unavailable</source>
             <translation>The clipboard is unavailable</translation>
         </message>
@@ -1795,10 +1799,6 @@
             <translation>Choose how network requests connect through a proxy</translation>
         </message>
         <message>
-            <source>Choose how text detection resizes images. Limiting the long side is faster; enlarging the short side may find smaller text</source>
-            <translation>Choose how text detection resizes images. Limiting the long side is faster; enlarging the short side may find smaller text</translation>
-        </message>
-        <message>
             <source>Choose how the area behind recognized text is filled</source>
             <translation>Choose how the area behind recognized text is filled</translation>
         </message>
@@ -2025,6 +2025,10 @@
         <message>
             <source>Closed window count</source>
             <translation>Closed window count</translation>
+        </message>
+        <message>
+            <source>Cloud settings sync</source>
+            <translation>Cloud settings sync</translation>
         </message>
         <message>
             <source>Cloud upload</source>
@@ -2541,10 +2545,6 @@
         <message>
             <source>End recording</source>
             <translation>End recording</translation>
-        </message>
-        <message>
-            <source>Enlarge short side (more detail)</source>
-            <translation>Enlarge short side (more detail)</translation>
         </message>
         <message>
             <source>Enter an HTTP or HTTPS address. Changes apply immediately. Clear to use the default server</source>
@@ -3081,10 +3081,6 @@
         <message>
             <source>Limit how much disk space screenshot history can use</source>
             <translation>Limit how much disk space screenshot history can use</translation>
-        </message>
-        <message>
-            <source>Limit long side (faster)</source>
-            <translation>Limit long side (faster)</translation>
         </message>
         <message>
             <source>Limit the width of pinned text, including padding</source>
@@ -4379,6 +4375,10 @@
             <translation>Shape tool</translation>
         </message>
         <message>
+            <source>Share preferences across devices signed in to the same account</source>
+            <translation>Share preferences across devices signed in to the same account</translation>
+        </message>
+        <message>
             <source>Shared image export settings for screenshot and pin-to-screen windows</source>
             <translation>Shared image export settings for screenshot and pin-to-screen windows</translation>
         </message>
@@ -4757,10 +4757,6 @@
         <message>
             <source>Text detection processing</source>
             <translation>Text detection processing</translation>
-        </message>
-        <message>
-            <source>Text detection scaling</source>
-            <translation>Text detection scaling</translation>
         </message>
         <message>
             <source>Text recognition</source>

@@ -37,9 +37,9 @@ const QString kWindowsPlatform = QStringLiteral("windows-arm64");
 const QString kWindowsPlatform = QStringLiteral("windows-x64");
 #endif
 const QString kWindowsWorkerName =
-    QStringLiteral("snow-ocr-process-1.4.0-%1.exe").arg(kWindowsPlatform);
+    QStringLiteral("snow-ocr-process-1.5.0-%1.exe").arg(kWindowsPlatform);
 const QString kWindowsArchiveName =
-    QStringLiteral("snow-ocr-runtime-1.4.0-%1.zip").arg(kWindowsPlatform);
+    QStringLiteral("snow-ocr-runtime-1.5.0-%1.zip").arg(kWindowsPlatform);
 #ifdef Q_OS_MACOS
 const QString kWorkerName = QStringLiteral("snow-ocr-process");
 #if defined(Q_PROCESSOR_ARM_64)
@@ -135,13 +135,13 @@ void writeAssetManifest(const QString& root, bool completePayload) {
     const QByteArray recognizer("recognizer");
     const QByteArray dictionary("dictionary");
     const QString runtimeDirectory =
-        QDir(root).filePath(QStringLiteral("runtimes/1.4.0/%1").arg(kWindowsPlatform));
+        QDir(root).filePath(QStringLiteral("runtimes/1.5.0/%1").arg(kWindowsPlatform));
     if (completePayload) {
         writeFixture(QDir(runtimeDirectory).filePath(kWindowsWorkerName), process);
         writeFixture(QDir(runtimeDirectory).filePath(QStringLiteral("runtime-manifest.json")),
                      runtimeManifest);
         writeFixture(QDir(runtimeDirectory).filePath(QStringLiteral(".complete.json")),
-                     R"({"schema":1,"component":"1.4.0"})");
+                     R"({"schema":1,"component":"1.5.0"})");
         writeInstalledSmallModelFixture(root);
     }
     const QJsonArray runtimeFiles{
@@ -173,7 +173,7 @@ void writeAssetManifest(const QString& root, bool completePayload) {
         {QStringLiteral("schema"), 2},
         {QStringLiteral("default_model"), QStringLiteral("small")},
         {QStringLiteral("runtime"),
-         QJsonObject{{QStringLiteral("version"), QStringLiteral("1.4.0")},
+         QJsonObject{{QStringLiteral("version"), QStringLiteral("1.5.0")},
                      {QStringLiteral("platform"), kWindowsPlatform},
                      {QStringLiteral("archive"),
                       assetFile(kWindowsArchiveName, archive,
@@ -204,7 +204,7 @@ void writeAssetManifest(const QString& root, bool completePayload) {
     manifest.insert(QStringLiteral("schema"), 3);
     manifest.insert(
         QStringLiteral("runtime"),
-        QJsonObject{{QStringLiteral("version"), QStringLiteral("1.4.0")},
+        QJsonObject{{QStringLiteral("version"), QStringLiteral("1.5.0")},
                     {QStringLiteral("platform"), kMacPlatform},
                     {QStringLiteral("delivery"), QStringLiteral("bundled")},
                     {QStringLiteral("protocol"), 8},
@@ -437,7 +437,7 @@ void installedAssetsUseLightweightChecks() {
             if (!cached) {
                 const QDir runtime(
                     QDir(payloadRoot)
-                        .filePath(QStringLiteral("runtimes/1.4.0/%1").arg(kWindowsPlatform)));
+                        .filePath(QStringLiteral("runtimes/1.5.0/%1").arg(kWindowsPlatform)));
                 changeFixtureContentsWithoutResizing(runtime.filePath(kWindowsWorkerName));
                 changeFixtureContentsWithoutResizing(
                     runtime.filePath(QStringLiteral("runtime-manifest.json")));
@@ -657,7 +657,7 @@ void acquiredRuntimeStillRequiresMatchingHashes() {
         require(
             !QDir(cache.path())
                     .exists(
-                        QStringLiteral("runtimes/1.4.0/%1/.complete.json").arg(kWindowsPlatform)) &&
+                        QStringLiteral("runtimes/1.5.0/%1/.complete.json").arg(kWindowsPlatform)) &&
                 QDir(QDir(cache.path()).filePath(QStringLiteral(".staging")))
                     .entryList(QDir::NoDotAndDotDot | QDir::AllEntries)
                     .isEmpty(),
@@ -715,13 +715,24 @@ void everyModelMapsToItsOwnFilesAndCachesAreRetained() {
     ScreenshotOcrAssets assets(options);
     ScreenshotOcrResolvedAssets resolved;
     int readyCount = 0;
+    int failureCount = 0;
     QObject::connect(&assets, &ScreenshotOcrAssets::ready, &assets,
                      [&](const ScreenshotOcrResolvedAssets& result) {
                          resolved = result;
                          ++readyCount;
                      });
+    QObject::connect(&assets, &ScreenshotOcrAssets::failed, &assets,
+                     [&](const QString&) { ++failureCount; });
+    assets.prepare(false);
+    require(waitUntil([&] { return failureCount == 1; }, 5'000) && downloads.isEmpty() &&
+                !QDir(cache.path()).exists(QStringLiteral(".staging")),
+            "checking an uncached model does not download assets or alter the cache");
+    assets.prepare(false, true);
+    require(waitUntil([&] { return readyCount == 1; }, 5'000) &&
+                resolved.modelType == ScreenshotOcrModelType::Small && downloads.isEmpty(),
+            "a cache-only startup check finds the available alternative without downloading");
     assets.prepare();
-    require(waitUntil([&]() { return readyCount == 1; }, 5'000),
+    require(waitUntil([&]() { return readyCount == 2; }, 5'000),
             "the Medium model fixture should be acquired");
     require(resolved.modelType == ScreenshotOcrModelType::Medium &&
                 resolved.modelId == QStringLiteral("ppocrv6-medium-f5063c6") &&
@@ -736,12 +747,16 @@ void everyModelMapsToItsOwnFilesAndCachesAreRetained() {
             "Medium acquisition must download exactly its three role files");
 
     downloads.clear();
+    assets.prepare(false);
+    require(waitUntil([&] { return readyCount == 3; }, 5'000) && downloads.isEmpty(),
+            "checking a cached model makes it usable without downloading again");
+
     assets.setModelType(ScreenshotOcrModelType::ExtraSmall);
     processEventsFor(100);
     require(downloads.isEmpty(),
             "changing the OCR model selection must not start acquisition without demand");
     assets.prepare();
-    require(waitUntil([&]() { return readyCount == 2; }, 5'000),
+    require(waitUntil([&]() { return readyCount == 4; }, 5'000),
             "the Extra Small model fixture should be acquired");
     require(resolved.modelType == ScreenshotOcrModelType::ExtraSmall &&
                 resolved.modelId == QStringLiteral("ppocrv6-tiny-cd609a1") &&
@@ -757,7 +772,7 @@ void everyModelMapsToItsOwnFilesAndCachesAreRetained() {
     downloads.clear();
     assets.setModelType(ScreenshotOcrModelType::Small);
     assets.prepare();
-    require(waitUntil([&]() { return readyCount == 3; }, 5'000),
+    require(waitUntil([&]() { return readyCount == 5; }, 5'000),
             "the bundled Small model should be selected");
     require(resolved.modelType == ScreenshotOcrModelType::Small && resolved.offline &&
                 downloads.isEmpty(),
@@ -1174,7 +1189,7 @@ void storeRuntimeNeverFallsBackToCachedCode() {
         writeAssetManifest(offline.path(), true);
         writeAssetManifest(cache.path(), true);
         const QString worker = QDir(offline.path())
-                                   .filePath(QStringLiteral("runtimes/1.4.0/%1/%2")
+                                   .filePath(QStringLiteral("runtimes/1.5.0/%1/%2")
                                                  .arg(kWindowsPlatform, kWindowsWorkerName));
         if (corrupt)
             changeFixtureContentsWithoutResizing(worker);

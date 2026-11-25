@@ -3251,27 +3251,6 @@ SettingsItemDefinition ocrModelTypeItem() {
     };
 }
 
-SettingsItemDefinition ocrDetectorResizePolicyItem() {
-    SettingsSelectDefinition payload;
-    payload.options = {
-        {QStringLiteral("max"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Limit long side (faster)"))},
-        {QStringLiteral("min"),
-         settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Enlarge short side (more detail)"))},
-    };
-    payload.binding = SettingsSelectBinding::OcrDetectorResizePolicy;
-    return {
-        QStringLiteral("text-recognition.detector-resize-policy"),
-        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Text detection scaling")),
-        settingsText(QT_TRANSLATE_NOOP(
-            "SettingsCatalog", "Choose how text detection resizes images. Limiting the long side "
-                               "is faster; enlarging the short side may find smaller text")),
-        {},
-        QStringLiteral("text_recognition/detector_resize_policy"),
-        payload,
-    };
-}
-
 SettingsItemDefinition ocrTextDetectionProcessingItem() {
     SettingsSelectDefinition payload;
     payload.options = {
@@ -3351,6 +3330,19 @@ SettingsItemDefinition clearPinnedHistoryItem() {
         payload,
     };
 }
+
+#if !SNOW_SHOT_EDITION_MINI
+SettingsItemDefinition cloudSettingsSyncItem() {
+    return {
+        QStringLiteral("storage.cloud-settings-sync"),
+        settingsText(QT_TRANSLATE_NOOP("SettingsCatalog", "Cloud settings sync")),
+        settingsText(QT_TRANSLATE_NOOP(
+            "SettingsCatalog", "Share preferences across devices signed in to the same account")),
+        {},
+        {},
+        SettingsCustomDefinition{SettingsCustomRenderer::CloudSettingsSync}};
+}
+#endif
 
 SettingsItemDefinition storageStatusItem() {
     return {
@@ -4762,12 +4754,8 @@ constexpr CatalogItemFactory catalogPageTextRecognitionTranslationSectionTransla
 
 #endif
 constexpr CatalogItemFactory catalogPageTextRecognitionTranslationSectionTextRecognitionItems[] = {
-    {ocrModelTypeItem},
-    {ocrDetectorResizePolicyItem},
-    {ocrTextDetectionProcessingItem},
-    {ocrHardwareAccelerationItem},
-    {ocrResidentProcessItem},
-    {ocrModelHotStartItem},
+    {ocrModelTypeItem},       {ocrTextDetectionProcessingItem}, {ocrHardwareAccelerationItem},
+    {ocrResidentProcessItem}, {ocrModelHotStartItem},
 };
 
 constexpr CatalogSectionRecord catalogPageTextRecognitionTranslationSections[] = {
@@ -5039,6 +5027,9 @@ constexpr CatalogItemFactory catalogPageFilesHistorySectionPinnedHistoryItems[] 
 };
 
 constexpr CatalogItemFactory catalogPageFilesHistorySectionStorageStatusItems[] = {
+#if !SNOW_SHOT_EDITION_MINI
+    {cloudSettingsSyncItem},
+#endif
     {exportConfigurationItem}, {importConfigurationItem}, {storageStatusItem},
     {exportLogsItem},          {clearRecordingTempItem},
 };
@@ -6379,9 +6370,6 @@ QStringList SettingsCatalog::validationErrors() const {
                     case SettingsSelectBinding::OcrModelType:
                         expectedKey = QStringLiteral("text_recognition/model_type");
                         break;
-                    case SettingsSelectBinding::OcrDetectorResizePolicy:
-                        expectedKey = QStringLiteral("text_recognition/detector_resize_policy");
-                        break;
                     case SettingsSelectBinding::OcrTextDetectionProcessing:
                         expectedKey = QStringLiteral("text_recognition/text_detection_processing");
                         break;
@@ -7228,6 +7216,7 @@ QStringList SettingsCatalog::validationErrors() const {
                     case SettingsCustomRenderer::PermissionInputMonitoring:
                     case SettingsCustomRenderer::PermissionMicrophone:
                     case SettingsCustomRenderer::McpStatus:
+                    case SettingsCustomRenderer::CloudSettingsSync:
                     case SettingsCustomRenderer::StorageStatus:
                         rendererSupported = true;
                         break;

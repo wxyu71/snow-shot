@@ -1184,6 +1184,10 @@
             <translation>請輸入有效的 HTTP 代理位址，例如 http://127.0.0.1:7890</translation>
         </message>
         <message>
+            <source>Language %1 is unavailable on this device</source>
+            <translation>此裝置不支援語言 %1</translation>
+        </message>
+        <message>
             <source>The clipboard is unavailable</source>
             <translation>剪貼簿無法使用</translation>
         </message>
@@ -1795,10 +1799,6 @@
             <translation>選擇網路請求連線代理的方式</translation>
         </message>
         <message>
-            <source>Choose how text detection resizes images. Limiting the long side is faster; enlarging the short side may find smaller text</source>
-            <translation>選擇文字偵測時的影像縮放方式。限制長邊可提高速度；放大短邊可能辨識出更小的文字</translation>
-        </message>
-        <message>
             <source>Choose how the area behind recognized text is filled</source>
             <translation>選擇辨識文字後方區域的填滿方式</translation>
         </message>
@@ -2025,6 +2025,10 @@
         <message>
             <source>Closed window count</source>
             <translation>已關閉視窗數量</translation>
+        </message>
+        <message>
+            <source>Cloud settings sync</source>
+            <translation>雲端設定同步</translation>
         </message>
         <message>
             <source>Cloud upload</source>
@@ -2541,10 +2545,6 @@
         <message>
             <source>End recording</source>
             <translation>結束螢幕錄製</translation>
-        </message>
-        <message>
-            <source>Enlarge short side (more detail)</source>
-            <translation>放大短邊（更多細節）</translation>
         </message>
         <message>
             <source>Enter an HTTP or HTTPS address. Changes apply immediately. Clear to use the default server</source>
@@ -3081,10 +3081,6 @@
         <message>
             <source>Limit how much disk space screenshot history can use</source>
             <translation>限制截圖歷史可使用的磁碟空間</translation>
-        </message>
-        <message>
-            <source>Limit long side (faster)</source>
-            <translation>限制長邊（更快）</translation>
         </message>
         <message>
             <source>Limit the width of pinned text, including padding</source>
@@ -4379,6 +4375,10 @@
             <translation>圖形</translation>
         </message>
         <message>
+            <source>Share preferences across devices signed in to the same account</source>
+            <translation>在登入同一帳號的裝置間共用偏好設定</translation>
+        </message>
+        <message>
             <source>Shared image export settings for screenshot and pin-to-screen windows</source>
             <translation>截圖視窗和固定到螢幕視窗共用的影像匯出設定</translation>
         </message>
@@ -4757,10 +4757,6 @@
         <message>
             <source>Text detection processing</source>
             <translation>文字偵測處理</translation>
-        </message>
-        <message>
-            <source>Text detection scaling</source>
-            <translation>文字偵測縮放</translation>
         </message>
         <message>
             <source>Text recognition</source>

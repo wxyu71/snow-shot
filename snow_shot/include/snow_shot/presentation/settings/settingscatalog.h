@@ -77,7 +77,6 @@ enum class SettingsSelectBinding {
     Proxy,
     UpdateMode,
     OcrModelType,
-    OcrDetectorResizePolicy,
     OcrTextDetectionProcessing,
     ScreenshotApiMode,
     ScreenRecordingApiMode,
@@ -449,6 +448,7 @@ enum class SettingsCustomRenderer {
     PinnedToolbarEditor,
     FloatingToolbarEditor,
     TrayMenuOptions,
+    CloudSettingsSync,
 };
 
 struct SettingsGlobalMouseActionDefinition {
