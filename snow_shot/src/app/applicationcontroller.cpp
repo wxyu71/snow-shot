@@ -1630,6 +1630,13 @@ class ApplicationController::Impl {
                                  static_cast<void>(actionGate.dispatch(
                                      [this, recordId]() { editHistoryRecord(recordId); }));
                              });
+            QObject::connect(mainWindow, &MainWindow::screenshotHistoryOnlineOcrRequested, &q,
+                             [this](const QString& recordId) {
+                                 static_cast<void>(actionGate.dispatch([this, recordId] {
+                                     if (ScreenshotController* controller = ensureScreenshotController())
+                                         controller->recognizeHistoryRecordOnline(recordId);
+                                 }));
+                             });
             QObject::connect(mainWindow, &MainWindow::screenshotHistoryPinRequested, &q,
                              [this](const QString& recordId) {
                                  static_cast<void>(actionGate.dispatch([this, recordId]() {

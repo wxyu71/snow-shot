@@ -565,19 +565,44 @@ bool ScreenshotOcrController::startBackgroundOnlineOcr() {
         showStatus(tr("Unable to read the selected screenshot"), true);
         return true;
     }
+    return startBackgroundOnlineOcrImage(std::move(source),
+                                         ScreenshotClipboardService::reservePublication(), true);
+}
+
+bool ScreenshotOcrController::startBackgroundOnlineOcrImage(QImage source, quint64 publication,
+                                                            bool closeCapture) {
+    const auto settings = snow_shot::network::readCommunityCloudOcrSettings();
+    if (settings.engine != QStringLiteral("paddleocr"))
+        return false;
+    const QPointer<QScreen> screen(QGuiApplication::screenAt(QCursor::pos()));
+    if (m_backgroundOcr) {
+        showBackgroundOcrMessage(tr("An online OCR job is already running in the background."),
+                                 BackgroundMessageKind::Warning, screen.data());
+        return true;
+    }
+    if (settings.accessToken.trimmed().isEmpty()) {
+        showBackgroundOcrMessage(tr("Configure the PaddleOCR Access Token in Settings before online OCR."),
+                                 BackgroundMessageKind::Error, screen.data());
+        return true;
+    }
+    if (source.isNull()) {
+        showBackgroundOcrMessage(QCoreApplication::translate("HistoryEntryWidget",
+                                                           "Unable to read the history screenshot"),
+                                 BackgroundMessageKind::Error, screen.data());
+        return true;
+    }
     auto* job = new snow_shot::network::BaiduPaddleOcrClient(this);
     m_backgroundOcr = job;
     const QPointer<ScreenshotOcrController> controller(this);
     const QPointer<snow_shot::network::BaiduPaddleOcrClient> jobGuard(job);
-    const QPointer<QScreen> screen(QGuiApplication::screenAt(QCursor::pos()));
-    const auto publication = ScreenshotClipboardService::reservePublication();
     snow_shot::network::BaiduPaddleOcrClient::Options options{
         settings.apiUrl, settings.accessToken, settings.model, settings.outputFormat};
 
     // The selected pixels and provider configuration are now independent of
     // the overlays. Close the screenshot first; network/PNG work begins on
     // the next event-loop turn. invalidateSession() only cancels m_session.
-    m_context.cancelCapture();
+    if (closeCapture)
+        m_context.cancelCapture();
     if (!controller || !jobGuard)
         return true;
     QTimer::singleShot(0, job, [controller, jobGuard, screen, publication,

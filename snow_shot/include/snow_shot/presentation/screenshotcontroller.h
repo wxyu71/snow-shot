@@ -146,6 +146,7 @@ class ScreenshotController : public QObject {
     void editHistoryRecord(const QString& recordId);
     void pinDirectCapture(const QImage& image, const QRect& logicalBounds);
     void pinHistoryRecord(const QString& recordId);
+    void recognizeHistoryRecordOnline(const QString& recordId);
     void pinClipboardContentToScreen();
     void pinSelectedFilesToScreen();
     // MCP uses the same controller actions as the toolbar. These narrow

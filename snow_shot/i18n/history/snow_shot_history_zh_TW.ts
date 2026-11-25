@@ -15,6 +15,18 @@
     <context>
         <name>HistoryEntryWidget</name>
         <message>
+            <source>Unable to read the history screenshot</source>
+            <translation>無法讀取歷史截圖</translation>
+        </message>
+        <message>
+            <source>Screenshot history is unavailable</source>
+            <translation>截圖歷史無法使用</translation>
+        </message>
+        <message>
+            <source>Online OCR</source>
+            <translation>線上辨識</translation>
+        </message>
+        <message>
             <source>%1 x %2 px</source>
             <translation>%1 × %2 像素</translation>
         </message>

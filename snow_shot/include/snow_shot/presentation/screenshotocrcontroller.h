@@ -91,6 +91,8 @@ class ScreenshotOcrController final : public QObject {
     // Explicit interactive Online OCR transfers the selected image out of the capture session.
     // Returns false only when the caller should use the ordinary conversion workflow.
     [[nodiscard]] bool startBackgroundOnlineOcr();
+    [[nodiscard]] bool startBackgroundOnlineOcrImage(QImage source, quint64 publication,
+                                                     bool closeCapture);
     [[nodiscard]] bool backgroundOnlineOcrBusy() const;
     // Retires the recognition input surface while retaining completed results in the cache.
     void deactivate();

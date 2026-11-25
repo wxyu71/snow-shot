@@ -58,6 +58,7 @@ class MainWindow : public QMainWindow {
     void screenshotHistoryEditRequested(const QString& recordId);
     void imageDragRequested(QObject* gesture, const QImage& image);
     void screenshotHistoryPinRequested(const QString& recordId);
+    void screenshotHistoryOnlineOcrRequested(const QString& recordId);
     void screenshotHistoryStitchImagesRequested(
         const QVector<snow_shot::storage::CaptureHistoryRecord>& records);
     void screenshotHistorySplitRequested(const snow_shot::storage::CaptureHistoryRecord& record);
