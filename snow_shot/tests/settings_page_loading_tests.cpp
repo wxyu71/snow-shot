@@ -17,6 +17,7 @@
 #include "snow_shot/storage/applicationstorage.h"
 #include "widgets/scroll_area.h"
 #include "widgets/color_picker.h"
+#include "widgets/combo_box.h"
 #include "widgets/select.h"
 #include "widgets/multi_select.h"
 #include "widgets/slider.h"
@@ -58,6 +59,7 @@
 #include <QtTest/QTest>
 #include <QTranslator>
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
@@ -536,36 +538,41 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     // custom controls after construction; the constructor-local name is replaced.
     auto* widget = page.findChild<QWidget*>(settings::generatedObjectName(
         QStringLiteral("settings-item"), QStringLiteral("text-recognition.cloud-ocr")));
-    auto* engine = page.findChild<QComboBox*>(QStringLiteral("onlineOcrEngine"));
-    auto* output = page.findChild<QComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
+    auto* engine = page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("onlineOcrEngine"));
+    auto* output =
+        page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
     auto* endpoint = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrApiUrl"));
     auto* token = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrAccessToken"));
-    auto* model = page.findChild<QComboBox*>(QStringLiteral("paddleOcrModel"));
+    auto* model = page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("paddleOcrModel"));
     auto* save = page.findChild<QPushButton*>(QStringLiteral("paddleOcrSave"));
-    auto* testConnection =
-        page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
+    auto* testConnection = page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
     auto* status = page.findChild<QLabel*>(QStringLiteral("paddleOcrConnectionStatus"));
-    require(widget && engine && output && endpoint && token && model && save &&
-                testConnection && status,
+    require(widget && engine && output && endpoint && token && model && save && testConnection &&
+                status,
             "Online OCR settings materialize the real PaddleOCR controls");
-    require(page.findChild<QComboBox*>(QStringLiteral("onlineOcrVisionModel")) == nullptr &&
-                engine->count() == 1 &&
-                engine->currentData().toString() == QStringLiteral("paddleocr") &&
-                engine->findData(QStringLiteral("vision")) == -1 &&
+    require(page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("onlineOcrVisionModel")) ==
+                    nullptr &&
+                engine->options().size() == 1 &&
+                engine->currentValue().toString() == QStringLiteral("paddleocr") &&
+                engine->options().first().value.toString() == QStringLiteral("paddleocr") &&
                 !engine->isEnabled(),
             "Community Online OCR exposes only the fixed PaddleOCR provider");
-    require(output->count() == 1 &&
-                output->currentData().toString() == QStringLiteral("markdown") &&
-                output->findData(QStringLiteral("html")) == -1 &&
-                output->findData(QStringLiteral("latex")) == -1 &&
+    require(output->options().size() == 1 &&
+                output->currentValue().toString() == QStringLiteral("markdown") &&
+                output->options().first().value.toString() == QStringLiteral("markdown") &&
                 !output->isEnabled(),
             "Community Online OCR exposes only Markdown output");
     require(token->echoMode() == QLineEdit::Password,
             "Cloud OCR token uses a password editor");
-    require(model->count() == 3 &&
-                model->findText(QStringLiteral("PaddleOCR-VL-1.6")) >= 0 &&
-                model->findText(QStringLiteral("PP-StructureV3")) >= 0 &&
-                model->findText(QStringLiteral("PP-OCRv6")) >= 0,
+    const auto modelOptions = model->options();
+    const auto containsModel = [&modelOptions](const QString& modelId) {
+        return std::any_of(
+            modelOptions.cbegin(), modelOptions.cend(),
+            [&modelId](const auto& option) { return option.value.toString() == modelId; });
+    };
+    require(modelOptions.size() == 3 && containsModel(QStringLiteral("PaddleOCR-VL-1.6")) &&
+                containsModel(QStringLiteral("PP-StructureV3")) &&
+                containsModel(QStringLiteral("PP-OCRv6")),
             "Cloud OCR settings expose all supported PaddleOCR models");
 
     endpoint->setText(QStringLiteral("not-a-url"));
@@ -577,7 +584,7 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
 
     endpoint->setText(QStringLiteral("http://127.0.0.1:5102"));
     token->setText(QStringLiteral("native-test-token"));
-    model->setCurrentText(QStringLiteral("PP-OCRv6"));
+    model->setCurrentValue(QStringLiteral("PP-OCRv6"));
     save->click();
     drainEvents();
     const auto stored = snow_shot::network::readCommunityCloudOcrSettings();
