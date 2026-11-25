@@ -28,7 +28,6 @@
     "AdministratorLaunch",
     "AutoStartRegistration",
     "AppPermissions",
-    "CloudSettingsSyncWidget",
     "CloudUploadSettingsWidget",
     "CustomAiModelsSettingsWidget",
     "DrawingToolbarEditorSettingsWidget",

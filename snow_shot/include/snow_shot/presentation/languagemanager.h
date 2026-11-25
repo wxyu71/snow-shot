@@ -27,7 +27,6 @@ class LanguageManager final : public QObject {
     [[nodiscard]] QList<LanguageCatalog> availableLanguages() const;
     [[nodiscard]] QString languagePreference() const;
     [[nodiscard]] QLocale currentLocale() const;
-    [[nodiscard]] bool isLanguageAvailable(const QString& languagePreference);
     [[nodiscard]] bool setLanguage(const QString& languagePreference);
 
   signals:
@@ -37,7 +36,6 @@ class LanguageManager final : public QObject {
   private:
     explicit LanguageManager(QObject* parent = nullptr);
 
-    [[nodiscard]] bool supportsPreference(const QString& preference) const;
     [[nodiscard]] bool applyPreference(const QString& preference, bool persist);
     void discoverCatalogs();
 

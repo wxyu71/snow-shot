@@ -448,7 +448,6 @@ enum class SettingsCustomRenderer {
     PinnedToolbarEditor,
     FloatingToolbarEditor,
     TrayMenuOptions,
-    CloudSettingsSync,
 };
 
 struct SettingsGlobalMouseActionDefinition {

@@ -2616,9 +2616,10 @@ void ScreenshotRecognitionSessionController::applyTextTargetLanguage(const QStri
     const QPointer<ScreenshotRecognitionSessionController> lifetime(this);
     if (m_translationService == nullptr)
         return;
-    if (m_translationService->preferences().targetLanguage != language) {
-        const bool saved =
-            m_translationService->savePreferenceChanges({.targetLanguage = language});
+    auto preferences = m_translationService->preferences();
+    if (preferences.targetLanguage != language) {
+        preferences.targetLanguage = language;
+        const bool saved = m_translationService->savePreferences(preferences);
         if (!lifetime || !m_translationService)
             return;
         if (!saved)
@@ -2646,8 +2647,10 @@ void ScreenshotRecognitionSessionController::applyTextTranslationService(const Q
     const QPointer<ScreenshotRecognitionSessionController> lifetime(this);
     if (m_translationService == nullptr)
         return;
-    if (m_translationService->preferences().modelId != service) {
-        const bool saved = m_translationService->savePreferenceChanges({.modelId = service});
+    auto preferences = m_translationService->preferences();
+    if (preferences.modelId != service) {
+        preferences.modelId = service;
+        const bool saved = m_translationService->savePreferences(preferences);
         if (!lifetime || !m_translationService)
             return;
         if (!saved)

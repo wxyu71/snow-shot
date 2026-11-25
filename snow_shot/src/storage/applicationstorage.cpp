@@ -693,22 +693,20 @@ ApplicationStorage::requestCaptureHistoryPolicyAsync(const CaptureHistoryPolicy&
     return result;
 }
 
-bool ApplicationStorage::requestSmartSelectionMode(SmartSelectionMode mode,
-                                                   ConfigurationWriteOrigin origin) {
-    const auto result = requestSmartSelectionModeAsync(mode, origin);
+bool ApplicationStorage::requestSmartSelectionMode(SmartSelectionMode mode) {
+    const auto result = requestSmartSelectionModeAsync(mode);
     return result.valid() && result.get().success;
 }
 
 std::shared_future<StorageResult>
-ApplicationStorage::requestSmartSelectionModeAsync(SmartSelectionMode mode,
-                                                   ConfigurationWriteOrigin origin) {
+ApplicationStorage::requestSmartSelectionModeAsync(SmartSelectionMode mode) {
     if (directoryChangeBlocksWork() || !m_initialized || m_configuration == nullptr ||
         !m_status.writeAvailable) {
         return readyFuture(
             StorageResult::failure(QStringLiteral("Configuration storage is not writable")));
     }
     if (!m_configuration->setValue(QStringLiteral("screenshot_selection/smart_selection"),
-                                   smartSelectionModeId(mode), origin)) {
+                                   smartSelectionModeId(mode))) {
         updateConfigurationError(m_configuration->lastError());
         return readyFuture(StorageResult::failure(m_configuration->lastError()));
     }

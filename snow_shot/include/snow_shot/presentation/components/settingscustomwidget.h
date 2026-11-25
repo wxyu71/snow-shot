@@ -6,8 +6,6 @@
 
 #include <QWidget>
 
-#include <functional>
-
 namespace snow_shot::presentation::settings {
 class SettingsRegistry;
 class SettingsRuntimeSession;
@@ -27,6 +25,6 @@ class SettingsCustomWidget : public QWidget {
     const snow_shot::presentation::settings::SettingsRegistry& registry,
     const snow_shot::presentation::settings::SettingsItemDefinition& definition,
     snow_shot::presentation::settings::SettingsRuntimeSession& runtimeSession,
-    QWidget* parent = nullptr, std::function<void()> openAccount = {});
+    QWidget* parent = nullptr);
 
 #endif // SNOW_SHOT_PRESENTATION_COMPONENTS_SETTINGSCUSTOMWIDGET_H

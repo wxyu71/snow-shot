@@ -1,26 +1,15 @@
 #include "snow_shot/presentation/styles/thememanager.h"
-#include "snow_shot/storage/applicationstorage.h"
 #include "snow_shot/storage/settingsadapters.h"
 
 #include "theme/theme_manager.h"
 #include "themeconfig_p.h"
 
 #include <QApplication>
-#include <QFontDatabase>
 #include <QStyleHints>
 #include <QtGlobal>
 
 namespace snow_shot::presentation::styles {
 namespace {
-const QString kThemeMode = QStringLiteral("interface/theme_mode");
-const QString kPrimaryColor = QStringLiteral("interface/theme_primary_color");
-const QString kFontFamily = QStringLiteral("interface/app_font");
-const QString kFontSize = QStringLiteral("interface/app_font_size");
-
-QString installedFontFamily(const QString& family) {
-    return !family.isEmpty() && QFontDatabase::hasFamily(family) ? family : QString();
-}
-
 ThemeMode decodeThemeMode(const QString& value) {
     const QString key = value.trimmed().toLower();
     if (key == QStringLiteral("light")) {
@@ -103,27 +92,17 @@ ThemeManager::ThemeManager(QObject* parent)
                            adqt::theme::ThemeManager::instance().config()))),
       m_scheme(generateThemeColorScheme(m_config)),
       m_mode(decodeThemeMode(snow_shot::storage::InterfaceSettings().themeMode())),
-      m_appFontFamily(storage::InterfaceSettings().appFontFamily()),
-      m_effectiveFontFamily(installedFontFamily(m_appFontFamily)),
       m_appFontSize(storage::InterfaceSettings().appFontSize()) {
     m_config.colorPrimary = storage::InterfaceSettings().themePrimaryColor();
-    if (!m_effectiveFontFamily.isEmpty()) {
-        m_config.appFont.setFamily(m_effectiveFontFamily);
+    const QString family = storage::InterfaceSettings().appFontFamily();
+    if (!family.isEmpty()) {
+        m_config.appFont.setFamily(family);
     }
     applyFontSize(m_config);
     auto& adqtThemeManager = adqt::theme::ThemeManager::instance();
     adqtThemeManager.setConfig(detail::toAdqtThemeConfig(m_config));
     m_config = toThemeStyleConfig(adqt::theme::makeResolvedTheme(adqtThemeManager.config()));
     m_scheme = generateThemeColorScheme(m_config);
-    auto& configuration = storage::ApplicationStorage::instance().configuration();
-    connect(&configuration, &storage::ConfigurationStore::valuesCommitted, this,
-            [this](storage::ConfigurationWriteOrigin origin, const auto&, const auto& values) {
-                if (origin != storage::ConfigurationWriteOrigin::Explicit &&
-                    (values.contains(kThemeMode) || values.contains(kPrimaryColor) ||
-                     values.contains(kFontFamily) || values.contains(kFontSize))) {
-                    applyInterfaceConfiguration(values);
-                }
-            });
 }
 
 void ThemeManager::initialize(QApplication& application) {
@@ -134,10 +113,6 @@ void ThemeManager::initialize(QApplication& application) {
     m_initialized = true;
     applyThemeMode();
     adqt::theme::ThemeManager::instance().applyTo(application);
-    connect(&application, &QGuiApplication::fontDatabaseChanged, this, [this] {
-        if (!m_appFontFamily.isEmpty())
-            applyInterfaceConfiguration({{kFontFamily, m_appFontFamily}});
-    });
 
     if (QStyleHints* styleHints = QApplication::styleHints(); styleHints != nullptr) {
         m_systemColorSchemeConnection =
@@ -203,7 +178,9 @@ void ThemeManager::setThemeStyleConfig(const ThemeStyleConfig& config) {
 }
 
 QString ThemeManager::appFontFamily() const {
-    return m_appFontFamily;
+    return (m_config.appFont.resolveMask() & (QFont::FamilyResolved | QFont::FamiliesResolved)) != 0
+               ? m_config.appFont.family()
+               : QString();
 }
 
 bool ThemeManager::setAppFontFamily(const QString& family) {
@@ -211,7 +188,16 @@ bool ThemeManager::setAppFontFamily(const QString& family) {
     if (!storage::InterfaceSettings().setAppFontFamily(normalized)) {
         return false;
     }
-    applyInterfaceConfiguration({{kFontFamily, normalized}});
+    if (appFontFamily() != normalized) {
+        auto config = m_config;
+        config.appFont = QFont();
+        if (!normalized.isEmpty()) {
+            config.appFont.setFamily(normalized);
+        }
+        applyFontSize(config);
+        setThemeStyleConfig(config);
+        emit appFontFamilyChanged(normalized);
+    }
     return true;
 }
 
@@ -223,7 +209,13 @@ bool ThemeManager::setAppFontSize(int pixelSize) {
     if (!storage::InterfaceSettings().setAppFontSize(pixelSize)) {
         return false;
     }
-    applyInterfaceConfiguration({{kFontSize, pixelSize}});
+    if (m_appFontSize != pixelSize) {
+        m_appFontSize = pixelSize;
+        auto config = m_config;
+        applyFontSize(config);
+        setThemeStyleConfig(config);
+        emit appFontSizeChanged(pixelSize);
+    }
     return true;
 }
 
@@ -236,14 +228,23 @@ bool ThemeManager::setThemePrimaryColor(const QColor& color) {
     if (!color.isValid() || !storage::InterfaceSettings().setThemePrimaryColor(color)) {
         return false;
     }
-    applyInterfaceConfiguration({{kPrimaryColor, storage::colorToRgbaString(color)}});
+    if (m_config.colorPrimary != color) {
+        auto config = m_config;
+        config.colorPrimary = color;
+        setThemeStyleConfig(config);
+    }
     return true;
 }
 
 void ThemeManager::setThemeMode(ThemeMode mode) {
-    const QString preference = encodeThemeMode(mode);
-    if (storage::InterfaceSettings().setThemeMode(preference))
-        applyInterfaceConfiguration({{kThemeMode, preference}});
+    if (m_mode == mode) {
+        return;
+    }
+
+    m_mode = mode;
+    snow_shot::storage::InterfaceSettings().setThemeMode(encodeThemeMode(m_mode));
+    applyThemeMode();
+    emit themeModeChanged(m_mode);
 }
 
 void ThemeManager::setThemeAppearance(ThemeAppearance appearance) {
@@ -264,47 +265,6 @@ void ThemeManager::setThemePreset(ThemePreset preset) {
 void ThemeManager::rebuildScheme() {
     m_scheme = generateThemeColorScheme(m_config);
     emit themeChanged(m_scheme);
-}
-
-void ThemeManager::applyInterfaceConfiguration(const QMap<QString, QJsonValue>& values) {
-    const auto mode =
-        values.contains(kThemeMode) ? decodeThemeMode(values.value(kThemeMode).toString()) : m_mode;
-    const bool hasFont = values.contains(kFontFamily);
-    const QString family = hasFont ? values.value(kFontFamily).toString() : m_appFontFamily;
-    const QString effectiveFont = hasFont ? installedFontFamily(family) : m_effectiveFontFamily;
-    const int fontSize = values.value(kFontSize).toInt(m_appFontSize);
-    const auto color = storage::colorFromRgbaString(values.value(kPrimaryColor).toString());
-    const bool modeChanged = mode != m_mode;
-    const bool familyChanged = family != m_appFontFamily;
-    const bool effectiveFontChanged = effectiveFont != m_effectiveFontFamily;
-    const bool sizeChanged = fontSize != m_appFontSize;
-    const bool colorChanged = color.isValid() && color != m_config.colorPrimary;
-
-    m_mode = mode;
-    m_appFontFamily = family;
-    m_effectiveFontFamily = effectiveFont;
-    m_appFontSize = fontSize;
-    const ThemeAppearance appearance = modeChanged ? resolvedAppearance(mode) : m_config.appearance;
-    if (appearance != m_config.appearance || effectiveFontChanged || sizeChanged || colorChanged) {
-        auto config = m_config;
-        config.appearance = appearance;
-        if (colorChanged)
-            config.colorPrimary = color;
-        if (effectiveFontChanged) {
-            config.appFont = QFont();
-            if (!effectiveFont.isEmpty())
-                config.appFont.setFamily(effectiveFont);
-        }
-        if (effectiveFontChanged || sizeChanged)
-            applyFontSize(config);
-        setThemeStyleConfig(config);
-    }
-    if (modeChanged)
-        emit themeModeChanged(mode);
-    if (familyChanged)
-        emit appFontFamilyChanged(family);
-    if (sizeChanged)
-        emit appFontSizeChanged(fontSize);
 }
 
 void ThemeManager::applyThemeMode() {

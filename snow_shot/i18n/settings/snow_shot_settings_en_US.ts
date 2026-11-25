@@ -1184,10 +1184,6 @@
             <translation>Enter a valid HTTP proxy address, for example http://127.0.0.1:7890</translation>
         </message>
         <message>
-            <source>Language %1 is unavailable on this device</source>
-            <translation>Language %1 is unavailable on this device</translation>
-        </message>
-        <message>
             <source>The clipboard is unavailable</source>
             <translation>The clipboard is unavailable</translation>
         </message>
@@ -2025,10 +2021,6 @@
         <message>
             <source>Closed window count</source>
             <translation>Closed window count</translation>
-        </message>
-        <message>
-            <source>Cloud settings sync</source>
-            <translation>Cloud settings sync</translation>
         </message>
         <message>
             <source>Cloud upload</source>
@@ -4373,10 +4365,6 @@
         <message>
             <source>Shape tool</source>
             <translation>Shape tool</translation>
-        </message>
-        <message>
-            <source>Share preferences across devices signed in to the same account</source>
-            <translation>Share preferences across devices signed in to the same account</translation>
         </message>
         <message>
             <source>Shared image export settings for screenshot and pin-to-screen windows</source>

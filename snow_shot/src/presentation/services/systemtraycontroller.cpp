@@ -537,7 +537,7 @@ class SystemTrayController::Impl {
         separatorsBeforeGroup.clear();
         buildMenu();
         retranslateUi();
-        setMenuOptions(menuOptions, true);
+        setMenuOptions(menuOptions);
         return menu;
     }
 
@@ -795,7 +795,7 @@ class SystemTrayController::Impl {
         requestGroupMenuRefresh();
     }
 
-    void setMenuOptions(const QStringList& options, bool preserveInputPause = false) {
+    void setMenuOptions(const QStringList& options) {
         const QSet<QString> requested(options.cbegin(), options.cend());
         const QString mouseToggleId = QStringLiteral("quick.toggle-global-mouse");
         const bool mouseToggleWasVisible = menuOptions.contains(mouseToggleId);
@@ -833,9 +833,6 @@ class SystemTrayController::Impl {
             }
             priorGroupVisible = priorGroupVisible || visibleGroups.at(groupIndex);
         }
-
-        if (preserveInputPause)
-            return;
 
         const auto clearManualPause = [this](GlobalShortcutAction toggle) {
             if (!checkedQuickActions.value(toggle))
@@ -1137,8 +1134,8 @@ void SystemTrayController::setGlobalShortcuts(GlobalShortcutAction action,
     m_impl->retranslateUi();
 }
 
-void SystemTrayController::setMenuOptions(const QStringList& options, bool preserveInputPause) {
-    m_impl->setMenuOptions(options, preserveInputPause);
+void SystemTrayController::setMenuOptions(const QStringList& options) {
+    m_impl->setMenuOptions(options);
 }
 
 QStringList SystemTrayController::menuOptions() const {

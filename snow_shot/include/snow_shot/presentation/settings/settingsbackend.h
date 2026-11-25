@@ -19,7 +19,6 @@
 #include <QObject>
 #include <QHash>
 #include <QPointer>
-#include <QSet>
 #include <QVariant>
 #include <QVector>
 #include <algorithm>
@@ -195,8 +194,7 @@ class SettingsBackend : public QObject {
 #endif
     virtual bool
     importConfigurationSnapshot(const QMap<QString, QJsonValue>&, int,
-                                std::shared_future<storage::StorageResult>* completion = nullptr,
-                                const QSet<QString>* = nullptr) {
+                                std::shared_future<storage::StorageResult>* completion = nullptr) {
         if (completion)
             *completion = {};
         return false;
@@ -395,10 +393,9 @@ class BuiltInSettingsBackend final : public SettingsBackend {
     bool applyTextTranslationConfigurations(const TextTranslationConfigurations& values) override;
 #endif
 
-    bool
-    importConfigurationSnapshot(const QMap<QString, QJsonValue>& values, int schemaVersion,
-                                std::shared_future<storage::StorageResult>* completion = nullptr,
-                                const QSet<QString>* explicitlyImported = nullptr) override;
+    bool importConfigurationSnapshot(
+        const QMap<QString, QJsonValue>& values, int schemaVersion,
+        std::shared_future<storage::StorageResult>* completion = nullptr) override;
     [[nodiscard]] storage::StorageStatus storageStatus() const override;
     void refreshPlatformSettings() override;
     QString fieldError(const QString& fieldId) const override;

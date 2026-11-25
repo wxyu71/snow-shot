@@ -174,7 +174,6 @@ class ScreenshotOcrRecognitionService final : public ScreenshotOcrRecognitionPor
         // Optional worker-side barrier for deterministic rendering/lifecycle tests.
         std::function<void()> beforeLocalRender;
         QString paragraphModelPath;
-        bool tryCachedFallbackAtStartup = false;
     };
 
     explicit ScreenshotOcrRecognitionService(QObject* parent = nullptr);
@@ -205,8 +204,7 @@ class ScreenshotOcrRecognitionService final : public ScreenshotOcrRecognitionPor
     [[nodiscard]] ScreenshotOcrRuntimeConfiguration runtimeConfiguration() const {
         return m_runtimeConfiguration;
     }
-    void setRuntimeConfiguration(const ScreenshotOcrRuntimeConfiguration& configuration,
-                                 bool deferModelDownload = false);
+    void setRuntimeConfiguration(const ScreenshotOcrRuntimeConfiguration& configuration);
     [[nodiscard]] int liveWorkerCount() const;
     [[nodiscard]] bool storageBusy() const;
     void suspendStorage();
@@ -223,7 +221,6 @@ class ScreenshotOcrRecognitionService final : public ScreenshotOcrRecognitionPor
     RequestToken m_nextToken = 0;
     Options m_storageOptions;
     ScreenshotOcrRuntimeConfiguration m_runtimeConfiguration;
-    bool m_deferModelDownload = false;
 
   signals:
 };
