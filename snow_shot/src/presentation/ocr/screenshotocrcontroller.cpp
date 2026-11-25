@@ -1,5 +1,6 @@
 #include "snow_shot/presentation/screenshotocrcontroller.h"
 #include "snow_shot/network/communitycloudocrsettings.h"
+#include "snow_shot/network/baidupaddleocrclient.h"
 #include "snow_shot/storage/settingsadapters.h"
 #include "snow_shot/presentation/screenshotclipboardcontent.h"
 #include "snow_shot/presentation/screenshotclipboardservice.h"
@@ -26,6 +27,7 @@
 #include "snow_shot/presentation/screenshottoolbarwindow.h"
 
 #include "theme/theme_manager.h"
+#include "widgets/message.h"
 
 #include "snow_draw_engine_qt/snow_canvas_widget.h"
 
@@ -33,11 +35,14 @@
 #include <QElapsedTimer>
 #include <QApplication>
 #include <QClipboard>
+#include <QCursor>
 #include <QDesktopServices>
 #include <QMimeData>
 #include <QScreen>
 #include <QTimer>
 #include <QUrl>
+#include <QWidget>
+#include <algorithm>
 
 #include <utility>
 
@@ -361,6 +366,10 @@ ScreenshotOcrController::ScreenshotOcrController(ScreenshotOcrControllerContext 
 }
 
 ScreenshotOcrController::~ScreenshotOcrController() {
+    // Only application/controller shutdown cancels this independent job.
+    if (m_backgroundOcr)
+        m_backgroundOcr->cancel();
+    delete m_backgroundMessageHost.data();
     invalidateSession();
 }
 
@@ -465,6 +474,164 @@ QImage clipRecognitionSelection(QImage image, const ScreenshotSelectionModel& se
     return ScreenshotResultCompositor::compose(image, style);
 }
 } // namespace
+
+bool ScreenshotOcrController::backgroundOnlineOcrBusy() const {
+    return !m_backgroundOcr.isNull();
+}
+
+void ScreenshotOcrController::showBackgroundOcrMessage(const QString& message,
+                                                       BackgroundMessageKind kind,
+                                                       QScreen* screen) {
+    using adqt::widgets::AdMessage;
+    using adqt::widgets::AdMessageService;
+    if (!screen)
+        screen = QGuiApplication::primaryScreen();
+    if (!screen)
+        return;
+
+    // AdMessage is window-scoped. A tray application may have no visible
+    // content window once the capture overlay has closed. Give the same
+    // component a passive, transparent desktop host, not a native balloon.
+    if (!m_backgroundMessageHost) {
+        auto* host = new QWidget(nullptr, Qt::Tool | Qt::FramelessWindowHint |
+                                              Qt::WindowStaysOnTopHint |
+                                              Qt::WindowDoesNotAcceptFocus |
+                                              Qt::WindowTransparentForInput);
+        host->setObjectName(QStringLiteral("backgroundOnlineOcrMessageHost"));
+        host->setAttribute(Qt::WA_TranslucentBackground);
+        host->setAttribute(Qt::WA_ShowWithoutActivating);
+        m_backgroundMessageHost = host;
+        if (auto* service = AdMessageService::instance(host)) {
+            connect(service, &AdMessage::countChanged, host, [host](int count) {
+                if (count == 0)
+                    host->hide();
+            });
+        }
+    }
+    auto* host = m_backgroundMessageHost.data();
+    const QRect available = screen->availableGeometry();
+    const int width = std::min(available.width(), 760);
+    const int height = std::min(available.height(), 180);
+    host->setGeometry(available.center().x() - width / 2, available.top(), width, height);
+    host->show();
+
+    AdMessage::Request request;
+    request.key = QStringLiteral("background-online-ocr");
+    request.content = message;
+    request.durationMs = std::max(1000, AdMessageService::config().defaultDurationMs);
+    request.pauseOnHover = false;
+    switch (kind) {
+    case BackgroundMessageKind::Info:
+        request.type = AdMessage::Type::Info;
+        break;
+    case BackgroundMessageKind::Success:
+        request.type = AdMessage::Type::Success;
+        break;
+    case BackgroundMessageKind::Warning:
+        request.type = AdMessage::Type::Warning;
+        break;
+    case BackgroundMessageKind::Error:
+        request.type = AdMessage::Type::Error;
+        break;
+    }
+    if (!AdMessageService::open(std::move(request), host))
+        host->hide();
+}
+
+bool ScreenshotOcrController::startBackgroundOnlineOcr() {
+    // Automated/hidden recognition still uses the existing result session.
+    if (m_context.captureState.presentationSuppressed)
+        return false;
+    const auto settings = snow_shot::network::readCommunityCloudOcrSettings();
+    if (settings.engine != QStringLiteral("paddleocr"))
+        return false;
+    if (m_backgroundOcr) {
+        showStatus(tr("An online OCR job is already running in the background."), false);
+        return true;
+    }
+    if (settings.accessToken.trimmed().isEmpty()) {
+        showStatus(tr("Configure the PaddleOCR Access Token in Settings before online OCR."), true);
+        return true;
+    }
+    const QRect selection = m_context.selection.pixelSelection();
+    if (selection.isEmpty()) {
+        showStatus(tr("Select an area to recognize"), false);
+        return true;
+    }
+    QImage source = clipRecognitionSelection(
+        composeScreenshotSourceSelection(m_context.displaySession, selection),
+        m_context.selection);
+    if (source.isNull()) {
+        showStatus(tr("Unable to read the selected screenshot"), true);
+        return true;
+    }
+    auto* job = new snow_shot::network::BaiduPaddleOcrClient(this);
+    m_backgroundOcr = job;
+    const QPointer<ScreenshotOcrController> controller(this);
+    const QPointer<snow_shot::network::BaiduPaddleOcrClient> jobGuard(job);
+    const QPointer<QScreen> screen(QGuiApplication::screenAt(QCursor::pos()));
+    const auto publication = ScreenshotClipboardService::reservePublication();
+    snow_shot::network::BaiduPaddleOcrClient::Options options{
+        settings.apiUrl, settings.accessToken, settings.model};
+
+    // The selected pixels and provider configuration are now independent of
+    // the overlays. Close the screenshot first; network/PNG work begins on
+    // the next event-loop turn. invalidateSession() only cancels m_session.
+    m_context.cancelCapture();
+    if (!controller || !jobGuard)
+        return true;
+    QTimer::singleShot(0, job, [controller, jobGuard, screen, publication,
+                                source = std::move(source),
+                                options = std::move(options)]() mutable {
+        if (!controller || !jobGuard)
+            return;
+        controller->showBackgroundOcrMessage(
+            tr("Online OCR is running in the background. You can continue using Snow Shot."),
+            BackgroundMessageKind::Info, screen.data());
+        jobGuard->recognize(source, std::move(options),
+                            [controller, jobGuard, screen, publication](QString markdown,
+                                                                        QString error) {
+            if (!controller || !jobGuard)
+                return;
+            const auto complete = [controller, jobGuard, screen](const QString& message,
+                                                                BackgroundMessageKind kind) {
+                if (!controller || !jobGuard)
+                    return;
+                controller->m_backgroundOcr.clear();
+                jobGuard->deleteLater();
+                controller->showBackgroundOcrMessage(message, kind, screen.data());
+            };
+            if (!error.isEmpty()) {
+                complete(tr("Online OCR failed: %1").arg(error.simplified().left(240)),
+                         BackgroundMessageKind::Error);
+                return;
+            }
+            if (!QApplication::clipboard()) {
+                complete(tr("Online OCR completed, but the clipboard is unavailable."),
+                         BackgroundMessageKind::Warning);
+                return;
+            }
+            auto* mime = new QMimeData;
+            mime->setText(markdown);
+            static_cast<void>(ScreenshotClipboardService::commitMimeData(
+                QApplication::clipboard(), jobGuard.data(), mime, publication,
+                [complete](ScreenshotClipboardCommitResult result) {
+                    if (result.superseded) {
+                        complete(tr("Online OCR completed. A newer copy operation was preserved."),
+                                 BackgroundMessageKind::Warning);
+                    } else if (!result.succeeded()) {
+                        complete(tr("Online OCR completed, but copying failed: %1")
+                                     .arg(result.errorString()),
+                                 BackgroundMessageKind::Warning);
+                    } else {
+                        complete(tr("Online OCR completed. The result was copied to the clipboard."),
+                                 BackgroundMessageKind::Success);
+                    }
+                }));
+        });
+    });
+    return true;
+}
 
 QString ScreenshotOcrController::currentCacheKey() const {
     const QRect selection = m_context.selection.pixelSelection();

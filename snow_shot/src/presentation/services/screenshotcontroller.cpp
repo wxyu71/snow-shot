@@ -2820,6 +2820,9 @@ void ScreenshotController::Impl::activateRecognitionToolForSelection(ScreenshotA
     } else if (tool == ScreenshotActiveTool::Latex) {
         m_ocrController->activateLatex();
     } else if (tool == ScreenshotActiveTool::Markdown || tool == ScreenshotActiveTool::Html) {
+        if (tool == ScreenshotActiveTool::Markdown && !m_mcpObserving &&
+            m_ocrController->startBackgroundOnlineOcr())
+            return;
         m_ocrController->activateImageConversion(tool == ScreenshotActiveTool::Markdown
                                                      ? SnowShotImageConversionFormat::Markdown
                                                      : SnowShotImageConversionFormat::Html);
@@ -2991,6 +2994,8 @@ void ScreenshotController::Impl::setMarkdownTool() {
     if (!ensureRecognitionFeature()) {
         return;
     }
+    if (!m_mcpObserving && m_ocrController->startBackgroundOnlineOcr())
+        return;
     m_ocrController->activateImageConversion(SnowShotImageConversionFormat::Markdown);
     m_presentationServices->updateOverlayState();
     restoreToolUiAfterScrollingCapture(stopped);
@@ -6877,7 +6882,9 @@ void ScreenshotController::setCaptureSuspended(bool suspended) {
 }
 
 bool ScreenshotController::blocksApplicationUpdate(bool includeCaptureSuspension) const {
-    return !m_impl->canBeginCapture(includeCaptureSuspension) || m_impl->m_filePinQueue.active() ||
+    return !m_impl->canBeginCapture(includeCaptureSuspension) ||
+           (m_impl->m_ocrController && m_impl->m_ocrController->backgroundOnlineOcrBusy()) ||
+           m_impl->m_filePinQueue.active() ||
            m_impl->clipboardPinPending() || m_impl->m_historyPinQueue.active() ||
            (m_impl->m_selectionExportUiServices &&
             m_impl->m_selectionExportUiServices->restoringWindows()) ||
@@ -6891,7 +6898,9 @@ bool ScreenshotController::blocksApplicationUpdate(bool includeCaptureSuspension
 
 bool ScreenshotController::blocksMemoryTrimming(bool includeCaptureSuspension) const {
     const auto& state = *m_impl;
-    return !state.canBeginCapture(includeCaptureSuspension) || state.m_recaptureBusy ||
+    return !state.canBeginCapture(includeCaptureSuspension) ||
+           (state.m_ocrController && state.m_ocrController->backgroundOnlineOcrBusy()) ||
+           state.m_recaptureBusy ||
            state.m_globalMouseDrag.active() || state.clipboardPinPending() ||
            state.m_filePinBatch.active() || state.m_filePinQueue.active() ||
            state.m_historyPinQueue.active() ||

@@ -89,6 +89,38 @@
     <context>
         <name>ScreenshotOcrController</name>
         <message>
+            <source>An online OCR job is already running in the background.</source>
+            <translation>已有一個線上辨識工作正在背景執行。</translation>
+        </message>
+        <message>
+            <source>Configure the PaddleOCR Access Token in Settings before online OCR.</source>
+            <translation>請先在設定中設定 PaddleOCR 存取權杖，再執行線上辨識。</translation>
+        </message>
+        <message>
+            <source>Online OCR is running in the background. You can continue using Snow Shot.</source>
+            <translation>線上辨識正在背景處理，你可以繼續使用 Snow Shot。</translation>
+        </message>
+        <message>
+            <source>Online OCR failed: %1</source>
+            <translation>線上辨識失敗：%1</translation>
+        </message>
+        <message>
+            <source>Online OCR completed, but the clipboard is unavailable.</source>
+            <translation>線上辨識完成，但剪貼簿無法使用。</translation>
+        </message>
+        <message>
+            <source>Online OCR completed. A newer copy operation was preserved.</source>
+            <translation>線上辨識完成，已保留較新的剪貼簿內容。</translation>
+        </message>
+        <message>
+            <source>Online OCR completed, but copying failed: %1</source>
+            <translation>線上辨識完成，但複製失敗：%1</translation>
+        </message>
+        <message>
+            <source>Online OCR completed. The result was copied to the clipboard.</source>
+            <translation>線上辨識完成，結果已複製到剪貼簿。</translation>
+        </message>
+        <message>
             <source>Barcode recognition components are missing or damaged</source>
             <translation>條碼辨識元件缺失或已損毀</translation>
         </message>
