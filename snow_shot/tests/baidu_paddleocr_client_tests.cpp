@@ -25,7 +25,8 @@ enum class ReplyMode {
     VendorQuota,
     FailedJob,
     InvalidJsonl,
-    InvalidParameters
+    InvalidParameters,
+    SuccessWithoutCode
 };
 
 struct RunResult {
@@ -88,6 +89,8 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                         // The service sometimes encodes a quota error in a
                         // syntactically successful HTTP 200 JSON envelope.
                         body = R"({"code":12001,"msg":"daily quota exhausted"})";
+                    } else if (mode == ReplyMode::SuccessWithoutCode) {
+                        body = R"({"data":{"jobId":"job-123"}})";
                     } else {
                         body = R"({"code":0,"data":{"jobId":"job-123"}})";
                     }
@@ -97,6 +100,14 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                     if (mode == ReplyMode::PollRateLimitedThenSuccess && outcome.polls == 1) {
                         status = "429 Too Many Requests";
                         body = R"({"code":12002,"msg":"poll frequency too high"})";
+                    } else if (mode == ReplyMode::SuccessWithoutCode && outcome.polls == 1) {
+                        body = R"({"data":{"state":"pending"}})";
+                    } else if (mode == ReplyMode::SuccessWithoutCode && outcome.polls == 2) {
+                        body = R"({"data":{"state":"running"}})";
+                    } else if (mode == ReplyMode::SuccessWithoutCode) {
+                        body = QStringLiteral(
+                            R"({"data":{"state":"done","resultUrl":{"jsonUrl":"%1/result"}}})")
+                            .arg(root).toUtf8();
                     } else if (outcome.polls == 1) {
                         body = R"({"code":0,"data":{"state":"running"}})";
                     } else if (mode == ReplyMode::FailedJob) {
@@ -110,6 +121,10 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                     outcome.downloadIsAnonymous = !lower.contains("authorization:");
                     if (mode == ReplyMode::InvalidJsonl) {
                         body = "{not-valid-json}";
+                    } else if (mode == ReplyMode::SuccessWithoutCode) {
+                        body = R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Page 1"}}]}})";
+                        body += "\n";
+                        body += R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Page 2"}}]}})";
                     } else if (model == QStringLiteral("PP-OCRv6")) {
                         body = R"({"result":{"ocrResults":[{"prunedResult":{"rec_texts":["Hello OCR","Total 42"]}}]}})";
                     } else if (model == QStringLiteral("PP-StructureV3")) {
@@ -155,6 +170,13 @@ RunResult runCase(const QString& model, ReplyMode mode) {
 }
 
 void checkSuccessfulModels() {
+    auto asynchronous = runCase(QStringLiteral("PaddleOCR-VL-1.6"),
+                                ReplyMode::SuccessWithoutCode);
+    require(asynchronous.error.isEmpty() && asynchronous.polls == 3 &&
+            asynchronous.pollAuthenticated && asynchronous.downloadIsAnonymous &&
+            asynchronous.markdown == QStringLiteral("# Page 1\n\n# Page 2"),
+            "documented pending/running/done sequence works without an explicit code field");
+
     auto ocr = runCase(QStringLiteral("PP-OCRv6"), ReplyMode::Success);
     require(ocr.error.isEmpty() && ocr.pollAuthenticated && ocr.downloadIsAnonymous,
             "PP-OCRv6 job authenticates poll but not result download");

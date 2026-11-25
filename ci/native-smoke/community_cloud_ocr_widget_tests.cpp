@@ -7,7 +7,24 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QTemporaryDir>
+#include <QTranslator>
 #include <QtTest/QtTest>
+
+namespace {
+class CloudOcrContextTranslator final : public QTranslator {
+  public:
+    bool isEmpty() const override {
+        return false;
+    }
+
+    QString translate(const char* context, const char* sourceText, const char*,
+                      int) const override {
+        if (QByteArray(context) != QByteArrayLiteral("CloudOcrSettingsWidget"))
+            return {};
+        return QStringLiteral("translated: ") + QString::fromUtf8(sourceText);
+    }
+};
+} // namespace
 
 class CommunityCloudOcrWidgetTests final : public QObject {
     Q_OBJECT
@@ -62,6 +79,33 @@ class CommunityCloudOcrWidgetTests final : public QObject {
         QVERIFY(model->findText(QStringLiteral("PaddleOCR-VL-1.6")) >= 0);
         QVERIFY(model->findText(QStringLiteral("PP-StructureV3")) >= 0);
         QVERIFY(model->findText(QStringLiteral("PP-OCRv6")) >= 0);
+    }
+
+    void widgetUsesItsOwnTranslationContextAndKeepsModelValues() {
+        CloudOcrContextTranslator translator;
+        QVERIFY(QCoreApplication::installTranslator(&translator));
+        CloudOcrSettingsWidget widget;
+        auto* engine = widget.findChild<QComboBox*>(QStringLiteral("onlineOcrEngine"));
+        auto* output = widget.findChild<QComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
+        auto* model = widget.findChild<QComboBox*>(QStringLiteral("paddleOcrModel"));
+        auto* save = widget.findChild<QPushButton*>(QStringLiteral("paddleOcrSave"));
+        auto* test = widget.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
+        QVERIFY(engine);
+        QVERIFY(output);
+        QVERIFY(model);
+        QVERIFY(save);
+        QVERIFY(test);
+        QCOMPARE(engine->currentText(), QStringLiteral("translated: Baidu PaddleOCR (AI Studio)"));
+        QCOMPARE(output->currentText(),
+                 QStringLiteral("translated: Markdown (formulas preserved as LaTeX)"));
+        QCOMPARE(save->text(), QStringLiteral("translated: Save"));
+        QCOMPARE(test->text(), QStringLiteral("translated: Test PaddleOCR connection"));
+        QCOMPARE(engine->currentData().toString(), QStringLiteral("paddleocr"));
+        QCOMPARE(output->currentData().toString(), QStringLiteral("markdown"));
+        QCOMPARE(model->currentText(), QStringLiteral("PaddleOCR-VL-1.6"));
+        QCoreApplication::removeTranslator(&translator);
+        widget.retranslateUi();
+        QCOMPARE(save->text(), QStringLiteral("Save"));
     }
 
     void widgetSavesPaddleAndNormalizesLegacyChoices() {
