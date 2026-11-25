@@ -55,6 +55,30 @@ def openssl(*args: str, payload: bytes | None = None) -> bytes:
                           stdout=subprocess.PIPE).stdout
 
 
+def export_public_key(public_key: Path, key_id: str) -> dict:
+    """Accept only an RSA-3072 public PEM; never read a private PEM."""
+    if not re.fullmatch(r"[A-Za-z0-9_.-]{1,80}", key_id):
+        raise ValueError("Invalid key identifier")
+    if not public_key.is_file() or public_key.stat().st_size > 16384:
+        raise ValueError("Expected a small public PEM file")
+    pem = public_key.read_bytes().strip()
+    if not (pem.startswith(b"-----BEGIN PUBLIC KEY-----") and
+            pem.endswith(b"-----END PUBLIC KEY-----") and
+            pem.count(b"-----BEGIN ") == 1):
+        raise ValueError("Expected only a PUBLIC KEY PEM; never provide a private key here")
+    modulus = openssl("rsa", "-pubin", "-in", str(public_key),
+                      "-modulus", "-noout").strip()
+    if not modulus.startswith(b"Modulus="):
+        raise ValueError("Invalid RSA public key")
+    key = {"id": key_id,
+           "modulus": encoded(bytes.fromhex(modulus.decode("ascii").split("=", 1)[1])),
+           "exponent": encoded(b"\\x01\\x00\\x01")}
+    actual = openssl("pkey", "-pubin", "-in", str(public_key), "-pubout", "-outform", "DER")
+    if actual != public_der(key):
+        raise ValueError("Expected RSA-3072 with exponent 65537")
+    return key
+
+
 def file_digest(path: Path) -> str:
     if path.is_symlink() or not path.is_file() or not 0 < path.stat().st_size <= MAX_BYTES:
         raise ValueError("Unsafe release input")
@@ -259,6 +283,15 @@ def selftest() -> None:
             "modulus": encoded(bytes.fromhex(modulus.decode().split("=", 1)[1])),
             "exponent": encoded(b"\x01\x00\x01")}]}))
         assert json.loads(sign(payload, key, "test-only", trust))["keyId"] == "test-only"
+        public_pem = root / "public.pem"
+        public_pem.write_bytes(openssl("pkey", "-in", str(key), "-pubout"))
+        assert export_public_key(public_pem, "test-only") == json.loads(trust.read_text())["keys"][0]
+        try:
+            export_public_key(key, "test-only")
+        except ValueError:
+            pass
+        else:
+            raise AssertionError("Private PEM was accepted by public export")
         trust.write_text('{"keys":[]}')
         try:
             sign(payload, key, "test-only", trust)
@@ -282,11 +315,24 @@ def main() -> None:
     parser.add_argument("--local-variant", choices=("online", "offline"))
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--private-key", type=Path)
+    parser.add_argument("--export-public-key", type=Path,
+                        help="Export only an independently generated PUBLIC KEY PEM as trust JSON")
     parser.add_argument("--key-id")
     parser.add_argument("--output", type=Path)
     args = parser.parse_args()
     if args.selftest:
         selftest()
+        return
+    if args.export_public_key:
+        if not args.key_id or args.private_key or args.local_variant or args.directory:
+            parser.error("Public export requires --key-id and a public PEM only")
+        data = json.dumps({"keys": [export_public_key(args.export_public_key, args.key_id)]},
+                          indent=2) + "\n"
+        if args.output:
+            with args.output.open("x", encoding="utf-8") as stream:
+                stream.write(data)
+        else:
+            print(data, end="")
         return
     if args.local_variant:
         if not args.directory or not args.output:
