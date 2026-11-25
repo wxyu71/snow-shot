@@ -72,7 +72,7 @@ def export_public_key(public_key: Path, key_id: str) -> dict:
         raise ValueError("Invalid RSA public key")
     key = {"id": key_id,
            "modulus": encoded(bytes.fromhex(modulus.decode("ascii").split("=", 1)[1])),
-           "exponent": encoded(b"\\x01\\x00\\x01")}
+           "exponent": encoded(b"\x01\x00\x01")}
     actual = openssl("pkey", "-pubin", "-in", str(public_key), "-pubout", "-outform", "DER")
     if actual != public_der(key):
         raise ValueError("Expected RSA-3072 with exponent 65537")
