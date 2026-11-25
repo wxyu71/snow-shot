@@ -445,4 +445,79 @@
             <translation>粘贴的单元格超出识别表格范围</translation>
         </message>
     </context>
+    <context>
+        <name>BaiduPaddleOcrClient</name>
+        <message>
+            <source>Invalid PaddleOCR JSONL document</source>
+            <translation>PaddleOCR JSONL 文档无效</translation>
+        </message>
+        <message>
+            <source>PaddleOCR JSONL has no recognized text or document Markdown</source>
+            <translation>PaddleOCR JSONL 不包含识别文字或文档 Markdown</translation>
+        </message>
+        <message>
+            <source>AI Studio Access Token rejected (HTTP 401)</source>
+            <translation>AI Studio 访问令牌无效（HTTP 401）</translation>
+        </message>
+        <message>
+            <source>AI Studio rate limit (12002 / HTTP 429), retry later</source>
+            <translation>AI Studio 请求过于频繁（12002 / HTTP 429），请稍后重试</translation>
+        </message>
+        <message>
+            <source>AI Studio daily OCR quota exhausted (12001 / HTTP 403)</source>
+            <translation>AI Studio 今日识别额度已用完（12001 / HTTP 403）</translation>
+        </message>
+        <message>
+            <source>AI Studio does not support the selected model (10007)</source>
+            <translation>AI Studio 不支持所选模型（10007）</translation>
+        </message>
+        <message>
+            <source>PaddleOCR API failed (HTTP %1, code %2): %3</source>
+            <translation>PaddleOCR API 请求失败（HTTP %1，错误码 %2）：%3</translation>
+        </message>
+        <message>
+            <source>The PaddleOCR service returned an error</source>
+            <translation>PaddleOCR 服务返回错误</translation>
+        </message>
+        <message>
+            <source>PaddleOCR response exceeds 8 MiB</source>
+            <translation>PaddleOCR 响应超过 8 MiB</translation>
+        </message>
+        <message>
+            <source>A screenshot and PaddleOCR Access Token are required</source>
+            <translation>需要截图和 PaddleOCR 访问令牌</translation>
+        </message>
+        <message>
+            <source>Unsupported PaddleOCR model</source>
+            <translation>不支持的 PaddleOCR 模型</translation>
+        </message>
+        <message>
+            <source>PaddleOCR API URL must be HTTPS (or localhost for testing)</source>
+            <translation>PaddleOCR API 地址必须使用 HTTPS（本地测试除外）</translation>
+        </message>
+        <message>
+            <source>Unable to prepare PNG image (15 MiB limit)</source>
+            <translation>无法准备 PNG 图像（上限 15 MiB）</translation>
+        </message>
+        <message>
+            <source>PaddleOCR response has no jobId</source>
+            <translation>PaddleOCR 响应缺少任务 ID</translation>
+        </message>
+        <message>
+            <source>PaddleOCR job timed out</source>
+            <translation>PaddleOCR 识别任务超时</translation>
+        </message>
+        <message>
+            <source>PaddleOCR returned no valid JSONL or Markdown URL</source>
+            <translation>PaddleOCR 未返回有效的 JSONL 或 Markdown 地址</translation>
+        </message>
+        <message>
+            <source>PaddleOCR result download failed (HTTP %1): %2</source>
+            <translation>PaddleOCR 结果下载失败（HTTP %1）：%2</translation>
+        </message>
+        <message>
+            <source>PaddleOCR returned empty Markdown</source>
+            <translation>PaddleOCR 返回的 Markdown 为空</translation>
+        </message>
+    </context>
 </TS>

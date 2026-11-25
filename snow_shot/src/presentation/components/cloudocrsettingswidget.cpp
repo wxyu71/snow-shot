@@ -80,6 +80,7 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     m_status = new QLabel(this);
     m_status->setObjectName(QStringLiteral("paddleOcrConnectionStatus"));
     m_status->setWordWrap(true);
+    m_status->setTextFormat(Qt::PlainText);
     outer->addWidget(m_status);
 
     const auto settings = snow_shot::network::readCommunityCloudOcrSettings();
@@ -107,10 +108,43 @@ void CloudOcrSettingsWidget::applyTheme(
     const snow_shot::presentation::styles::ThemeColorScheme& scheme) {
     const int spacing = scheme.metricAlias.paddingSM;
     layout()->setSpacing(spacing);
+    const auto& colors = scheme.map;
+    const auto& metrics = scheme.metricAlias;
+    const auto css = [](const QColor& color) { return color.name(QColor::HexArgb); };
+    const QString fieldsStyle = QStringLiteral(
+        "QComboBox, QLineEdit { color: %1; background: %2; border: %3px solid %4; "
+        "border-radius: %5px; padding: 0 %6px; }"
+        "QComboBox:hover, QLineEdit:hover { border-color: %7; }"
+        "QComboBox:focus, QLineEdit:focus { border-color: %8; }"
+        "QComboBox:disabled, QLineEdit:disabled { color: %9; background: %10; border-color: %11; }"
+        "QComboBox QAbstractItemView { color: %1; background: %12; "
+        "selection-background-color: %13; selection-color: %1; border: %3px solid %4; }")
+        .arg(css(colors.colorText), css(colors.colorBgContainer))
+        .arg(metrics.lineWidth).arg(css(colors.colorBorder)).arg(metrics.borderRadius)
+        .arg(metrics.paddingXS).arg(css(colors.colorPrimaryHover), css(colors.colorPrimary),
+             css(colors.colorTextQuaternary), css(colors.colorFillTertiary),
+             css(colors.colorBorderDisabled), css(colors.colorBgElevated),
+             css(colors.colorPrimaryBg));
     for (auto* control : {static_cast<QWidget*>(m_engine), static_cast<QWidget*>(m_output),
                           static_cast<QWidget*>(m_endpoint), static_cast<QWidget*>(m_token),
-                          static_cast<QWidget*>(m_model)})
-        control->setMinimumHeight(scheme.metricAlias.controlHeight);
+                          static_cast<QWidget*>(m_model)}) {
+        control->setMinimumHeight(metrics.controlHeight);
+        control->setStyleSheet(fieldsStyle);
+    }
+    const QString buttonStyle = QStringLiteral(
+        "QPushButton { color: %1; background: %2; border: %3px solid %4; "
+        "border-radius: %5px; padding: 0 %6px; }"
+        "QPushButton:hover { color: %7; border-color: %7; }"
+        "QPushButton:disabled { color: %8; background: %9; border-color: %10; }")
+        .arg(css(colors.colorText), css(colors.colorBgContainer))
+        .arg(metrics.lineWidth).arg(css(colors.colorBorder)).arg(metrics.borderRadius)
+        .arg(metrics.paddingSM).arg(css(colors.colorPrimaryHover),
+             css(colors.colorTextQuaternary), css(colors.colorFillTertiary),
+             css(colors.colorBorderDisabled));
+    for (auto* button : {m_save, m_test}) {
+        button->setMinimumHeight(metrics.controlHeight);
+        button->setStyleSheet(buttonStyle);
+    }
 }
 
 void CloudOcrSettingsWidget::retranslateUi() {

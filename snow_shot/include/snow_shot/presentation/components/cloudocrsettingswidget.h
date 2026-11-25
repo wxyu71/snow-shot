@@ -4,6 +4,7 @@
 #include "snow_shot/presentation/components/settingscustomwidget.h"
 #include "snow_shot/network/baidupaddleocrclient.h"
 
+#include <QCoreApplication>
 #include <QPointer>
 
 class QComboBox;
@@ -12,6 +13,7 @@ class QLineEdit;
 class QPushButton;
 
 class CloudOcrSettingsWidget final : public SettingsCustomWidget {
+    Q_DECLARE_TR_FUNCTIONS(CloudOcrSettingsWidget)
   public:
     explicit CloudOcrSettingsWidget(QWidget* parent = nullptr);
     ~CloudOcrSettingsWidget() override;

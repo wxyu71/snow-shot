@@ -24,7 +24,8 @@ enum class ReplyMode {
     PollRateLimitedThenSuccess,
     VendorQuota,
     FailedJob,
-    InvalidJsonl
+    InvalidJsonl,
+    InvalidParameters
 };
 
 struct RunResult {
@@ -71,12 +72,13 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                         payload->contains(model.toUtf8()) &&
                         payload->contains("name=\"file\"") &&
                         payload->contains("name=\"optionalPayload\"") &&
-                        (model != QStringLiteral("PP-StructureV3") ||
-                         (payload->contains("useTableRecognition") &&
-                          payload->contains("useFormulaRecognition"))) &&
-                        (model != QStringLiteral("PaddleOCR-VL-1.6") ||
-                         payload->contains("useLayoutDetection"));
-                    if (mode == ReplyMode::Unauthorized) {
+                        payload->contains(model == QStringLiteral("PP-OCRv6")
+                            ? R"({"useDocOrientationClassify":false,"useDocUnwarping":false,"useTextlineOrientation":false})"
+                            : R"({"useChartRecognition":false,"useDocOrientationClassify":false,"useDocUnwarping":false})");
+                    if (mode == ReplyMode::InvalidParameters) {
+                        status = "400 Bad Request";
+                        body = R"({"code":10010,"msg":"optionalPayload invalid"})";
+                    } else if (mode == ReplyMode::Unauthorized) {
                         status = "401 Unauthorized";
                         body = R"({"code":401,"msg":"token invalid"})";
                     } else if (mode == ReplyMode::RateLimited) {
@@ -175,6 +177,11 @@ void checkSuccessfulModels() {
 
 void checkErrors() {
     const QString model = QStringLiteral("PP-OCRv6");
+    auto parameters = runCase(model, ReplyMode::InvalidParameters);
+    require(parameters.markdown.isEmpty() &&
+            parameters.error.contains(QStringLiteral("10010")) &&
+            parameters.error.contains(QStringLiteral("optionalPayload invalid")),
+            "HTTP 400 retains provider business error instead of Qt Bad Request");
     auto auth = runCase(model, ReplyMode::Unauthorized);
     require(auth.markdown.isEmpty() && auth.error.contains(QStringLiteral("401")),
             "invalid Access Token is reported as HTTP 401");

@@ -5850,4 +5850,83 @@ Unavailable: %2</source>
             <translation>部分自定义 API 配置无效，已被忽略</translation>
         </message>
     </context>
+    <context>
+        <name>CloudOcrSettingsWidget</name>
+        <message>
+            <source>Online OCR uses only the PaddleOCR AI Studio API configured here. Images are sent to that service only when you explicitly run Online OCR. The result is Markdown with formulas preserved as LaTeX. Local text recognition remains offline.</source>
+            <translation>在线识别仅使用此处配置的 PaddleOCR AI Studio API。只有主动执行在线识别时才会向该服务发送图像。结果为 Markdown，公式保留为 LaTeX。本地文字识别仍完全离线。</translation>
+        </message>
+        <message>
+            <source>OCR engine</source>
+            <translation>识别引擎</translation>
+        </message>
+        <message>
+            <source>Output format</source>
+            <translation>输出格式</translation>
+        </message>
+        <message>
+            <source>PaddleOCR AI Studio API URL</source>
+            <translation>PaddleOCR AI Studio API 地址</translation>
+        </message>
+        <message>
+            <source>Access Token</source>
+            <translation>访问令牌</translation>
+        </message>
+        <message>
+            <source>PaddleOCR model</source>
+            <translation>PaddleOCR 模型</translation>
+        </message>
+        <message>
+            <source>Save</source>
+            <translation>保存</translation>
+        </message>
+        <message>
+            <source>Test PaddleOCR connection</source>
+            <translation>测试 PaddleOCR 连接</translation>
+        </message>
+        <message>
+            <source>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</source>
+            <translation>将一张小型测试图像直接发送至 PaddleOCR，可能消耗 API 额度。</translation>
+        </message>
+        <message>
+            <source>Baidu PaddleOCR (AI Studio)</source>
+            <translation>百度 PaddleOCR（AI Studio）</translation>
+        </message>
+        <message>
+            <source>Markdown (formulas preserved as LaTeX)</source>
+            <translation>Markdown（公式保留为 LaTeX）</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>
+            <translation>请输入有效的 PaddleOCR HTTPS 地址和访问令牌。</translation>
+        </message>
+        <message>
+            <source>PaddleOCR configuration saved.</source>
+            <translation>PaddleOCR 配置已保存。</translation>
+        </message>
+        <message>
+            <source>Could not securely save PaddleOCR configuration.</source>
+            <translation>无法安全保存 PaddleOCR 配置。</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token before testing.</source>
+            <translation>请先输入有效的 HTTPS 地址和访问令牌。</translation>
+        </message>
+        <message>
+            <source>Testing the OCR service...</source>
+            <translation>正在测试识别服务…</translation>
+        </message>
+        <message>
+            <source>Connection failed: %1</source>
+            <translation>连接失败：%1</translation>
+        </message>
+        <message>
+            <source>The OCR service returned an empty result.</source>
+            <translation>识别服务返回空结果。</translation>
+        </message>
+        <message>
+            <source>Connection successful. PaddleOCR returned recognized text.</source>
+            <translation>连接成功，PaddleOCR 已返回识别文字。</translation>
+        </message>
+    </context>
 </TS>

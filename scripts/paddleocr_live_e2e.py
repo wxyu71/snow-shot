@@ -151,13 +151,12 @@ def test_auth(base: str) -> None:
 def run_model(base: str, token: str, model: str, png: bytes) -> dict:
     import requests
     options = (
-        {"useTableRecognition": True, "useFormulaRecognition": True, "prettifyMarkdown": True}
-        if model == "PP-StructureV3" else
-        {"useLayoutDetection": True, "prettifyMarkdown": True}
-        if model == "PaddleOCR-VL-1.6" else
-        {"useDocOrientationClassify": False}
+        {"useDocOrientationClassify": False, "useDocUnwarping": False,
+         "useTextlineOrientation": False} if model == "PP-OCRv6" else
+        {"useDocOrientationClassify": False, "useDocUnwarping": False,
+         "useChartRecognition": False}
     )
-    auth = {"Authorization": "Bearer " + token}
+    auth = {"Authorization": "bearer " + token}
     response = requests.post(base, headers=auth,
                              data={"model": model, "optionalPayload": json.dumps(options)},
                              files={"file": ("community-e2e.png", png, "image/png")},
