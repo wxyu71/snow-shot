@@ -2,12 +2,12 @@
 #define SNOW_SHOT_PRESENTATION_COMPONENTS_CLOUDOCRSETTINGSWIDGET_H
 
 #include "snow_shot/presentation/components/settingscustomwidget.h"
+#include "snow_shot/presentation/components/cloudocrsettingscontrols.h"
 #include "snow_shot/network/baidupaddleocrclient.h"
 
 #include <QCoreApplication>
 #include <QPointer>
 
-class QComboBox;
 class QLabel;
 class QLineEdit;
 class QPushButton;
@@ -34,11 +34,11 @@ class CloudOcrSettingsWidget final : public SettingsCustomWidget {
     QLabel* m_tokenLabel = nullptr;
     QLabel* m_modelLabel = nullptr;
     QLabel* m_status = nullptr;
-    QComboBox* m_engine = nullptr;
-    QComboBox* m_output = nullptr;
+    snow_shot::presentation::components::CloudOcrSelect m_engine;
+    snow_shot::presentation::components::CloudOcrSelect m_output;
     QLineEdit* m_endpoint = nullptr;
     QLineEdit* m_token = nullptr;
-    QComboBox* m_model = nullptr;
+    snow_shot::presentation::components::CloudOcrSelect m_model;
     QPushButton* m_save = nullptr;
     QPushButton* m_test = nullptr;
     QPushButton* m_getToken = nullptr;

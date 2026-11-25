@@ -1231,6 +1231,8 @@ target_sources(snow_shot_settings PRIVATE
     src/presentation/components/clouduploadsettingswidget.cpp
     include/snow_shot/presentation/components/cloudocrsettingswidget.h
     src/presentation/components/cloudocrsettingswidget.cpp
+    include/snow_shot/presentation/components/cloudocrsettingscontrols.h
+    src/presentation/components/cloudocrsettingscontrols.cpp
     include/snow_shot/presentation/components/cloudocrenginechoices.h
     src/presentation/components/cloudocrenginechoices.cpp)
 target_link_libraries(snow_shot_settings PUBLIC snow_shot_permissions snow_shot_login_item
@@ -2800,6 +2802,29 @@ if(SNOW_SHOT_BUILD_TESTS)
         LABELS "unit" TIMEOUT 30
         ENVIRONMENT "${_SNOW_SHOT_OFFSCREEN_QPA_ENVIRONMENT}"
         ENVIRONMENT_MODIFICATION "PATH=path_list_prepend:$<TARGET_FILE_DIR:Qt6::Core>")
+
+    # Same settings contracts, now using the actual application AdQt editors.
+    snow_find_qt(COMPONENTS Test)
+    add_executable(snow-shot-paddleocr-settings-widget-tests
+        "${CMAKE_CURRENT_SOURCE_DIR}/../ci/native-smoke/community_cloud_ocr_widget_tests.cpp"
+        src/presentation/components/cloudocrsettingswidget.cpp
+        src/presentation/components/cloudocrsettingscontrols.cpp
+        src/network/communitycloudocrsettings.cpp
+        src/network/baidupaddleocrclient.cpp)
+    target_include_directories(snow-shot-paddleocr-settings-widget-tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}/include")
+    target_compile_definitions(snow-shot-paddleocr-settings-widget-tests PRIVATE
+        SNOW_CLOUD_OCR_ADQT_TEST=1)
+    target_link_libraries(snow-shot-paddleocr-settings-widget-tests PRIVATE
+        adqt::widgets Qt6::Widgets Qt6::Network Qt6::Test)
+    if(WIN32)
+        target_link_libraries(snow-shot-paddleocr-settings-widget-tests PRIVATE crypt32)
+    endif()
+    snow_shot_import_offscreen_platform(snow-shot-paddleocr-settings-widget-tests)
+    add_test(NAME snow-shot-paddleocr-settings-widget-tests
+        COMMAND snow-shot-paddleocr-settings-widget-tests -platform offscreen)
+    set_tests_properties(snow-shot-paddleocr-settings-widget-tests PROPERTIES
+        LABELS "unit" TIMEOUT 60)
 
     add_executable(snow-shot-text-translation-settings-tests tests/text_translation_settings_tests.cpp
         src/presentation/services/screenshotclipboardservice.cpp)
