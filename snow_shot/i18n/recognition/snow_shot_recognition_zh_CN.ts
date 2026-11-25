@@ -480,6 +480,14 @@
     <context>
         <name>BaiduPaddleOcrClient</name>
         <message>
+            <source>AI Studio job queue is full (10010); retry later</source>
+            <translation>AI Studio 任务队列已满（10010），请稍后重试</translation>
+        </message>
+        <message>
+            <source>Unsupported PaddleOCR output format</source>
+            <translation>不支持的 PaddleOCR 输出格式</translation>
+        </message>
+        <message>
             <source>Invalid PaddleOCR JSONL document</source>
             <translation>PaddleOCR JSONL 文档无效</translation>
         </message>

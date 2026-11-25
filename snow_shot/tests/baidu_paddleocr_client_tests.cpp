@@ -26,7 +26,11 @@ enum class ReplyMode {
     FailedJob,
     InvalidJsonl,
     InvalidParameters,
-    SuccessWithoutCode
+    SuccessWithoutCode,
+    QueueFullThenSuccess,
+    AutoQuotaThenSuccess,
+    AutoAllQuota,
+    AutoAuthFailure
 };
 
 struct RunResult {
@@ -37,9 +41,11 @@ struct RunResult {
     bool pollAuthenticated = false;
     bool downloadIsAnonymous = false;
     int polls = 0;
+    QStringList submittedModels;
 };
 
-RunResult runCase(const QString& model, ReplyMode mode) {
+RunResult runCase(const QString& model, ReplyMode mode,
+                  const QString& output = QStringLiteral("markdown")) {
     QTcpServer server;
     require(server.listen(QHostAddress::LocalHost), "local fake AI Studio server listens");
     const QString root = QStringLiteral("http://127.0.0.1:%1").arg(server.serverPort());
@@ -68,18 +74,37 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                 QByteArray body;
                 QByteArray status = "200 OK";
                 if (headers.startsWith("POST /api/v2/ocr/jobs ")) {
+                    QString actual = model;
+                    if (model == QStringLiteral("auto")) {
+                        for (const auto& candidate : {QStringLiteral("PaddleOCR-VL-1.6"),
+                                                      QStringLiteral("PP-StructureV3"),
+                                                      QStringLiteral("PP-OCRv6")}) {
+                            if (payload->contains(candidate.toUtf8()))
+                                actual = candidate;
+                        }
+                    }
+                    outcome.submittedModels.append(actual);
                     outcome.submitAuthenticated = bearer &&
                         payload->contains("name=\"model\"") &&
-                        payload->contains(model.toUtf8()) &&
+                        payload->contains(actual.toUtf8()) &&
                         payload->contains("name=\"file\"") &&
                         payload->contains("name=\"optionalPayload\"") &&
-                        payload->contains(model == QStringLiteral("PP-OCRv6")
+                        payload->contains(actual == QStringLiteral("PP-OCRv6")
                             ? R"({"useDocOrientationClassify":false,"useDocUnwarping":false,"useTextlineOrientation":false})"
                             : R"({"useChartRecognition":false,"useDocOrientationClassify":false,"useDocUnwarping":false})");
                     if (mode == ReplyMode::InvalidParameters) {
                         status = "400 Bad Request";
-                        body = R"({"code":10010,"msg":"optionalPayload invalid"})";
-                    } else if (mode == ReplyMode::Unauthorized) {
+                        body = R"({"code":10008,"msg":"optionalPayload invalid"})";
+                    } else if (mode == ReplyMode::QueueFullThenSuccess &&
+                               outcome.submittedModels.size() == 1) {
+                        status = "400 Bad Request";
+                        body = R"({"code":10010,"msg":"queue full"})";
+                    } else if (mode == ReplyMode::AutoAllQuota ||
+                               (mode == ReplyMode::AutoQuotaThenSuccess &&
+                                outcome.submittedModels.size() == 1)) {
+                        status = "403 Forbidden";
+                        body = R"({"code":12001,"msg":"daily quota exhausted"})";
+                    } else if (mode == ReplyMode::Unauthorized || mode == ReplyMode::AutoAuthFailure) {
                         status = "401 Unauthorized";
                         body = R"({"code":401,"msg":"token invalid"})";
                     } else if (mode == ReplyMode::RateLimited) {
@@ -125,9 +150,9 @@ RunResult runCase(const QString& model, ReplyMode mode) {
                         body = R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Page 1"}}]}})";
                         body += "\n";
                         body += R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Page 2"}}]}})";
-                    } else if (model == QStringLiteral("PP-OCRv6")) {
+                    } else if (outcome.submittedModels.last() == QStringLiteral("PP-OCRv6")) {
                         body = R"({"result":{"ocrResults":[{"prunedResult":{"rec_texts":["Hello OCR","Total 42"]}}]}})";
-                    } else if (model == QStringLiteral("PP-StructureV3")) {
+                    } else if (outcome.submittedModels.last() == QStringLiteral("PP-StructureV3")) {
                         body = R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Invoice\n\n| Item | Price |\n| --- | --- |\n| Book | 42 |\n\n$$E=mc^2$$"}}]}})";
                     } else {
                         body = R"({"result":{"layoutParsingResults":[{"markdown":{"text":"# Mixed Layout\n\nChinese and English\n\n| X | Y |\n| --- | --- |\n| 3 | 4 |\n\n$\\frac{a}{b}$"}}]}})";
@@ -153,7 +178,7 @@ RunResult runCase(const QString& model, ReplyMode mode) {
     QTimer deadline;
     deadline.setSingleShot(true);
     QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
-    client.recognize(image, {root, QStringLiteral("test-token"), model},
+    client.recognize(image, {root, QStringLiteral("test-token"), model, output},
                      [&](QString markdown, QString error) {
         outcome.finished = true;
         outcome.markdown = std::move(markdown);
@@ -201,7 +226,7 @@ void checkErrors() {
     const QString model = QStringLiteral("PP-OCRv6");
     auto parameters = runCase(model, ReplyMode::InvalidParameters);
     require(parameters.markdown.isEmpty() &&
-            parameters.error.contains(QStringLiteral("10010")) &&
+            parameters.error.contains(QStringLiteral("10008")) &&
             parameters.error.contains(QStringLiteral("optionalPayload invalid")),
             "HTTP 400 retains provider business error instead of Qt Bad Request");
     auto auth = runCase(model, ReplyMode::Unauthorized);
@@ -229,6 +254,32 @@ void checkErrors() {
             "malformed result never copies partial output");
 }
 
+void checkAutomaticRouting() {
+    const auto automatic = QStringLiteral("auto");
+    const auto vl = QStringLiteral("PaddleOCR-VL-1.6");
+    const auto structure = QStringLiteral("PP-StructureV3");
+    const auto ocr = QStringLiteral("PP-OCRv6");
+    const auto queue = runCase(automatic, ReplyMode::QueueFullThenSuccess);
+    require(queue.error.isEmpty() && queue.submittedModels == QStringList{vl, vl},
+            "10010 retries the same model, not a quota fallback");
+    const auto quota = runCase(automatic, ReplyMode::AutoQuotaThenSuccess);
+    require(quota.error.isEmpty() && quota.submittedModels == QStringList{vl, structure},
+            "document quota fallback preserves document capabilities");
+    const auto all = runCase(automatic, ReplyMode::AutoAllQuota);
+    require(!all.error.isEmpty() && all.submittedModels == QStringList{vl, structure},
+            "document requests never silently downgrade to generic OCR");
+    const auto auth = runCase(automatic, ReplyMode::AutoAuthFailure);
+    require(!auth.error.isEmpty() && auth.submittedModels == QStringList{vl},
+            "invalid token never triggers model fallback");
+    const auto text = runCase(automatic, ReplyMode::AutoQuotaThenSuccess, QStringLiteral("text"));
+    require(text.error.isEmpty() && text.submittedModels == QStringList{ocr, vl},
+            "text requests prefer generic OCR and can use document fallback");
+    const auto raw = runCase(automatic, ReplyMode::Success, QStringLiteral("jsonl"));
+    require(raw.error.isEmpty() && raw.submittedModels == QStringList{ocr} &&
+                raw.markdown.contains(QStringLiteral("\"ocrResults\"")),
+            "JSONL returns original validated result");
+}
+
 void checkUnsafeUrl() {
     snow_shot::network::BaiduPaddleOcrClient client;
     QImage image(10, 10, QImage::Format_RGBA8888);
@@ -249,6 +300,7 @@ int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     checkSuccessfulModels();
     checkErrors();
+    checkAutomaticRouting();
     checkUnsafeUrl();
     return 0;
 }
