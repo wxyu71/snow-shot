@@ -459,8 +459,6 @@ ConfigurationStore::ConfigurationStore(QString configurationFile, bool readAvail
     m_flushTimer.setSingleShot(true);
     m_flushTimer.setInterval(std::max(0, debounceMilliseconds));
     connect(&m_flushTimer, &QTimer::timeout, this, [this] {
-        if (!isDirty())
-            return;
         if (m_flushWorker)
             flushAsync(this, {});
         else
@@ -508,7 +506,7 @@ bool ConfigurationStore::mutateIfRevision(quint64 expectedRevision,
 
 bool ConfigurationStore::isDirty() const {
     QMutexLocker locker(&m_mutex);
-    return m_dirty || m_journalSnapshot == JournalSnapshot::Scheduled;
+    return m_dirty;
 }
 
 void ConfigurationStore::afterPendingChanges(const std::function<void()>& transition) {
@@ -528,41 +526,9 @@ bool ConfigurationStore::isWritable() const {
     return m_writeAvailable && m_compatibility != ConfigurationCompatibility::FutureVersion;
 }
 
-void ConfigurationStore::setCloudSyncJournal(CloudSyncJournal journal,
-                                             std::function<QJsonObject()> snapshot) {
+void ConfigurationStore::setCloudSyncJournal(CloudSyncJournal journal) {
     QMutexLocker lock(&m_mutationMutex);
-    Q_ASSERT(bool(journal) == bool(snapshot));
-    materializeCloudSyncJournal();
     m_cloudSyncJournal = std::move(journal);
-    m_snapshotCloudSyncJournal = std::move(snapshot);
-}
-
-bool ConfigurationStore::deferCloudSyncStatus() {
-    QMutexLocker mutationLock(&m_mutationMutex);
-    QMutexLocker lock(&m_mutex);
-    if (!m_snapshotCloudSyncJournal || m_suspended || !m_writeAvailable ||
-        m_compatibility == ConfigurationCompatibility::FutureVersion)
-        return false;
-    if (m_journalSnapshot == JournalSnapshot::Current)
-        m_journalSnapshot = JournalSnapshot::OnNextFlush;
-    return true;
-}
-
-// The mutation lock keeps the snapshot and the matching preference values in one transaction.
-void ConfigurationStore::materializeCloudSyncJournal() {
-    if (m_journalSnapshot == JournalSnapshot::Current)
-        return;
-    const auto state = m_snapshotCloudSyncJournal();
-    QMutexLocker lock(&m_mutex);
-    m_journalSnapshot = JournalSnapshot::Current;
-    if (m_document.value(kCloudSyncStateKey).toObject() != state) {
-        if (state.isEmpty())
-            m_document.remove(kCloudSyncStateKey);
-        else
-            m_document.insert(kCloudSyncStateKey, state);
-        ++m_documentRevision;
-        m_dirty = true;
-    }
 }
 
 QString ConfigurationStore::lastError() const {
@@ -586,9 +552,6 @@ bool ConfigurationStore::setValues(const QMap<QString, QJsonValue>& values,
 }
 
 QJsonObject ConfigurationStore::cloudSyncState() const {
-    QMutexLocker mutationLock(&m_mutationMutex);
-    if (m_journalSnapshot != JournalSnapshot::Current)
-        return m_snapshotCloudSyncJournal();
     QMutexLocker locker(&m_mutex);
     return m_document.value(kCloudSyncStateKey).toObject();
 }
@@ -641,8 +604,6 @@ bool ConfigurationStore::setValuesImpl(const QMap<QString, QJsonValue>& values,
         }
         const bool stateChanged =
             cloudSyncState && m_document.value(kCloudSyncStateKey).toObject() != *cloudSyncState;
-        if (cloudSyncState)
-            m_journalSnapshot = JournalSnapshot::Current;
         if (stateChanged) {
             if (cloudSyncState->isEmpty())
                 m_document.remove(kCloudSyncStateKey);
@@ -671,12 +632,8 @@ void ConfigurationStore::announceChanges(ConfigurationWriteOrigin origin,
     if (!documentChanged && values.isEmpty())
         return;
     if (m_cloudSyncJournal && !values.isEmpty() && origin != ConfigurationWriteOrigin::Remote &&
-        origin != ConfigurationWriteOrigin::Internal &&
-        m_cloudSyncJournal(origin, previous, values)) {
-        QMutexLocker lock(&m_mutex);
-        m_journalSnapshot = JournalSnapshot::Scheduled;
-        documentChanged = true;
-    }
+        origin != ConfigurationWriteOrigin::Internal)
+        m_cloudSyncJournal(origin, previous, values);
     auto notify = [this, origin, previous = std::move(previous), values = std::move(values),
                    changed = std::move(changed), documentChanged]() {
         if (!values.isEmpty())
@@ -789,7 +746,6 @@ StorageResult ConfigurationStore::flushNow() {
     for (;;) {
         QMutexLocker mutationLock(&m_mutationMutex);
         QMutexLocker ioLocker(&m_ioMutex);
-        materializeCloudSyncJournal();
         QJsonObject document;
         quint64 revision = 0;
         {
@@ -833,8 +789,6 @@ StorageResult ConfigurationStore::flushNow() {
             QMutexLocker locker(&m_mutex);
             if (m_documentRevision == revision) {
                 m_dirty = false;
-                if (m_journalSnapshot == JournalSnapshot::Scheduled)
-                    continue;
                 locker.unlock();
                 setLastError({});
                 return StorageResult::ok();
@@ -868,10 +822,6 @@ void ConfigurationStore::flushAsync(QObject* receiver,
 void ConfigurationStore::suspendWrites(bool suspended) {
     {
         QMutexLocker mutationLock(&m_mutationMutex);
-        // Account changes can still arrive during a storage move. Freeze the accepted edits
-        // before suspension so a checkpoint cannot capture a later, rejected transition.
-        if (suspended)
-            materializeCloudSyncJournal();
         QMutexLocker lock(&m_mutex);
         if (m_suspended == suspended)
             return;
