@@ -69,13 +69,16 @@ class CommunityCloudOcrWidgetTests final : public QObject {
         QCOMPARE(engine->currentData().toString(), QStringLiteral("paddleocr"));
         QCOMPARE(engine->findData(QStringLiteral("vision")), -1);
         QVERIFY(!engine->isEnabled());
-        QCOMPARE(output->count(), 1);
+        QCOMPARE(output->count(), 4);
         QCOMPARE(output->currentData().toString(), QStringLiteral("markdown"));
-        QCOMPARE(output->findData(QStringLiteral("html")), -1);
+        QVERIFY(output->findData(QStringLiteral("html")) >= 0);
+        QVERIFY(output->findData(QStringLiteral("jsonl")) >= 0);
+        QVERIFY(output->findData(QStringLiteral("text")) >= 0);
         QCOMPARE(output->findData(QStringLiteral("latex")), -1);
-        QVERIFY(!output->isEnabled());
+        QVERIFY(output->isEnabled());
         QCOMPARE(token->echoMode(), QLineEdit::Password);
-        QCOMPARE(model->count(), 3);
+        QCOMPARE(model->count(), 4);
+        QCOMPARE(model->currentData().toString(), QStringLiteral("auto"));
         QVERIFY(model->findText(QStringLiteral("PaddleOCR-VL-1.6")) >= 0);
         QVERIFY(model->findText(QStringLiteral("PP-StructureV3")) >= 0);
         QVERIFY(model->findText(QStringLiteral("PP-OCRv6")) >= 0);
@@ -96,13 +99,13 @@ class CommunityCloudOcrWidgetTests final : public QObject {
         QVERIFY(save);
         QVERIFY(test);
         QCOMPARE(engine->currentText(), QStringLiteral("translated: Baidu PaddleOCR (AI Studio)"));
-        QCOMPARE(output->currentText(),
-                 QStringLiteral("translated: Markdown (formulas preserved as LaTeX)"));
+        QCOMPARE(output->currentText(), QStringLiteral("Markdown"));
         QCOMPARE(save->text(), QStringLiteral("translated: Save"));
-        QCOMPARE(test->text(), QStringLiteral("translated: Test PaddleOCR connection"));
+        QCOMPARE(test->text(), QStringLiteral("translated: Test connection"));
         QCOMPARE(engine->currentData().toString(), QStringLiteral("paddleocr"));
         QCOMPARE(output->currentData().toString(), QStringLiteral("markdown"));
-        QCOMPARE(model->currentText(), QStringLiteral("PaddleOCR-VL-1.6"));
+        QCOMPARE(model->currentText(), QStringLiteral("translated: Automatic"));
+        QCOMPARE(model->currentData().toString(), QStringLiteral("auto"));
         QCoreApplication::removeTranslator(&translator);
         widget.retranslateUi();
         QCOMPARE(save->text(), QStringLiteral("Save"));
@@ -141,6 +144,11 @@ class CommunityCloudOcrWidgetTests final : public QObject {
 
         endpoint->setText(QStringLiteral("http://127.0.0.1:5102"));
         model->setCurrentText(QStringLiteral("PP-OCRv6"));
+        auto* output = widget.findChild<QComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
+        QVERIFY(output);
+        QCOMPARE(output->count(), 2);
+        QCOMPARE(output->currentData().toString(), QStringLiteral("text"));
+        output->setCurrentIndex(output->findData(QStringLiteral("jsonl")));
         QTest::mouseClick(save, Qt::LeftButton);
         QCOMPARE(status->text(), QStringLiteral("PaddleOCR configuration saved."));
 
@@ -149,13 +157,13 @@ class CommunityCloudOcrWidgetTests final : public QObject {
         QCOMPARE(stored.accessToken, QStringLiteral("test-token"));
         QCOMPARE(stored.model, QStringLiteral("PP-OCRv6"));
         QCOMPARE(stored.engine, QStringLiteral("paddleocr"));
-        QCOMPARE(stored.outputFormat, QStringLiteral("markdown"));
+        QCOMPARE(stored.outputFormat, QStringLiteral("jsonl"));
 
         QSettings persisted(QSettings::IniFormat, QSettings::UserScope, organization, application);
         const QString persistedEngine = persisted.value(QStringLiteral("engine")).toString();
         const QString persistedOutput = persisted.value(QStringLiteral("output_format")).toString();
         QCOMPARE(persistedEngine, QStringLiteral("paddleocr"));
-        QCOMPARE(persistedOutput, QStringLiteral("markdown"));
+        QCOMPARE(persistedOutput, QStringLiteral("jsonl"));
 #ifdef Q_OS_WIN
         QVERIFY(persisted.value(QStringLiteral("access_token")).toString().isEmpty());
         QVERIFY(!persisted.value(QStringLiteral("access_token_dpapi_v1")).toString().isEmpty());

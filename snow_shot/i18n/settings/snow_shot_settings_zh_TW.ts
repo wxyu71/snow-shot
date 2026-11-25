@@ -5853,8 +5853,32 @@ Unavailable: %2</source>
     <context>
         <name>CloudOcrSettingsWidget</name>
         <message>
-            <source>Online OCR uses only the PaddleOCR AI Studio API configured here. Images are sent to that service only when you explicitly run Online OCR. The result is Markdown with formulas preserved as LaTeX. Local text recognition remains offline.</source>
-            <translation>線上辨識僅使用此處設定的 PaddleOCR AI Studio API。只有主動執行線上辨識時才會向該服務傳送影像。結果為 Markdown，公式保留為 LaTeX。本機文字辨識仍完全離線。</translation>
+            <source>Automatic</source>
+            <translation>自動選擇</translation>
+        </message>
+        <message>
+            <source>Plain text</source>
+            <translation>純文字</translation>
+        </message>
+        <message>
+            <source>HTML (local conversion)</source>
+            <translation>HTML（本機轉換）</translation>
+        </message>
+        <message>
+            <source>Test connection</source>
+            <translation>測試連線</translation>
+        </message>
+        <message>
+            <source>Get Access Token</source>
+            <translation>取得存取權杖</translation>
+        </message>
+        <message>
+            <source>Open the official AI Studio Access Token page</source>
+            <translation>開啟 AI Studio 官方存取權杖頁面</translation>
+        </message>
+        <message>
+            <source>Automatic selects a compatible model and switches on daily quota exhaustion.</source>
+            <translation>自動選擇相容模型，達到每日配額後切換。</translation>
         </message>
         <message>
             <source>OCR engine</source>
@@ -5891,10 +5915,6 @@ Unavailable: %2</source>
         <message>
             <source>Baidu PaddleOCR (AI Studio)</source>
             <translation>百度 PaddleOCR（AI Studio）</translation>
-        </message>
-        <message>
-            <source>Markdown (formulas preserved as LaTeX)</source>
-            <translation>Markdown（公式保留為 LaTeX）</translation>
         </message>
         <message>
             <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>

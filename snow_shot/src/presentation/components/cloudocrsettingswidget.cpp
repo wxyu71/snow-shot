@@ -3,6 +3,7 @@
 #include "snow_shot/network/communitycloudocrsettings.h"
 
 #include <QComboBox>
+#include <QDesktopServices>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QImage>
@@ -31,9 +32,6 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     setObjectName(QStringLiteral("settings-cloud-ocr"));
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);
-    m_explanation = new QLabel(this);
-    m_explanation->setWordWrap(true);
-    outer->addWidget(m_explanation);
 
     auto* form = new QFormLayout;
     m_engine = new QComboBox(this);
@@ -61,8 +59,10 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     form->addRow(m_tokenLabel, m_token);
     m_model = new QComboBox(this);
     m_model->setObjectName(QStringLiteral("paddleOcrModel"));
-    m_model->addItems({QStringLiteral("PaddleOCR-VL-1.6"), QStringLiteral("PP-StructureV3"),
-                       QStringLiteral("PP-OCRv6")});
+    m_model->addItem(tr("Automatic"), QStringLiteral("auto"));
+    for (const auto& model : {QStringLiteral("PaddleOCR-VL-1.6"),
+                              QStringLiteral("PP-StructureV3"), QStringLiteral("PP-OCRv6")})
+        m_model->addItem(model, model);
     m_modelLabel = new QLabel(this);
     form->addRow(m_modelLabel, m_model);
 
@@ -75,6 +75,9 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     m_test = new QPushButton(this);
     m_test->setObjectName(QStringLiteral("paddleOcrTestConnection"));
     actions->addWidget(m_test);
+    m_getToken = new QPushButton(this);
+    m_getToken->setObjectName(QStringLiteral("paddleOcrGetToken"));
+    actions->addWidget(m_getToken);
     actions->addStretch();
     outer->addLayout(actions);
     m_status = new QLabel(this);
@@ -86,13 +89,18 @@ CloudOcrSettingsWidget::CloudOcrSettingsWidget(QWidget* parent) : SettingsCustom
     const auto settings = snow_shot::network::readCommunityCloudOcrSettings();
     m_endpoint->setText(settings.apiUrl);
     m_token->setText(settings.accessToken);
-    if (m_model->findText(settings.model) >= 0)
-        m_model->setCurrentText(settings.model);
+    if (m_model->findData(settings.model) >= 0)
+        m_model->setCurrentIndex(m_model->findData(settings.model));
     const int engineIndex = m_engine->findData(settings.engine);
     if (engineIndex >= 0)
         m_engine->setCurrentIndex(engineIndex);
     rebuildOutputFormats();
+    m_output->setCurrentIndex(m_output->findData(settings.outputFormat));
 
+    connect(m_model, &QComboBox::currentIndexChanged, this, [this] { rebuildOutputFormats(); });
+    connect(m_getToken, &QPushButton::clicked, this, [] {
+        QDesktopServices::openUrl(QUrl(QStringLiteral("https://aistudio.baidu.com/account/accessToken")));
+    });
     connect(m_save, &QPushButton::clicked, this, [this] { save(); });
     connect(m_test, &QPushButton::clicked, this, [this] { testConnection(); });
     retranslateUi();
@@ -141,37 +149,43 @@ void CloudOcrSettingsWidget::applyTheme(
         .arg(metrics.paddingSM).arg(css(colors.colorPrimaryHover),
              css(colors.colorTextQuaternary), css(colors.colorFillTertiary),
              css(colors.colorBorderDisabled));
-    for (auto* button : {m_save, m_test}) {
+    for (auto* button : {m_save, m_test, m_getToken}) {
         button->setMinimumHeight(metrics.controlHeight);
         button->setStyleSheet(buttonStyle);
     }
 }
 
 void CloudOcrSettingsWidget::retranslateUi() {
-    m_explanation->setText(
-        tr("Online OCR uses only the PaddleOCR AI Studio API configured here. "
-           "Images are sent to that service only when you explicitly run Online OCR. "
-           "The result is Markdown with formulas preserved as LaTeX. "
-           "Local text recognition remains offline."));
     m_engineLabel->setText(tr("OCR engine"));
     m_outputLabel->setText(tr("Output format"));
     m_endpointLabel->setText(tr("PaddleOCR AI Studio API URL"));
     m_tokenLabel->setText(tr("Access Token"));
     m_modelLabel->setText(tr("PaddleOCR model"));
     m_save->setText(tr("Save"));
-    m_test->setText(tr("Test PaddleOCR connection"));
+    m_test->setText(tr("Test connection"));
+    m_getToken->setText(tr("Get Access Token"));
+    m_getToken->setToolTip(tr("Open the official AI Studio Access Token page"));
     m_test->setToolTip(tr("Sends a small OCR sample directly to the selected PaddleOCR provider; "
                          "this can consume API quota."));
 
     m_engine->setItemText(0, tr("Baidu PaddleOCR (AI Studio)"));
-    m_output->setItemText(0, tr("Markdown (formulas preserved as LaTeX)"));
+    m_model->setItemText(0, tr("Automatic"));
+    m_model->setToolTip(tr("Automatic selects a compatible model and switches on daily quota exhaustion."));
+    rebuildOutputFormats();
 }
 
 void CloudOcrSettingsWidget::rebuildOutputFormats() {
+    const QString previous = m_output->currentData().toString();
     const QSignalBlocker blocker(m_output);
     m_output->clear();
-    m_output->addItem(tr("Markdown (formulas preserved as LaTeX)"),
-                      QStringLiteral("markdown"));
+    if (m_model->currentData().toString() != QStringLiteral("PP-OCRv6"))
+        m_output->addItem(QStringLiteral("Markdown"), QStringLiteral("markdown"));
+    m_output->addItem(tr("Plain text"), QStringLiteral("text"));
+    m_output->addItem(QStringLiteral("JSONL"), QStringLiteral("jsonl"));
+    if (m_model->currentData().toString() != QStringLiteral("PP-OCRv6"))
+        m_output->addItem(tr("HTML (local conversion)"), QStringLiteral("html"));
+    const int index = m_output->findData(previous);
+    m_output->setCurrentIndex(index < 0 ? 0 : index);
 }
 
 void CloudOcrSettingsWidget::updateEngineUi() {
@@ -180,16 +194,16 @@ void CloudOcrSettingsWidget::updateEngineUi() {
     m_model->setEnabled(!m_testing);
     m_test->setEnabled(!m_testing);
     m_save->setEnabled(!m_testing);
-    // These controls document the fixed provider/output, not configurable routes.
     m_engine->setEnabled(false);
-    m_output->setEnabled(false);
+    m_output->setEnabled(!m_testing);
 }
 
 snow_shot::network::BaiduPaddleOcrClient::Options CloudOcrSettingsWidget::currentOptions() const {
     snow_shot::network::BaiduPaddleOcrClient::Options result;
     result.apiUrl = m_endpoint->text().trimmed();
     result.accessToken = m_token->text().trimmed();
-    result.model = m_model->currentText();
+    result.model = m_model->currentData().toString();
+    result.outputFormat = m_output->currentData().toString();
     return result;
 }
 
@@ -207,6 +221,7 @@ void CloudOcrSettingsWidget::save() {
     }
     snow_shot::network::CommunityCloudOcrSettings settings{
         options.apiUrl, options.accessToken, options.model};
+    settings.outputFormat = options.outputFormat;
     const bool saved = snow_shot::network::writeCommunityCloudOcrSettings(settings);
     m_status->setText(saved ? tr("PaddleOCR configuration saved.")
                             : tr("Could not securely save PaddleOCR configuration."));

@@ -572,7 +572,7 @@ bool ScreenshotOcrController::startBackgroundOnlineOcr() {
     const QPointer<QScreen> screen(QGuiApplication::screenAt(QCursor::pos()));
     const auto publication = ScreenshotClipboardService::reservePublication();
     snow_shot::network::BaiduPaddleOcrClient::Options options{
-        settings.apiUrl, settings.accessToken, settings.model};
+        settings.apiUrl, settings.accessToken, settings.model, settings.outputFormat};
 
     // The selected pixels and provider configuration are now independent of
     // the overlays. Close the screenshot first; network/PNG work begins on
@@ -588,8 +588,9 @@ bool ScreenshotOcrController::startBackgroundOnlineOcr() {
         controller->showBackgroundOcrMessage(
             tr("Online OCR is running in the background. You can continue using Snow Shot."),
             BackgroundMessageKind::Info, screen.data());
+        const QString outputFormat = options.outputFormat;
         jobGuard->recognize(source, std::move(options),
-                            [controller, jobGuard, screen, publication](QString markdown,
+                            [controller, jobGuard, screen, publication, outputFormat](QString markdown,
                                                                         QString error) {
             if (!controller || !jobGuard)
                 return;
@@ -612,7 +613,24 @@ bool ScreenshotOcrController::startBackgroundOnlineOcr() {
                 return;
             }
             auto* mime = new QMimeData;
-            mime->setText(markdown);
+            if (outputFormat == QStringLiteral("html") ||
+                (outputFormat == QStringLiteral("text") &&
+                 jobGuard->actualModel() != QStringLiteral("PP-OCRv6"))) {
+                // Derive alternate text representations locally from the same
+                // recognition result. Do not send a second cloud request.
+                QTextDocument document;
+                document.setMarkdown(markdown, QTextDocument::MarkdownDialectGitHub |
+                                               QTextDocument::MarkdownNoHTML);
+                if (outputFormat == QStringLiteral("html")) {
+                    const QString html = document.toHtml();
+                    mime->setHtml(html);
+                    mime->setText(html);
+                } else {
+                    mime->setText(document.toPlainText());
+                }
+            } else {
+                mime->setText(markdown);
+            }
             static_cast<void>(ScreenshotClipboardService::commitMimeData(
                 QApplication::clipboard(), jobGuard.data(), mime, publication,
                 [complete](ScreenshotClipboardCommitResult result) {

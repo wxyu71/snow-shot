@@ -32,6 +32,7 @@ class CommunityNativeSmoke final : public QObject {
         const auto initial = snow_shot::network::readCommunityCloudOcrSettings();
         QCOMPARE(initial.engine, QStringLiteral("paddleocr"));
         QCOMPARE(initial.outputFormat, QStringLiteral("markdown"));
+        QCOMPARE(initial.model, QStringLiteral("auto"));
 
         auto selected = initial;
         selected.engine = QStringLiteral("vision");
@@ -41,7 +42,7 @@ class CommunityNativeSmoke final : public QObject {
 
         const auto restored = snow_shot::network::readCommunityCloudOcrSettings();
         QCOMPARE(restored.engine, QStringLiteral("paddleocr"));
-        QCOMPARE(restored.outputFormat, QStringLiteral("markdown"));
+        QCOMPARE(restored.outputFormat, QStringLiteral("html"));
         QCOMPARE(restored.accessToken, QStringLiteral("native-test-token"));
 
         const QString organization = QStringLiteral("SnowShot");
@@ -50,7 +51,7 @@ class CommunityNativeSmoke final : public QObject {
         const QString storedEngine = legacy.value(QStringLiteral("engine")).toString();
         const QString storedOutput = legacy.value(QStringLiteral("output_format")).toString();
         QCOMPARE(storedEngine, QStringLiteral("paddleocr"));
-        QCOMPARE(storedOutput, QStringLiteral("markdown"));
+        QCOMPARE(storedOutput, QStringLiteral("html"));
         // Existing installs can have obsolete Vision preferences. Even before
         // saving, the reader must not route a future OCR job to that provider.
         legacy.setValue(QStringLiteral("engine"), QStringLiteral("vision"));
@@ -58,7 +59,7 @@ class CommunityNativeSmoke final : public QObject {
         legacy.sync();
         const auto migrated = snow_shot::network::readCommunityCloudOcrSettings();
         QCOMPARE(migrated.engine, QStringLiteral("paddleocr"));
-        QCOMPARE(migrated.outputFormat, QStringLiteral("markdown"));
+        QCOMPARE(migrated.outputFormat, QStringLiteral("html"));
     }
 };
 

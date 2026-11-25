@@ -28,7 +28,6 @@ class CloudOcrSettingsWidget final : public SettingsCustomWidget {
     void updateEngineUi();
     snow_shot::network::BaiduPaddleOcrClient::Options currentOptions() const;
 
-    QLabel* m_explanation = nullptr;
     QLabel* m_engineLabel = nullptr;
     QLabel* m_outputLabel = nullptr;
     QLabel* m_endpointLabel = nullptr;
@@ -42,6 +41,7 @@ class CloudOcrSettingsWidget final : public SettingsCustomWidget {
     QComboBox* m_model = nullptr;
     QPushButton* m_save = nullptr;
     QPushButton* m_test = nullptr;
+    QPushButton* m_getToken = nullptr;
     snow_shot::network::BaiduPaddleOcrClient* m_probe = nullptr;
     bool m_testing = false;
 };
