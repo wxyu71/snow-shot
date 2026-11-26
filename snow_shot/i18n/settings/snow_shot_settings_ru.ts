@@ -2,344 +2,6 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="ru" sourcelanguage="en_US">
     <context>
-        <name>AccountPageWidget</name>
-        <message>
-            <source>3–32 letters, numbers, _, . or -</source>
-            <translation>3–32 символа: буквы, цифры, _, . и -</translation>
-        </message>
-        <message>
-            <source>8–16 characters</source>
-            <translation>8–16 символов</translation>
-        </message>
-        <message>
-            <source>Account</source>
-            <translation>Аккаунт</translation>
-        </message>
-        <message>
-            <source>Account linked</source>
-            <translation>Аккаунт привязан</translation>
-        </message>
-        <message>
-            <source>Account transactions</source>
-            <translation>Операции по аккаунту</translation>
-        </message>
-        <message>
-            <source>Activate %1</source>
-            <translation>Активировать %1</translation>
-        </message>
-        <message>
-            <source>Already have an account? Sign in</source>
-            <translation>Уже есть аккаунт? Войти</translation>
-        </message>
-        <message>
-            <source>Available credits</source>
-            <translation>Доступные кредиты</translation>
-        </message>
-        <message>
-            <source>Cancel</source>
-            <translation>Отмена</translation>
-        </message>
-        <message>
-            <source>Cancel payment</source>
-            <translation>Отменить оплату</translation>
-        </message>
-        <message>
-            <source>Code valid for %1:%2 · Valid until %3</source>
-            <translation>Код действует ещё %1:%2 · до %3</translation>
-        </message>
-        <message>
-            <source>Completed</source>
-            <translation>Готово</translation>
-        </message>
-        <message>
-            <source>Confirm password</source>
-            <translation>Подтвердите пароль</translation>
-        </message>
-        <message>
-            <source>Confirming payment</source>
-            <translation>Подтверждение оплаты</translation>
-        </message>
-        <message>
-            <source>Continue</source>
-            <translation>Продолжить</translation>
-        </message>
-        <message>
-            <source>Create an account</source>
-            <translation>Создать аккаунт</translation>
-        </message>
-        <message>
-            <source>Create your account</source>
-            <translation>Создайте аккаунт</translation>
-        </message>
-        <message>
-            <source>Credits</source>
-            <translation>Кредиты</translation>
-        </message>
-        <message>
-            <source>Date</source>
-            <translation>Дата</translation>
-        </message>
-        <message>
-            <source>Dismiss</source>
-            <translation>Закрыть</translation>
-        </message>
-        <message>
-            <source>Failed</source>
-            <translation>Ошибка</translation>
-        </message>
-        <message>
-            <source>I have read and agree to the %1 and %2</source>
-            <translation>Я прочитал(а) и принимаю документы «%1» и «%2»</translation>
-        </message>
-        <message>
-            <source>I've paid</source>
-            <translation>Я оплатил</translation>
-        </message>
-        <message>
-            <source>Image code</source>
-            <translation>Код с картинки</translation>
-        </message>
-        <message>
-            <source>Load more</source>
-            <translation>Загрузить ещё</translation>
-        </message>
-        <message>
-            <source>Manage and view account data</source>
-            <translation>Управление данными аккаунта и их просмотр</translation>
-        </message>
-        <message>
-            <source>No transactions yet</source>
-            <translation>Операций пока нет</translation>
-        </message>
-        <message>
-            <source>Order ID: %1</source>
-            <translation>Номер заказа: %1</translation>
-        </message>
-        <message>
-            <source>Outstanding balance: %1</source>
-            <translation>Задолженность: %1</translation>
-        </message>
-        <message>
-            <source>Paid calls are paused. Your free allowance remains available. New purchases pay this balance first</source>
-            <translation>Платные вызовы приостановлены, бесплатный лимит по-прежнему доступен. Новые пополнения сначала пойдут на погашение задолженности</translation>
-        </message>
-        <message>
-            <source>Password</source>
-            <translation>Пароль</translation>
-        </message>
-        <message>
-            <source>Payment confirmation continues after the code's original expiry</source>
-            <translation>Подтверждение оплаты продолжится и после истечения срока действия кода</translation>
-        </message>
-        <message>
-            <source>Payment failed or the order was closed</source>
-            <translation>Оплата не прошла или заказ закрыт</translation>
-        </message>
-        <message>
-            <source>Payment received</source>
-            <translation>Оплата получена</translation>
-        </message>
-        <message>
-            <source>Payment refunded</source>
-            <translation>Средства возвращены</translation>
-        </message>
-        <message>
-            <source>Payment status unavailable</source>
-            <translation>Статус оплаты временно недоступен</translation>
-        </message>
-        <message>
-            <source>Pending</source>
-            <translation>Ожидает</translation>
-        </message>
-        <message>
-            <source>Previous registration orders</source>
-            <translation>Предыдущие заказы на регистрацию</translation>
-        </message>
-        <message>
-            <source>Privacy policy</source>
-            <translation>Политика конфиденциальности</translation>
-        </message>
-        <message>
-            <source>Processing</source>
-            <translation>Обработка</translation>
-        </message>
-        <message>
-            <source>Purchase credits</source>
-            <translation>Пополнить кредиты</translation>
-        </message>
-        <message>
-            <source>Purchase credits for %1</source>
-            <translation>Пополнить кредиты для %1</translation>
-        </message>
-        <message>
-            <source>Purchases are currently unavailable. Your account and transaction records are still available</source>
-            <translation>Пополнение временно недоступно. Данные аккаунта и история операций по-прежнему доступны</translation>
-        </message>
-        <message>
-            <source>Refresh</source>
-            <translation>Обновить</translation>
-        </message>
-        <message>
-            <source>Refresh code</source>
-            <translation>Другой код</translation>
-        </message>
-        <message>
-            <source>Refund</source>
-            <translation>Возврат</translation>
-        </message>
-        <message>
-            <source>Register and continue</source>
-            <translation>Зарегистрироваться и продолжить</translation>
-        </message>
-        <message>
-            <source>Registration image code</source>
-            <translation>Код с картинки при регистрации</translation>
-        </message>
-        <message>
-            <source>Return to registration and generate a new code. Your previous order records are retained</source>
-            <translation>Вернитесь к регистрации и создайте новый код. Записи о предыдущих заказах сохранятся</translation>
-        </message>
-        <message>
-            <source>Scan this Mini Program code with WeChat</source>
-            <translation>Отсканируйте этот код мини-программы в WeChat</translation>
-        </message>
-        <message>
-            <source>Scan with your own WeChat account. An existing temporary account will be linked and signed in automatically using these desktop credentials. Otherwise, select a package and confirm your order. The WeChat link cannot be changed</source>
-            <translation>Отсканируйте код своим аккаунтом WeChat. Если у вас уже есть временный аккаунт, он будет привязан с помощью имени пользователя и пароля, введённых на компьютере, после чего вы автоматически войдёте в Snow Shot. Если временного аккаунта нет, выберите пакет и подтвердите покупку. Привязку WeChat изменить нельзя</translation>
-        </message>
-        <message>
-            <source>Sign in</source>
-            <translation>Войти</translation>
-        </message>
-        <message>
-            <source>Sign in to Snow Shot</source>
-            <translation>Войти в Snow Shot</translation>
-        </message>
-        <message>
-            <source>Sign in to an existing account</source>
-            <translation>Войти в существующий аккаунт</translation>
-        </message>
-        <message>
-            <source>Sign out</source>
-            <translation>Выйти</translation>
-        </message>
-        <message>
-            <source>Status</source>
-            <translation>Статус</translation>
-        </message>
-        <message>
-            <source>The account service is unavailable</source>
-            <translation>Сервис аккаунтов недоступен</translation>
-        </message>
-        <message>
-            <source>The payment result is still being checked</source>
-            <translation>Результат оплаты всё ещё проверяется</translation>
-        </message>
-        <message>
-            <source>This purchase code has expired</source>
-            <translation>Срок действия кода пополнения истёк</translation>
-        </message>
-        <message>
-            <source>Top-up</source>
-            <translation>Пополнение</translation>
-        </message>
-        <message>
-            <source>Top-ups, usage charges, and refunds</source>
-            <translation>Пополнения, списания за использование и возвраты</translation>
-        </message>
-        <message>
-            <source>Top-ups, usage charges, and refunds appear here</source>
-            <translation>Здесь будут отображаться пополнения, списания и возвраты</translation>
-        </message>
-        <message>
-            <source>Total top-ups: %1</source>
-            <translation>Всего пополнено: %1</translation>
-        </message>
-        <message>
-            <source>Transaction</source>
-            <translation>Тип операции</translation>
-        </message>
-        <message>
-            <source>Usage</source>
-            <translation>Списание</translation>
-        </message>
-        <message>
-            <source>User agreement</source>
-            <translation>Пользовательское соглашение</translation>
-        </message>
-        <message>
-            <source>Username</source>
-            <translation>Имя пользователя</translation>
-        </message>
-        <message>
-            <source>View account benefits</source>
-            <translation>Посмотреть преимущества аккаунта</translation>
-        </message>
-        <message>
-            <source>View your balance in the Mini Program with the WeChat account used to pay.</source>
-            <translation>Проверьте баланс в мини-программе с тем аккаунтом WeChat, с которого была произведена оплата.</translation>
-        </message>
-        <message>
-            <source>Waiting for payment</source>
-            <translation>Ожидание оплаты</translation>
-        </message>
-    </context>
-    <context>
-        <name>AccountSessionService</name>
-        <message>
-            <source>Complete your first payment to activate this account</source>
-            <translation>Чтобы активировать аккаунт, внесите первый платёж</translation>
-        </message>
-        <message>
-            <source>Payment has not been confirmed. We will keep checking</source>
-            <translation>Оплата ещё не подтверждена. Мы продолжим проверять</translation>
-        </message>
-        <message>
-            <source>Purchases are currently unavailable. Please try again later</source>
-            <translation>Пополнение временно недоступно. Повторите попытку позже</translation>
-        </message>
-        <message>
-            <source>The image code is incorrect or expired. Refresh it and try again</source>
-            <translation>Код с картинки неверен или устарел. Смените его и повторите попытку</translation>
-        </message>
-        <message>
-            <source>The passwords do not match</source>
-            <translation>Пароли не совпадают</translation>
-        </message>
-        <message>
-            <source>The payment result needs confirmation. Your request remains reserved</source>
-            <translation>Результат оплаты требует подтверждения. Ваша заявка сохранена</translation>
-        </message>
-        <message>
-            <source>The username or password is incorrect</source>
-            <translation>Неверное имя пользователя или пароль</translation>
-        </message>
-        <message>
-            <source>This purchase code has expired. Generate a new code to continue</source>
-            <translation>Срок действия кода пополнения истёк. Создайте новый код, чтобы продолжить</translation>
-        </message>
-        <message>
-            <source>This purchase must use the WeChat account linked to your Snow Shot account</source>
-            <translation>Для этой оплаты нужен аккаунт WeChat, привязанный к вашему аккаунту Snow Shot</translation>
-        </message>
-        <message>
-            <source>This username is already taken or temporarily reserved</source>
-            <translation>Это имя пользователя уже занято или временно зарезервировано</translation>
-        </message>
-        <message>
-            <source>Too many requests. Wait a moment and try again</source>
-            <translation>Слишком много запросов. Подождите немного и повторите попытку</translation>
-        </message>
-        <message>
-            <source>Unable to complete the request. Check your connection and try again</source>
-            <translation>Не удалось выполнить запрос. Проверьте подключение и повторите попытку</translation>
-        </message>
-        <message>
-            <source>Your session has expired. Sign in again</source>
-            <translation>Сеанс истёк. Войдите снова</translation>
-        </message>
-    </context>
-    <context>
         <name>AdministratorLaunch</name>
         <message>
             <source> Recovery failed: %1</source>
@@ -486,6 +148,101 @@
         <message>
             <source>Windows startup settings are unavailable</source>
             <translation>Параметры автозапуска Windows недоступны</translation>
+        </message>
+    </context>
+    <context>
+        <name>CloudOcrSettingsWidget</name>
+        <message>
+            <source>Access Token</source>
+            <translation>Токен доступа</translation>
+        </message>
+        <message>
+            <source>Automatic</source>
+            <translation>Автоматически</translation>
+        </message>
+        <message>
+            <source>Automatic selects a compatible model and switches on daily quota exhaustion.</source>
+            <translation>Автоматический режим выбирает совместимую модель и переключается на другую при исчерпании дневной квоты.</translation>
+        </message>
+        <message>
+            <source>Baidu PaddleOCR (AI Studio)</source>
+            <translation>Baidu PaddleOCR (AI Studio)</translation>
+        </message>
+        <message>
+            <source>Connection failed: %1</source>
+            <translation>Не удалось подключиться: %1</translation>
+        </message>
+        <message>
+            <source>Connection successful. Model: %1</source>
+            <translation>Соединение установлено. Модель: %1</translation>
+        </message>
+        <message>
+            <source>Could not securely save PaddleOCR configuration.</source>
+            <translation>Не удалось безопасно сохранить настройки PaddleOCR.</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token before testing.</source>
+            <translation>Перед проверкой введите корректный HTTPS URL и токен доступа.</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>
+            <translation>Введите корректный HTTPS URL и токен доступа PaddleOCR.</translation>
+        </message>
+        <message>
+            <source>Get Access Token</source>
+            <translation>Получить токен доступа</translation>
+        </message>
+        <message>
+            <source>HTML (local conversion)</source>
+            <translation>HTML (локальное преобразование)</translation>
+        </message>
+        <message>
+            <source>OCR engine</source>
+            <translation>Система OCR</translation>
+        </message>
+        <message>
+            <source>Open the official AI Studio Access Token page</source>
+            <translation>Открыть официальную страницу токена доступа AI Studio</translation>
+        </message>
+        <message>
+            <source>Output format</source>
+            <translation>Формат вывода</translation>
+        </message>
+        <message>
+            <source>PaddleOCR AI Studio API URL</source>
+            <translation>URL API PaddleOCR AI Studio</translation>
+        </message>
+        <message>
+            <source>PaddleOCR configuration saved.</source>
+            <translation>Настройки PaddleOCR сохранены.</translation>
+        </message>
+        <message>
+            <source>PaddleOCR model</source>
+            <translation>Модель PaddleOCR</translation>
+        </message>
+        <message>
+            <source>Plain text</source>
+            <translation>Обычный текст</translation>
+        </message>
+        <message>
+            <source>Save</source>
+            <translation>Сохранить</translation>
+        </message>
+        <message>
+            <source>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</source>
+            <translation>Отправляет небольшой образец для распознавания текста напрямую выбранному провайдеру PaddleOCR; это может расходовать квоту API.</translation>
+        </message>
+        <message>
+            <source>Test connection</source>
+            <translation>Проверить соединение</translation>
+        </message>
+        <message>
+            <source>Testing the OCR service...</source>
+            <translation>Проверка службы OCR...</translation>
+        </message>
+        <message>
+            <source>The OCR service returned an empty result.</source>
+            <translation>Служба OCR вернула пустой результат.</translation>
         </message>
     </context>
     <context>
@@ -1540,10 +1297,6 @@
         <message>
             <source>Accessibility</source>
             <translation>Универсальный доступ</translation>
-        </message>
-        <message>
-            <source>Account</source>
-            <translation>Аккаунт</translation>
         </message>
         <message>
             <source>Accuracy first</source>
@@ -3432,10 +3185,6 @@
         <message>
             <source>Medium V6</source>
             <translation>Средняя V6</translation>
-        </message>
-        <message>
-            <source>Membership, credits and transactions</source>
-            <translation>Подписка, баланс и операции по счёту</translation>
         </message>
         <message>
             <source>Memory optimization policy</source>
@@ -6093,53 +5842,6 @@ Unavailable: %2</source>
         <message>
             <source>Youdao</source>
             <translation>Youdao</translation>
-        </message>
-    </context>
-    <context>
-        <name>snow_shot::app::AccountSessionService</name>
-        <message numerus="yes">
-            <source>%1 credits</source>
-            <translation>
-                <numerusform>%1 кредит</numerusform>
-                <numerusform>%1 кредита</numerusform>
-                <numerusform>%1 кредитов</numerusform>
-            </translation>
-        </message>
-        <message>
-            <source>Confirm your password</source>
-            <translation>Подтвердите пароль</translation>
-        </message>
-        <message>
-            <source>Enter the image code</source>
-            <translation>Введите код с картинки</translation>
-        </message>
-        <message>
-            <source>Enter your password</source>
-            <translation>Введите пароль</translation>
-        </message>
-        <message>
-            <source>Enter your username</source>
-            <translation>Введите имя пользователя</translation>
-        </message>
-        <message>
-            <source>This payment is already being processed. We will keep checking its result</source>
-            <translation>Этот платёж уже обрабатывается. Мы продолжим проверять его результат</translation>
-        </message>
-        <message>
-            <source>Use 3–32 letters, numbers, underscores, dots, or hyphens for your username</source>
-            <translation>Имя пользователя — от 3 до 32 букв, цифр, знаков подчёркивания, точек или дефисов</translation>
-        </message>
-        <message>
-            <source>Use a password between 8 and 16 characters</source>
-            <translation>Пароль должен содержать от 8 до 16 символов</translation>
-        </message>
-        <message>
-            <source>Your account is activated. Sign in with your username and password if automatic sign-in does not complete</source>
-            <translation>Аккаунт активирован. Если автоматический вход не выполнится, войдите с именем пользователя и паролем</translation>
-        </message>
-        <message>
-            <source>Your session could not be saved securely. Keep this app open until payment is confirmed; you may need to sign in again after restarting</source>
-            <translation>Не удалось безопасно сохранить сеанс. Не закрывайте приложение до подтверждения платежа; после перезапуска может потребоваться повторный вход</translation>
         </message>
     </context>
     <context>

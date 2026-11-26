@@ -87,6 +87,10 @@
             <translation>Другие действия</translation>
         </message>
         <message>
+            <source>Online OCR</source>
+            <translation>Онлайн-OCR</translation>
+        </message>
+        <message>
             <source>Pin this screenshot to the screen</source>
             <translation>Закрепить этот скриншот на экране</translation>
         </message>
@@ -111,6 +115,10 @@
             <translation>Скриншот дисплея</translation>
         </message>
         <message>
+            <source>Screenshot history is unavailable</source>
+            <translation>История снимков экрана недоступна</translation>
+        </message>
+        <message>
             <source>Screenshot result</source>
             <translation>Результат скриншота</translation>
         </message>
@@ -125,6 +133,10 @@
         <message>
             <source>This screenshot cannot be pinned</source>
             <translation>Этот скриншот нельзя закрепить на экране</translation>
+        </message>
+        <message>
+            <source>Unable to read the history screenshot</source>
+            <translation>Не удалось прочитать снимок экрана из истории</translation>
         </message>
     </context>
     <context>

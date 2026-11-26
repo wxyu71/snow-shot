@@ -94,14 +94,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <translation>Текущая версия: %1</translation>
         </message>
         <message>
-            <source>Discover more features and ways to use it</source>
-            <translation>Узнайте больше о функциях и о том, как ими пользоваться</translation>
-        </message>
-        <message>
-            <source>Discussion and support · group no. %1</source>
-            <translation>Обсуждение и поддержка · группа № %1</translation>
-        </message>
-        <message>
             <source>Download update</source>
             <translation>Скачать обновление</translation>
         </message>
@@ -150,10 +142,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <translation>Помогите улучшить приложение</translation>
         </message>
         <message>
-            <source>Official website</source>
-            <translation>Официальный сайт</translation>
-        </message>
-        <message>
             <source>Open Microsoft Store</source>
             <translation>Открыть Microsoft Store</translation>
         </message>
@@ -172,10 +160,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
         <message>
             <source>Privacy policy</source>
             <translation>Политика конфиденциальности</translation>
-        </message>
-        <message>
-            <source>QQ group 4</source>
-            <translation>QQ-группа 4</translation>
         </message>
         <message>
             <source>Ready to install %1</source>
@@ -780,18 +764,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <translation>Нет доступных служб перевода</translation>
         </message>
         <message>
-            <source>Paid calls are paused because your account has an outstanding balance. Settle the balance in Account to continue</source>
-            <translation>Платные запросы приостановлены из-за задолженности по аккаунту. Погасите задолженность в разделе «Аккаунт», чтобы продолжить</translation>
-        </message>
-        <message>
-            <source>Sign in to your Snow Shot account to use Expert Model</source>
-            <translation>Войдите в аккаунт Snow Shot, чтобы использовать экспертную модель</translation>
-        </message>
-        <message>
-            <source>Sign in to your Snow Shot account to use this service</source>
-            <translation>Войдите в аккаунт Snow Shot, чтобы использовать эту службу</translation>
-        </message>
-        <message>
             <source>Table recognition failed</source>
             <translation>Не удалось распознать таблицу</translation>
         </message>
@@ -860,10 +832,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <translation>Ответ перевода слишком велик</translation>
         </message>
         <message>
-            <source>This request requires payment. Check your balance in Account</source>
-            <translation>Этот запрос платный. Проверьте баланс в разделе «Аккаунт»</translation>
-        </message>
-        <message>
             <source>This service does not support the selected language combination</source>
             <translation>Эта служба не поддерживает выбранную языковую пару</translation>
         </message>
@@ -886,22 +854,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
         <message>
             <source>Translation stream ended unexpectedly</source>
             <translation>Поток перевода неожиданно завершился</translation>
-        </message>
-        <message>
-            <source>Your Snow Shot session is no longer valid. Sign in again</source>
-            <translation>Сеанс Snow Shot больше не действителен. Войдите снова</translation>
-        </message>
-        <message>
-            <source>Your available credits cannot cover this request. Purchase credits in Account</source>
-            <translation>Доступных средств не хватает для этого запроса. Пополните баланс в разделе «Аккаунт»</translation>
-        </message>
-        <message>
-            <source>Your credits are reserved by other calls that are still running. Wait for them to finish and try again</source>
-            <translation>Средства зарезервированы другими незавершёнными запросами. Дождитесь их завершения и повторите попытку</translation>
-        </message>
-        <message>
-            <source>Your credits cannot cover this Expert Model request. Purchase credits from Account to continue</source>
-            <translation>Недостаточно кредитов для запроса к экспертной модели. Чтобы продолжить, купите кредиты в разделе «Аккаунт»</translation>
         </message>
         <message>
             <source>Your daily free allowance is exhausted. Try again after it resets</source>
