@@ -515,8 +515,8 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                                settings::SettingsRuntimeSession& session) {
     // Legacy Vision/HTML/LaTeX preferences must never override the Community
     // product contract, even before the settings widget is saved again.
-    QSettings legacy(QSettings::IniFormat, QSettings::UserScope,
-                     QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+    QSettings legacy(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("SnowShot"),
+                     QStringLiteral("CloudOcr"));
     legacy.setValue(QStringLiteral("engine"), QStringLiteral("vision"));
     legacy.setValue(QStringLiteral("output_format"), QStringLiteral("html"));
     legacy.sync();
@@ -557,13 +557,19 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                 engine->options().first().value.toString() == QStringLiteral("paddleocr") &&
                 !engine->isEnabled(),
             "Community Online OCR exposes only the fixed PaddleOCR provider");
-    require(output->options().size() == 1 &&
-                output->currentValue().toString() == QStringLiteral("markdown") &&
-                output->options().first().value.toString() == QStringLiteral("markdown") &&
-                !output->isEnabled(),
-            "Community Online OCR exposes only Markdown output");
-    require(token->echoMode() == QLineEdit::Password,
-            "Cloud OCR token uses a password editor");
+    const auto outputOptions = output->options();
+    const auto hasOutputFormat = [&outputOptions](const QString& format) {
+        return std::any_of(
+            outputOptions.cbegin(), outputOptions.cend(),
+            [&format](const auto& option) { return option.value.toString() == format; });
+    };
+    require(
+        outputOptions.size() == 4 && hasOutputFormat(QStringLiteral("markdown")) &&
+            hasOutputFormat(QStringLiteral("text")) && hasOutputFormat(QStringLiteral("jsonl")) &&
+            hasOutputFormat(QStringLiteral("html")) &&
+            output->currentValue().toString() == QStringLiteral("markdown") && output->isEnabled(),
+        "document-capable PaddleOCR models expose all four output formats");
+    require(token->echoMode() == QLineEdit::Password, "Cloud OCR token uses a password editor");
     const auto modelOptions = model->options();
     const auto containsModel = [&modelOptions](const QString& modelId) {
         return std::any_of(
@@ -585,6 +591,13 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     endpoint->setText(QStringLiteral("http://127.0.0.1:5102"));
     token->setText(QStringLiteral("native-test-token"));
     model->setCurrentValue(QStringLiteral("PP-OCRv6"));
+    const auto textOnlyOptions = output->options();
+    require(textOnlyOptions.size() == 2 &&
+                textOnlyOptions.at(0).value.toString() == QStringLiteral("text") &&
+                textOnlyOptions.at(1).value.toString() == QStringLiteral("jsonl") &&
+                output->currentValue().toString() == QStringLiteral("text"),
+            "PP-OCRv6 exposes only its supported text and JSONL output formats");
+    output->setCurrentValue(QStringLiteral("jsonl"));
     save->click();
     drainEvents();
     const auto stored = snow_shot::network::readCommunityCloudOcrSettings();
@@ -593,15 +606,16 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                 stored.accessToken == QStringLiteral("native-test-token") &&
                 stored.model == QStringLiteral("PP-OCRv6") &&
                 stored.engine == QStringLiteral("paddleocr") &&
-                stored.outputFormat == QStringLiteral("markdown"),
+                stored.outputFormat == QStringLiteral("jsonl"),
             "the Online OCR widget saves its supported PaddleOCR configuration");
-    QSettings persisted(QSettings::IniFormat, QSettings::UserScope,
-                        QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
-    require(persisted.value(QStringLiteral("engine")).toString() ==
-                QStringLiteral("paddleocr") &&
+    QSettings persisted(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("SnowShot"),
+                        QStringLiteral("CloudOcr"));
+    require(persisted.value(QStringLiteral("engine")).toString() == QStringLiteral("paddleocr") &&
                 persisted.value(QStringLiteral("output_format")).toString() ==
-                    QStringLiteral("markdown"),
-            "saving Online OCR overwrites obsolete Vision and HTML preferences");
+                    QStringLiteral("jsonl") &&
+                persisted.value(QStringLiteral("paddle_output_format_v2")).toString() ==
+                    QStringLiteral("jsonl"),
+            "saving Online OCR persists the selected PaddleOCR output format");
 #ifdef Q_OS_WIN
     require(persisted.value(QStringLiteral("access_token")).toString().isEmpty() &&
                 !persisted.value(QStringLiteral("access_token_dpapi_v1")).toString().isEmpty(),
