@@ -576,10 +576,11 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
             modelOptions.cbegin(), modelOptions.cend(),
             [&modelId](const auto& option) { return option.value.toString() == modelId; });
     };
-    require(modelOptions.size() == 3 && containsModel(QStringLiteral("PaddleOCR-VL-1.6")) &&
+    require(modelOptions.size() == 4 && containsModel(QStringLiteral("auto")) &&
+                containsModel(QStringLiteral("PaddleOCR-VL-1.6")) &&
                 containsModel(QStringLiteral("PP-StructureV3")) &&
                 containsModel(QStringLiteral("PP-OCRv6")),
-            "Cloud OCR settings expose all supported PaddleOCR models");
+            "Cloud OCR settings expose automatic selection and all supported PaddleOCR models");
 
     endpoint->setText(QStringLiteral("not-a-url"));
     token->setText(QStringLiteral("token"));
