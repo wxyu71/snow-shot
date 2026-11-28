@@ -656,3 +656,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/src/presentation/settings/settingscatalog.cpp`: retained 13 Community groups, applied 39 upstream groups, adapted base lines none. Context menu writes use local snapshot/rollback; reset new actions through real runtime APIs. Account-free page counts and ordering include upstream mouse operations. Native tests pending.
 - `snow_shot/src/presentation/components/settingspagewidget.cpp`: retained 3 Community groups, applied 5 upstream groups, adapted base lines none. Context menu writes use local snapshot/rollback; reset new actions through real runtime APIs. Account-free page counts and ordering include upstream mouse operations. Native tests pending.
 - `snow_shot/tests/settings_catalog_tests.cpp`: retained 20 Community groups, applied 59 upstream groups, adapted base lines 603, 605, 1695, 1699, 1708. Context menu writes use local snapshot/rollback; reset new actions through real runtime APIs. Account-free page counts and ordering include upstream mouse operations. Native tests pending.
+
+## Applied conflict resolutions — recording, input and tool palette
+
+- `snow_shot/src/presentation/recording/screenrecordingcontroller.cpp`: retained 10 Community groups, applied 26 disjoint upstream groups. Preserve local edition constraints and runtime input handling; native tests pending.
+- `snow_shot/src/presentation/services/globalmousemanager.cpp`: retained 1 Community groups, applied 19 disjoint upstream groups. Preserve local edition constraints and runtime input handling; native tests pending.
+- `snow_shot/src/presentation/services/globalshortcutmanager.cpp`: retained 5 Community groups, applied 4 disjoint upstream groups. Preserve local edition constraints and runtime input handling; native tests pending.
+- `snow_shot/src/presentation/tools/screenshottoolpalette.cpp`: retained 8 Community groups, applied 43 disjoint upstream groups. Preserve local edition constraints and runtime input handling; native tests pending.
