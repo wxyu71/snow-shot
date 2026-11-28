@@ -670,3 +670,13 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/src/presentation/ocr/screenshotimageconversionview.cpp`: retained 10 Community groups, applied 4 disjoint upstream groups; preserve independent OCR engine configuration, source edits and regression tests. Native tests pending.
 - `snow_shot/src/presentation/ocr/screenshotocrrecognitionservice.cpp`: retained 33 Community groups, applied 7 disjoint upstream groups; preserve independent OCR engine configuration, source edits and regression tests. Native tests pending.
 - `snow_shot/tests/screenshot_recognition_session_controller_tests.cpp`: retained 11 Community groups, applied 24 disjoint upstream groups; preserve independent OCR engine configuration, source edits and regression tests. Native tests pending.
+
+## Applied conflict resolutions — pinned OCR runtime and Inno staging
+
+- `scripts/package-snow-shot.ps1`: retained 16 Community groups and applied 4 upstream groups; adapted none.
+- `snow_shot/packaging/ocr-models.md`: retained 3 Community groups and applied 6 upstream groups; adapted none.
+- `snow_shot/tests/screenshot_ocr_assets_tests.cpp`: retained 10 Community groups and applied 8 upstream groups; adapted retain Community cached-payload branch.
+- `snow-crates/crates/simd-paddle-ocr-rs`: exact upstream object `b0d8bf38c6e83e3bfe8b58a3dad6ac24a743df7f`; adopted together with runtime 1.5.3 and protocol 8.
+- `snow_shot/packaging/snow-shot-ocr-asset-manifest.json`: exact upstream object `9d1beab34336318898d956973f9ade8200152ec3`; adopted together with runtime 1.5.3 and protocol 8.
+- `snow_shot/packaging/snow-shot-ocr-asset-manifest-arm64.json`: exact upstream object `3bc405aa46abd73adddb9a3dcfe2c1fdaeae93ac`; adopted together with runtime 1.5.3 and protocol 8.
+The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64 and ARM64 runtime archive hashes and worker binaries changed together with the gitlink. Inno packaging now audits the Explorer DLL in standalone staging. Runtime download, native worker and offline installer acceptance are still pending.
