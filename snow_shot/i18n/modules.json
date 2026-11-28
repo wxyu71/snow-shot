@@ -50,7 +50,9 @@
     "snow_shot::storage::ApplicationStorage",
     "snow_shot::storage::ConfigurationArchive",
     "snow_shot::storage::ConfigurationStore",
-    "CloudOcrSettingsWidget"
+    "CloudOcrSettingsWidget",
+    "MouseOperationRow",
+    "MouseOperations"
   ],
   "capture": [
     "DirectCaptureController",

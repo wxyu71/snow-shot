@@ -613,3 +613,11 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/src/presentation/services/screenshotcontroller.cpp`: retained 20 Community edit groups and applied 179 disjoint upstream groups. Preserve asynchronous history OCR queue, Markdown signal and conversion source edits. Runtime and API consistency validation pending.
 - `snow_shot/include/snow_shot/presentation/screenshotrecognitionwindow.h`: retained 1 Community edit groups and applied 9 disjoint upstream groups. Preserve asynchronous history OCR queue, Markdown signal and conversion source edits. Runtime and API consistency validation pending.
 - `snow_shot/src/presentation/ocr/screenshotrecognitionwindow.cpp`: retained 1 Community edit groups and applied 34 disjoint upstream groups. Preserve asynchronous history OCR queue, Markdown signal and conversion source edits. Runtime and API consistency validation pending.
+
+## Applied conflict resolutions — settings localization and manifest
+
+- `snow_shot/i18n/settings/snow_shot_settings_en_US.ts`: {"added":113,"removed":32,"updated":0,"community":28}; divergent keys retained for review: none; excluded changed keys in removed account/cloud contexts: 1. Locale key parity verified.
+- `snow_shot/i18n/settings/snow_shot_settings_ru.ts`: {"added":113,"removed":32,"updated":0,"community":28}; divergent keys retained for review: none; excluded changed keys in removed account/cloud contexts: 1. Locale key parity verified.
+- `snow_shot/i18n/settings/snow_shot_settings_zh_CN.ts`: {"added":113,"removed":32,"updated":0,"community":28}; divergent keys retained for review: none; excluded changed keys in removed account/cloud contexts: 1. Locale key parity verified.
+- `snow_shot/i18n/settings/snow_shot_settings_zh_TW.ts`: {"added":113,"removed":32,"updated":0,"community":28}; divergent keys retained for review: none; excluded changed keys in removed account/cloud contexts: 1. Locale key parity verified.
+- `snow_shot/i18n/modules.json`: added MouseOperationRow, MouseOperations; preserved CloudOcrSettingsWidget, BaiduPaddleOcrClient and intentional account/cloud deletions. Native translation check pending.

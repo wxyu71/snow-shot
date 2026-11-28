@@ -728,36 +728,12 @@
             <translation>Клавиши активации</translation>
         </message>
         <message>
-            <source>Alt</source>
-            <translation>Alt</translation>
-        </message>
-        <message>
             <source>Cancel</source>
             <translation>Отмена</translation>
         </message>
         <message>
-            <source>Command</source>
-            <translation>Command</translation>
-        </message>
-        <message>
             <source>Configure mouse combination for %1</source>
             <translation>Настройка сочетания мыши для %1</translation>
-        </message>
-        <message>
-            <source>Control</source>
-            <translation>Control</translation>
-        </message>
-        <message>
-            <source>Ctrl</source>
-            <translation>Ctrl</translation>
-        </message>
-        <message>
-            <source>Left-button drag</source>
-            <translation>Перетаскивание левой кнопкой</translation>
-        </message>
-        <message>
-            <source>Middle-button drag</source>
-            <translation>Перетаскивание средней кнопкой</translation>
         </message>
         <message>
             <source>Mouse button</source>
@@ -768,20 +744,8 @@
             <translation>Настройка мыши для «%1»</translation>
         </message>
         <message>
-            <source>None</source>
-            <translation>Нет</translation>
-        </message>
-        <message>
             <source>OK</source>
             <translation>ОК</translation>
-        </message>
-        <message>
-            <source>Option</source>
-            <translation>Option</translation>
-        </message>
-        <message>
-            <source>Right-button drag</source>
-            <translation>Перетаскивание правой кнопкой</translation>
         </message>
         <message>
             <source>Select a mouse button</source>
@@ -792,28 +756,8 @@
             <translation>Выберите хотя бы одну клавишу активации</translation>
         </message>
         <message>
-            <source>Shift</source>
-            <translation>Shift</translation>
-        </message>
-        <message>
-            <source>Side button 1 (back) drag</source>
-            <translation>Перетаскивание боковой кнопкой 1 (назад)</translation>
-        </message>
-        <message>
-            <source>Side button 2 (forward) drag</source>
-            <translation>Перетаскивание боковой кнопкой 2 (вперёд)</translation>
-        </message>
-        <message>
             <source>This mouse combination is already assigned to another action. Choose a different combination</source>
             <translation>Это сочетание мыши уже назначено другому действию. Выберите другое сочетание</translation>
-        </message>
-        <message>
-            <source>Unset</source>
-            <translation>Не задано</translation>
-        </message>
-        <message>
-            <source>Windows</source>
-            <translation>Windows</translation>
         </message>
     </context>
     <context>
@@ -864,6 +808,272 @@
         <message>
             <source>The skin image exceeds processing limits</source>
             <translation>Изображение оформления превышает пределы обработки</translation>
+        </message>
+    </context>
+    <context>
+        <name>MouseOperationRow</name>
+        <message>
+            <source>Keyboard modifiers</source>
+            <translation>Клавиши-модификаторы</translation>
+        </message>
+        <message>
+            <source>Mouse operation</source>
+            <translation>Действие мышью</translation>
+        </message>
+        <message>
+            <source>The mouse operation could not be saved.</source>
+            <translation>Не удалось сохранить действие мышью.</translation>
+        </message>
+        <message>
+            <source>The unmodified left single-click is reserved for selection.</source>
+            <translation>Одиночный щелчок левой кнопкой без модификаторов зарезервирован для выделения.</translation>
+        </message>
+        <message>
+            <source>This gesture is assigned to %1.</source>
+            <translation>Этот жест уже назначен действию «%1».</translation>
+        </message>
+        <message>
+            <source>Unmodified right clicks are reserved for Go back one step.</source>
+            <translation>Щелчки правой кнопкой без модификаторов зарезервированы для действия «Вернуться на шаг назад».</translation>
+        </message>
+    </context>
+    <context>
+        <name>MouseOperations</name>
+        <message>
+            <source>Adjust opacity</source>
+            <translation>Настроить непрозрачность</translation>
+        </message>
+        <message>
+            <source>Alt</source>
+            <translation>Alt</translation>
+        </message>
+        <message>
+            <source>Annotation mode</source>
+            <translation>Режим разметок</translation>
+        </message>
+        <message>
+            <source>Cancel screenshot</source>
+            <translation>Отменить скриншот</translation>
+        </message>
+        <message>
+            <source>Click-through</source>
+            <translation>Пропускать клики</translation>
+        </message>
+        <message>
+            <source>Close</source>
+            <translation>Закрыть</translation>
+        </message>
+        <message>
+            <source>Close all windows</source>
+            <translation>Закрыть все окна</translation>
+        </message>
+        <message>
+            <source>Close other windows</source>
+            <translation>Закрыть другие окна</translation>
+        </message>
+        <message>
+            <source>Command</source>
+            <translation>Command</translation>
+        </message>
+        <message>
+            <source>Control</source>
+            <translation>Control</translation>
+        </message>
+        <message>
+            <source>Copy after text recognition</source>
+            <translation>Копировать после распознавания текста</translation>
+        </message>
+        <message>
+            <source>Copy text to clipboard</source>
+            <translation>Копировать текст в буфер обмена</translation>
+        </message>
+        <message>
+            <source>Copy to clipboard</source>
+            <translation>Копировать в буфер обмена</translation>
+        </message>
+        <message>
+            <source>Copy to clipboard and close</source>
+            <translation>Скопировать в буфер обмена и закрыть</translation>
+        </message>
+        <message>
+            <source>Ctrl</source>
+            <translation>Ctrl</translation>
+        </message>
+        <message>
+            <source>Destroy</source>
+            <translation>Уничтожить</translation>
+        </message>
+        <message>
+            <source>Drag image</source>
+            <translation>Перетащить изображение</translation>
+        </message>
+        <message>
+            <source>Fine opacity adjustment</source>
+            <translation>Точная настройка непрозрачности</translation>
+        </message>
+        <message>
+            <source>Fine zoom</source>
+            <translation>Точное масштабирование</translation>
+        </message>
+        <message>
+            <source>Force window move</source>
+            <translation>Принудительно переместить окно</translation>
+        </message>
+        <message>
+            <source>Go back one step</source>
+            <translation>Вернуться на шаг назад</translation>
+        </message>
+        <message>
+            <source>Hide at top</source>
+            <translation>Скрытие у верхнего края экрана</translation>
+        </message>
+        <message>
+            <source>Hide other windows</source>
+            <translation>Скрыть другие окна</translation>
+        </message>
+        <message>
+            <source>Left-button double-click</source>
+            <translation>Двойной щелчок левой кнопкой</translation>
+        </message>
+        <message>
+            <source>Left-button drag</source>
+            <translation>Перетаскивание левой кнопкой</translation>
+        </message>
+        <message>
+            <source>Left-button single-click</source>
+            <translation>Щелчок левой кнопкой</translation>
+        </message>
+        <message>
+            <source>Lock mode</source>
+            <translation>Режим блокировки</translation>
+        </message>
+        <message>
+            <source>Menu</source>
+            <translation>Меню</translation>
+        </message>
+        <message>
+            <source>Middle-button double-click</source>
+            <translation>Двойной щелчок средней кнопкой</translation>
+        </message>
+        <message>
+            <source>Middle-button drag</source>
+            <translation>Перетаскивание средней кнопкой</translation>
+        </message>
+        <message>
+            <source>Middle-button single-click</source>
+            <translation>Щелчок средней кнопкой</translation>
+        </message>
+        <message>
+            <source>Mouse wheel</source>
+            <translation>Колесо мыши</translation>
+        </message>
+        <message>
+            <source>Move or resize window</source>
+            <translation>Переместить окно или изменить его размер</translation>
+        </message>
+        <message>
+            <source>Multi-select</source>
+            <translation>Множественный выбор</translation>
+        </message>
+        <message>
+            <source>None</source>
+            <translation>Нет</translation>
+        </message>
+        <message>
+            <source>Option</source>
+            <translation>Option</translation>
+        </message>
+        <message>
+            <source>Pan within crop</source>
+            <translation>Сдвинуть изображение в области обрезки</translation>
+        </message>
+        <message>
+            <source>Pin to screen</source>
+            <translation>Закрепить на экране</translation>
+        </message>
+        <message>
+            <source>Quick save</source>
+            <translation>Быстрое сохранение</translation>
+        </message>
+        <message>
+            <source>Reset zoom</source>
+            <translation>Сбросить масштаб</translation>
+        </message>
+        <message>
+            <source>Right-button double-click</source>
+            <translation>Двойной щелчок правой кнопкой</translation>
+        </message>
+        <message>
+            <source>Right-button drag</source>
+            <translation>Перетаскивание правой кнопкой</translation>
+        </message>
+        <message>
+            <source>Right-button single-click</source>
+            <translation>Щелчок правой кнопкой</translation>
+        </message>
+        <message>
+            <source>Save as file</source>
+            <translation>Сохранить как файл</translation>
+        </message>
+        <message>
+            <source>Select crop region</source>
+            <translation>Выбрать область обрезки</translation>
+        </message>
+        <message>
+            <source>Shift</source>
+            <translation>Shift</translation>
+        </message>
+        <message>
+            <source>Show all windows</source>
+            <translation>Показать все окна</translation>
+        </message>
+        <message>
+            <source>Show text recognition results</source>
+            <translation>Показывать результаты распознавания текста</translation>
+        </message>
+        <message>
+            <source>Side button 1 (back) double-click</source>
+            <translation>Двойной щелчок боковой кнопкой 1 (назад)</translation>
+        </message>
+        <message>
+            <source>Side button 1 (back) drag</source>
+            <translation>Перетаскивание боковой кнопкой 1 (назад)</translation>
+        </message>
+        <message>
+            <source>Side button 1 (back) single-click</source>
+            <translation>Щелчок боковой кнопкой 1 (назад)</translation>
+        </message>
+        <message>
+            <source>Side button 2 (forward) double-click</source>
+            <translation>Двойной щелчок боковой кнопкой 2 (вперёд)</translation>
+        </message>
+        <message>
+            <source>Side button 2 (forward) drag</source>
+            <translation>Перетаскивание боковой кнопкой 2 (вперёд)</translation>
+        </message>
+        <message>
+            <source>Side button 2 (forward) single-click</source>
+            <translation>Щелчок боковой кнопкой 2 (вперёд)</translation>
+        </message>
+        <message>
+            <source>Text recognition</source>
+            <translation>Распознавание текста</translation>
+        </message>
+        <message>
+            <source>Thumbnail mode</source>
+            <translation>Режим миниатюр</translation>
+        </message>
+        <message>
+            <source>Unset</source>
+            <translation>Не задано</translation>
+        </message>
+        <message>
+            <source>Windows</source>
+            <translation>Windows</translation>
+        </message>
+        <message>
+            <source>Zoom</source>
+            <translation>Масштаб</translation>
         </message>
     </context>
     <context>
@@ -1319,10 +1529,6 @@
             <translation>Добавлять маску для подсветки результатов распознавания текста</translation>
         </message>
         <message>
-            <source>Add edit with Snow Shot to the Windows context menu to pin a supported image or document file to the screen</source>
-            <translation>Добавить «Редактировать в Snow Shot» в контекстное меню Windows, чтобы закреплять на экране поддерживаемые изображения и документы</translation>
-        </message>
-        <message>
             <source>Adjust MP4 quality and file size</source>
             <translation>Настройка качества и размера файла MP4</translation>
         </message>
@@ -1539,6 +1745,22 @@
             <translation>Автосохранение</translation>
         </message>
         <message>
+            <source>Auto-save (Current monitor)</source>
+            <translation>Автосохранение (текущий монитор)</translation>
+        </message>
+        <message>
+            <source>Auto-save (Focused window)</source>
+            <translation>Автосохранение (активное окно)</translation>
+        </message>
+        <message>
+            <source>Auto-save (Normal)</source>
+            <translation>Автосохранение (обычный скриншот)</translation>
+        </message>
+        <message>
+            <source>Auto-save (Scrolling screenshot)</source>
+            <translation>Автосохранение (скриншот с прокруткой)</translation>
+        </message>
+        <message>
             <source>Auto-save image filename format</source>
             <translation>Формат имён файлов при автосохранении изображений</translation>
         </message>
@@ -1565,10 +1787,6 @@
         <message>
             <source>Automatically disable when a focused fullscreen window exists</source>
             <translation>Автоматически отключать при наличии активного полноэкранного окна</translation>
-        </message>
-        <message>
-            <source>Automatically enable annotation mode in new pin to screen windows opened with edit with Snow Shot</source>
-            <translation>Автоматически включать режим разметки в новых закреплённых окнах, открытых через «Редактировать в Snow Shot»</translation>
         </message>
         <message>
             <source>Automatically exit screen recording after the recording is saved</source>
@@ -1815,20 +2033,8 @@
             <translation>Выберите версию и размер модели OCR, чтобы сбалансировать скорость и точность распознавания</translation>
         </message>
         <message>
-            <source>Choose the action for double-clicking a draggable area of a pinned screenshot</source>
-            <translation>Выберите действие при двойном щелчке по перетаскиваемой области закреплённого скриншота</translation>
-        </message>
-        <message>
-            <source>Choose the action for double-clicking while moving or annotating in a screenshot</source>
-            <translation>Выберите действие при двойном щелчке во время перемещения или аннотирования на скриншоте</translation>
-        </message>
-        <message>
-            <source>Choose the action for middle-clicking a draggable area of a pinned screenshot</source>
-            <translation>Выберите действие при щелчке средней кнопкой по перетаскиваемой области закреплённого скриншота</translation>
-        </message>
-        <message>
-            <source>Choose the action for middle-clicking while moving or annotating in a screenshot</source>
-            <translation>Выберите действие при щелчке средней кнопкой во время перемещения или аннотирования на скриншоте</translation>
+            <source>Choose the actions to show in File Explorer</source>
+            <translation>Выберите действия для показа в Проводнике</translation>
         </message>
         <message>
             <source>Choose the bundled icon used in dark theme, or reuse the regular icon settings</source>
@@ -1963,6 +2169,10 @@
             <translation>Выберите, сохранять ли редактируемые сеансы скриншотов, только итоговые изображения или не вести новую историю</translation>
         </message>
         <message>
+            <source>Choose which file types show Snow Shot actions in File Explorer</source>
+            <translation>Выберите типы файлов, для которых Проводник показывает действия Snow Shot</translation>
+        </message>
+        <message>
             <source>Choose which fullscreen windows trigger automatic disabling</source>
             <translation>Выберите, какие полноэкранные окна вызывают автоматическое отключение</translation>
         </message>
@@ -1999,6 +2209,10 @@
             <translation>Очистить историю скриншотов?</translation>
         </message>
         <message>
+            <source>Click, wheel, and drag actions for pinned windows</source>
+            <translation>Действия при щелчке, прокрутке и перетаскивании в закреплённых окнах</translation>
+        </message>
+        <message>
             <source>Click-through</source>
             <translation>Пропускать клики</translation>
         </message>
@@ -2011,8 +2225,12 @@
             <translation>Содержимое буфера обмена</translation>
         </message>
         <message>
-            <source>Close</source>
-            <translation>Закрыть</translation>
+            <source>Close all windows</source>
+            <translation>Закрыть все окна</translation>
+        </message>
+        <message>
+            <source>Close other windows</source>
+            <translation>Закрыть другие окна</translation>
         </message>
         <message>
             <source>Close window</source>
@@ -2037,6 +2255,10 @@
         <message>
             <source>Color picker display mode</source>
             <translation>Режим отображения палитры цветов</translation>
+        </message>
+        <message>
+            <source>Compress images</source>
+            <translation>Сжать изображения</translation>
         </message>
         <message>
             <source>Compress selected images</source>
@@ -2131,6 +2353,14 @@
             <translation>Копировать файл</translation>
         </message>
         <message>
+            <source>Copy file (Normal)</source>
+            <translation>Копировать файл (обычный скриншот)</translation>
+        </message>
+        <message>
+            <source>Copy file (Scrolling screenshot)</source>
+            <translation>Копировать файл (скриншот с прокруткой)</translation>
+        </message>
+        <message>
             <source>Copy image file to clipboard</source>
             <translation>Копировать файл изображения в буфер обмена</translation>
         </message>
@@ -2173,6 +2403,14 @@
         <message>
             <source>Copy to clipboard</source>
             <translation>Копировать в буфер обмена</translation>
+        </message>
+        <message>
+            <source>Copy to clipboard (Normal)</source>
+            <translation>Копировать в буфер обмена (обычный скриншот)</translation>
+        </message>
+        <message>
+            <source>Copy to clipboard (Scrolling screenshot)</source>
+            <translation>Копировать в буфер обмена (скриншот с прокруткой)</translation>
         </message>
         <message>
             <source>Copy translation results as an image</source>
@@ -2435,10 +2673,6 @@
             <translation>Не выбирать автоматически элементы, созданные этими инструментами</translation>
         </message>
         <message>
-            <source>Double-click action</source>
-            <translation>Действие двойного щелчка</translation>
-        </message>
-        <message>
             <source>Download automatically</source>
             <translation>Загружать автоматически</translation>
         </message>
@@ -2483,8 +2717,16 @@
             <translation>Рисовать четыре отрезка направляющих вокруг центрального пикселя образца</translation>
         </message>
         <message>
+            <source>Draw solid grid lines along the screenshot selection edges</source>
+            <translation>Рисовать сплошные линии сетки вдоль границ выделенной области скриншота</translation>
+        </message>
+        <message>
             <source>Duplicate latest region</source>
             <translation>Дублировать последнюю область</translation>
+        </message>
+        <message>
+            <source>Edit images</source>
+            <translation>Редактировать изображения</translation>
         </message>
         <message>
             <source>Edit selected images</source>
@@ -2495,20 +2737,8 @@
             <translation>Редактировать выделение</translation>
         </message>
         <message>
-            <source>Edit with Snow Shot</source>
-            <translation>Редактировать в Snow Shot</translation>
-        </message>
-        <message>
-            <source>Edit with Snow Shot Mini</source>
-            <translation>Редактировать в Snow Shot Mini</translation>
-        </message>
-        <message>
             <source>Enable MCP integration</source>
             <translation>Включить интеграцию с MCP</translation>
-        </message>
-        <message>
-            <source>Enable annotation mode when opening for editing</source>
-            <translation>Включать режим разметки при открытии для редактирования</translation>
         </message>
         <message>
             <source>Enable edit mode</source>
@@ -2589,6 +2819,10 @@
         <message>
             <source>Export logs</source>
             <translation>Экспорт журналов</translation>
+        </message>
+        <message>
+            <source>Export recognition result as image</source>
+            <translation>Экспортировать результат распознавания как изображение</translation>
         </message>
         <message>
             <source>Export recording</source>
@@ -2807,6 +3041,10 @@
             <translation>Скрыть или показать все окна текущей группы</translation>
         </message>
         <message>
+            <source>Hide other windows</source>
+            <translation>Скрыть другие окна</translation>
+        </message>
+        <message>
             <source>Hide the toolbar near the left or right screen edge. Hover over the edge control to show it again</source>
             <translation>Скрывать панель у левого или правого края экрана. Наведите указатель на край, чтобы показать её снова.</translation>
         </message>
@@ -2841,6 +3079,10 @@
         <message>
             <source>Image and document files</source>
             <translation>Файлы изображений и документов</translation>
+        </message>
+        <message>
+            <source>Image compression</source>
+            <translation>Сжатие изображения</translation>
         </message>
         <message>
             <source>Image editing</source>
@@ -2907,12 +3149,12 @@
             <translation>Импорт настроек</translation>
         </message>
         <message>
-            <source>Include saved annotation styles in the configuration archive</source>
-            <translation>Включить сохранённые стили разметок в архив конфигурации</translation>
+            <source>Include recognition results when exporting an image with the text recognition tool active.</source>
+            <translation>Включать результаты распознавания в экспортируемое изображение, когда активен инструмент распознавания текста.</translation>
         </message>
         <message>
-            <source>Include the displayed text recognition or original-image translation result when saving a screenshot selection</source>
-            <translation>Включать отображаемый результат распознавания текста или перевода исходного изображения при сохранении выделенной области скриншота</translation>
+            <source>Include saved annotation styles in the configuration archive</source>
+            <translation>Включить сохранённые стили разметок в архив конфигурации</translation>
         </message>
         <message>
             <source>Include the pointer and capture controls in screenshots</source>
@@ -3223,8 +3465,20 @@
             <translation>Цвет центральной направляющей монитора</translation>
         </message>
         <message>
+            <source>Mouse actions for the current selection or smart selection preview</source>
+            <translation>Действия мыши для текущей области или предпросмотра умного выделения</translation>
+        </message>
+        <message>
             <source>Mouse combinations for screenshot actions</source>
             <translation>Сочетания кнопок мыши для действий со скриншотами</translation>
+        </message>
+        <message>
+            <source>Mouse gestures for screenshots and pinned windows</source>
+            <translation>Жесты мыши для снимков экрана и закреплённых окон</translation>
+        </message>
+        <message>
+            <source>Mouse operations</source>
+            <translation>Действия мышью</translation>
         </message>
         <message>
             <source>Mouse pointer</source>
@@ -3467,6 +3721,10 @@
             <translation>Статус разрешений и доступ</translation>
         </message>
         <message>
+            <source>Pin a live view of the window in the selected area</source>
+            <translation>Закрепить на экране окно из выбранной области в реальном времени</translation>
+        </message>
+        <message>
             <source>Pin clipboard content to screen</source>
             <translation>Закрепить содержимое буфера обмена на экране</translation>
         </message>
@@ -3497,6 +3755,26 @@
         <message>
             <source>Pin to screen</source>
             <translation>Закрепить на экране</translation>
+        </message>
+        <message>
+            <source>Pin to screen (Current monitor)</source>
+            <translation>Закрепить на экране (текущий монитор)</translation>
+        </message>
+        <message>
+            <source>Pin to screen (Focused window)</source>
+            <translation>Закрепить на экране (активное окно)</translation>
+        </message>
+        <message>
+            <source>Pin to screen (Normal)</source>
+            <translation>Закрепить на экране (обычный скриншот)</translation>
+        </message>
+        <message>
+            <source>Pin to screen (Scrolling screenshot)</source>
+            <translation>Закрепить на экране (скриншот с прокруткой)</translation>
+        </message>
+        <message>
+            <source>Pin to screen and annotate</source>
+            <translation>Закрепить на экране и добавить аннотации</translation>
         </message>
         <message>
             <source>Pin to screen management</source>
@@ -3803,10 +4081,6 @@
             <translation>Сбросить преобразование</translation>
         </message>
         <message>
-            <source>Reset zoom</source>
-            <translation>Сбросить масштаб</translation>
-        </message>
-        <message>
             <source>Resident recognition process</source>
             <translation>Постоянный процесс распознавания</translation>
         </message>
@@ -3977,10 +4251,6 @@
         <message>
             <source>Save locations, clipboard behavior, history and cleanup</source>
             <translation>Места сохранения, работа с буфером обмена, история и очистка</translation>
-        </message>
-        <message>
-            <source>Save recognition result as image</source>
-            <translation>Сохранять результат распознавания как изображение</translation>
         </message>
         <message>
             <source>Save system audio and microphone audio as separate MP4 tracks for independent editing. Most players play one track at a time</source>
@@ -4171,6 +4441,10 @@
             <translation>Дополнительный целевой язык</translation>
         </message>
         <message>
+            <source>Select actions</source>
+            <translation>Выберите действия</translation>
+        </message>
+        <message>
             <source>Select dark theme tray icon</source>
             <translation>Тёмный значок в трее для тёмной темы</translation>
         </message>
@@ -4229,6 +4503,10 @@
         <message>
             <source>Selection center guide color</source>
             <translation>Цвет центральной направляющей выделения</translation>
+        </message>
+        <message>
+            <source>Selection grid guide color</source>
+            <translation>Цвет направляющих сетки выделения</translation>
         </message>
         <message>
             <source>Selection mask color</source>
@@ -4403,6 +4681,10 @@
             <translation>Показывать системное уведомление по завершении экспорта. Нажмите на него, чтобы открыть папку с экспортированным файлом</translation>
         </message>
         <message>
+            <source>Show all windows</source>
+            <translation>Показать все окна</translation>
+        </message>
+        <message>
             <source>Show border</source>
             <translation>Показывать границу</translation>
         </message>
@@ -4457,10 +4739,6 @@
         <message>
             <source>Show text highlighting</source>
             <translation>Показывать подсветку текста</translation>
-        </message>
-        <message>
-            <source>Show text recognition results</source>
-            <translation>Показывать результаты распознавания текста</translation>
         </message>
         <message>
             <source>Show the annotation and close buttons in the upper-right corner of pinned windows</source>
@@ -4603,6 +4881,10 @@
             <translation>«Приоритет скорости» снижает вычисления на коротком тексте и может изменить результаты распознавания</translation>
         </message>
         <message>
+            <source>Split images</source>
+            <translation>Разделить изображения</translation>
+        </message>
+        <message>
             <source>Split selected images</source>
             <translation>Разделить выбранные изображения</translation>
         </message>
@@ -4661,6 +4943,10 @@
         <message>
             <source>Startup &amp; updates</source>
             <translation>Запуск и обновления</translation>
+        </message>
+        <message>
+            <source>Stitch images</source>
+            <translation>Объединить изображения</translation>
         </message>
         <message>
             <source>Stitch selected images</source>
@@ -4979,6 +5265,22 @@
             <translation>Загрузить в облако</translation>
         </message>
         <message>
+            <source>Upload to cloud (Current monitor)</source>
+            <translation>Загрузить в облако (текущий монитор)</translation>
+        </message>
+        <message>
+            <source>Upload to cloud (Focused window)</source>
+            <translation>Загрузить в облако (активное окно)</translation>
+        </message>
+        <message>
+            <source>Upload to cloud (Normal)</source>
+            <translation>Загрузить в облако (обычный скриншот)</translation>
+        </message>
+        <message>
+            <source>Upload to cloud (Scrolling screenshot)</source>
+            <translation>Загрузить в облако (скриншот с прокруткой)</translation>
+        </message>
+        <message>
             <source>Use GPU acceleration when available. Recognition uses the CPU while acceleration is unavailable</source>
             <translation>Использовать ускорение GPU, когда оно доступно. Без ускорения распознавание выполняется на CPU</translation>
         </message>
@@ -5127,6 +5429,14 @@
             <translation>Контекстное меню Windows</translation>
         </message>
         <message>
+            <source>Windows context menu options</source>
+            <translation>Действия контекстного меню Windows</translation>
+        </message>
+        <message>
+            <source>Windows context menu scope</source>
+            <translation>Область действия контекстного меню Windows</translation>
+        </message>
+        <message>
             <source>Zip archives (*.zip);;All files (*.*)</source>
             <translation>Архивы Zip (*.zip);;Все файлы (*.*)</translation>
         </message>
@@ -5256,6 +5566,10 @@
     <context>
         <name>ShellContextMenuRegistration</name>
         <message>
+            <source>Compress images</source>
+            <translation>Сжать изображения</translation>
+        </message>
+        <message>
             <source>Could not access the Windows context menu registry. Windows error %1</source>
             <translation>Не удалось получить доступ к реестру контекстного меню Windows. Ошибка Windows %1</translation>
         </message>
@@ -5272,12 +5586,24 @@
             <translation>Не удалось сохранить настройку контекстного меню Windows</translation>
         </message>
         <message>
-            <source>Edit with Snow Shot</source>
-            <translation>Редактировать в Snow Shot</translation>
+            <source>Edit images</source>
+            <translation>Редактировать изображения</translation>
         </message>
         <message>
-            <source>Edit with Snow Shot Mini</source>
-            <translation>Редактировать в Snow Shot Mini</translation>
+            <source>Pin to screen</source>
+            <translation>Закрепить на экране</translation>
+        </message>
+        <message>
+            <source>Pin to screen and annotate</source>
+            <translation>Закрепить на экране и добавить аннотации</translation>
+        </message>
+        <message>
+            <source>Split images</source>
+            <translation>Разделить изображения</translation>
+        </message>
+        <message>
+            <source>Stitch images</source>
+            <translation>Объединить изображения</translation>
         </message>
         <message>
             <source>The Windows context menu entry is owned by another application</source>
@@ -5286,10 +5612,6 @@
         <message>
             <source>The Windows context menu is only supported on Windows</source>
             <translation>Контекстное меню Windows поддерживается только в Windows</translation>
-        </message>
-        <message>
-            <source>The context menu access key must be one letter (A–Z) or digit (0–9)</source>
-            <translation>Клавиша доступа в контекстном меню должна быть одной буквой (A–Z) или цифрой (0–9)</translation>
         </message>
     </context>
     <context>
@@ -5922,6 +6244,14 @@ Unavailable: %2</source>
         <message>
             <source>Some custom API configurations are invalid and were ignored</source>
             <translation>Некоторые пользовательские конфигурации API недопустимы и были пропущены</translation>
+        </message>
+        <message>
+            <source>The mouse operation is already assigned.</source>
+            <translation>Это действие мыши уже назначено.</translation>
+        </message>
+        <message>
+            <source>This context menu shortcut is already assigned</source>
+            <translation>Эта клавиша контекстного меню уже назначена</translation>
         </message>
     </context>
 </TS>
