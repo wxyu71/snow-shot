@@ -4,6 +4,7 @@
 #include "snow_shot/presentation/components/sidebarwidget.h"
 #include "snow_shot/presentation/globalshortcutmanager.h"
 #include "snow_shot/presentation/mainwindow.h"
+#include "snow_shot/presentation/languagemanager.h"
 #include "snow_shot/presentation/settings/settingsbackend.h"
 #include "snow_shot/presentation/settings/settingsruntimesession.h"
 #include "snow_shot/presentation/settings/settingssearchindex.h"
@@ -344,6 +345,42 @@ void projectLinksAreExplicitAccessibleAndRecoverable() {
     child<QAbstractButton>(page, "aboutPrivacyPolicy")->click();
     require(error->isHidden() && error->text().isEmpty(),
             "successful link retries clear the error");
+    page.hide();
+}
+
+void websiteLinksFollowApplicationLanguage() {
+    QList<QUrl> opened;
+    AboutPageWidget page(nullptr, [&](const QUrl& url) {
+        opened.append(url);
+        return true;
+    });
+    page.resize(700, 540);
+    page.show();
+    auto& languages = snow_shot::presentation::LanguageManager::instance();
+    const QString previousLanguage = languages.languagePreference();
+    const std::pair<const char*, QUrl> links[] = {
+        {"aboutPrivacyPolicy", QUrl(snow_shot::app::distribution::privacyPolicyUrl())},
+        {"aboutUserAgreement", QUrl(snow_shot::app::distribution::userAgreementUrl())},
+    };
+    for (const char* locale : {"en_US", "zh_CN", "zh_TW", "ru"}) {
+        require(languages.setLanguage(QString::fromLatin1(locale)),
+                "select the About language");
+        flushEvents();
+        for (const auto& [name, url] : links) {
+            auto* button = child<QAbstractButton>(page, name);
+            require(button->toolTip() == url.toDisplayString(),
+                    "Community legal destination does not change with language");
+            const auto previousCount = opened.size();
+            button->click();
+            require(opened.size() == previousCount + 1 && opened.back() == url,
+                    "the displayed legal destination is the one actually opened");
+        }
+        require(!page.findChild<QAbstractButton*>(QStringLiteral("aboutWebsite")) &&
+                    !page.findChild<QAbstractButton*>(QStringLiteral("aboutReleaseNotes")),
+                "removed upstream website and release-note buttons stay absent");
+    }
+    require(languages.setLanguage(previousLanguage), "restore the About language");
+    flushEvents();
     page.hide();
 }
 
@@ -1140,6 +1177,11 @@ int main(int argc, char** argv) {
     require(storage.initialize({directory.path(), directory.path(), 8000}).success,
             "initialize isolated storage");
     styles::ThemeManager::instance().initialize(application);
+    if (application.arguments().contains(QStringLiteral("--website-links-only"))) {
+        websiteLinksFollowApplicationLanguage();
+        storage.shutdown();
+        return 0;
+    }
     if (application.arguments().contains(QStringLiteral("--updates-only"))) {
         updatePolicyAndUnavailableCopy();
         updateStatesFitTheVersionPanel();
@@ -1173,6 +1215,7 @@ int main(int argc, char** argv) {
         storage.shutdown();
         return 0;
     }
+    websiteLinksFollowApplicationLanguage();
     themeAndSkinChangesUpdateOnlyAffectedBackgrounds();
     versionIsExactSelectableAndCopyable();
     absentVersionDoesNotInventARelease();

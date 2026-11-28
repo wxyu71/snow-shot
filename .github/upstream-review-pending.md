@@ -710,3 +710,8 @@ The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64
 - `snow_shot/src/app/mcp/mcpapplicationservice.cpp`: retained 7 Community groups, applied 1 upstream groups. Excluded upstream base-line groups 613, 641 dependent on removed account sync or removed cloud-only batch writes; local draft transactions remain. Native tests pending.
 - `snow_shot/tests/snowshot_api_client_tests.cpp`: retained 15 Community groups, applied 13 upstream groups. Native tests pending.
 - `snow_shot/tests/mcp_application_tests.cpp`: retained 1 Community groups, applied 4 upstream groups. Native tests pending.
+
+## Applied conflict resolutions — Community About page policy
+
+- `snow_shot/src/presentation/components/aboutpagewidget.cpp`: intentionally retain reduced Community About UI and exact distribution privacy/terms destinations; do not resurrect upstream promotional links or route Community URLs through upstream /zh paths.
+- `snow_shot/tests/about_page_tests.cpp`: adapt upstream four-locale website test to exact legal URLs and removed website/release-note buttons; wire the upstream --website-links-only test argument. Existing Community assertions retained. Native tests pending.
