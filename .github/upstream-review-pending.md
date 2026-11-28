@@ -621,3 +621,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/i18n/settings/snow_shot_settings_zh_CN.ts`: {"added":113,"removed":32,"updated":0,"community":28}; divergent keys retained for review: none; excluded changed keys in removed account/cloud contexts: 1. Locale key parity verified.
 - `snow_shot/i18n/settings/snow_shot_settings_zh_TW.ts`: {"added":113,"removed":32,"updated":0,"community":28}; divergent keys retained for review: none; excluded changed keys in removed account/cloud contexts: 1. Locale key parity verified.
 - `snow_shot/i18n/modules.json`: added MouseOperationRow, MouseOperations; preserved CloudOcrSettingsWidget, BaiduPaddleOcrClient and intentional account/cloud deletions. Native translation check pending.
+
+## Applied conflict resolutions — core localization
+
+- `snow_shot/i18n/core/snow_shot_core_en_US.ts`: {"added":0,"removed":1,"updated":0,"community":12}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/core/snow_shot_core_ru.ts`: {"added":0,"removed":1,"updated":0,"community":12}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/core/snow_shot_core_zh_CN.ts`: {"added":0,"removed":1,"updated":0,"community":12}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/core/snow_shot_core_zh_TW.ts`: {"added":0,"removed":1,"updated":0,"community":12}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
