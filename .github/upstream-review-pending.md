@@ -703,3 +703,10 @@ The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64
 ## Applied conflict resolutions — API and About page
 
 - `snow_shot/src/network/snowshotapiclient.cpp`: retained 26 Community groups, applied 8 disjoint upstream groups. Native tests pending.
+
+## Applied conflict resolutions — account-free application and MCP services
+
+- `snow_shot/src/app/applicationcontroller.cpp`: retained 21 Community groups, applied 20 upstream groups. Excluded upstream base-line groups 670 dependent on removed account sync or removed cloud-only batch writes; local draft transactions remain. Native tests pending.
+- `snow_shot/src/app/mcp/mcpapplicationservice.cpp`: retained 7 Community groups, applied 1 upstream groups. Excluded upstream base-line groups 613, 641 dependent on removed account sync or removed cloud-only batch writes; local draft transactions remain. Native tests pending.
+- `snow_shot/tests/snowshot_api_client_tests.cpp`: retained 15 Community groups, applied 13 upstream groups. Native tests pending.
+- `snow_shot/tests/mcp_application_tests.cpp`: retained 1 Community groups, applied 4 upstream groups. Native tests pending.
