@@ -663,3 +663,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/src/presentation/services/globalmousemanager.cpp`: retained 1 Community groups, applied 19 disjoint upstream groups. Preserve local edition constraints and runtime input handling; native tests pending.
 - `snow_shot/src/presentation/services/globalshortcutmanager.cpp`: retained 5 Community groups, applied 4 disjoint upstream groups. Preserve local edition constraints and runtime input handling; native tests pending.
 - `snow_shot/src/presentation/tools/screenshottoolpalette.cpp`: retained 8 Community groups, applied 43 disjoint upstream groups. Preserve local edition constraints and runtime input handling; native tests pending.
+
+## Applied conflict resolutions — conversion and OCR service
+
+- `snow_shot/include/snow_shot/presentation/screenshotimageconversionview.h`: retained 3 Community groups, applied 4 disjoint upstream groups; preserve independent OCR engine configuration, source edits and regression tests. Native tests pending.
+- `snow_shot/src/presentation/ocr/screenshotimageconversionview.cpp`: retained 10 Community groups, applied 4 disjoint upstream groups; preserve independent OCR engine configuration, source edits and regression tests. Native tests pending.
+- `snow_shot/src/presentation/ocr/screenshotocrrecognitionservice.cpp`: retained 33 Community groups, applied 7 disjoint upstream groups; preserve independent OCR engine configuration, source edits and regression tests. Native tests pending.
+- `snow_shot/tests/screenshot_recognition_session_controller_tests.cpp`: retained 11 Community groups, applied 24 disjoint upstream groups; preserve independent OCR engine configuration, source edits and regression tests. Native tests pending.
