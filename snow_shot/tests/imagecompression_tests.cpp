@@ -1,10 +1,12 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
+#include "saturated_export_queue.h"
 #include "snow_shot/presentation/imagecompressionwindow.h"
 #include "snow_shot/presentation/screenshotclipboardservice.h"
 #include "snow_shot/presentation/screenshotexportcoordinator.h"
 #include "snow_shot/presentation/screenshotsavepreviewcanvas.h"
 #include "snow_shot/storage/applicationstorage.h"
 #include "snow_shot/storage/capturehistoryrepository.h"
+#include "snow_shot/storage/clipboardfilecache.h"
 #include "snow_shot/storage/pinnedwindowrepository.h"
 #include "snow_shot/storage/settingsadapters.h"
 #include "snowimageqtcodec.h"
@@ -22,6 +24,7 @@
 #include <QAbstractButton>
 #include <QApplication>
 #include <QClipboard>
+#include <QDir>
 #include <QDragEnterEvent>
 #include <QElapsedTimer>
 #include <QFileDialog>
@@ -183,6 +186,29 @@ void waitForExport(AdModal* modal) {
         require(button->isEnabled() && !button->busy(), "Export actions can be used again");
     }
 }
+
+#ifndef Q_OS_WIN
+void clipboardFileSurvivesCloseDuringPublication(const ScreenshotPinnedImageSnapshot& snapshot) {
+    ImageCompressionWindowCoordinator windows;
+    windows.presentSnapshot(snapshot);
+    QPointer<AdModal> modal = child<AdModal>(&windows, "imageCompressionWindow");
+    auto* copy = child<AdButton>(modal->footerWidget(), "imageCompressionCopy");
+    auto* clipboard = QApplication::clipboard();
+    QString path;
+    QObject::connect(clipboard, &QClipboard::dataChanged, &windows, [&] {
+        if (modal) {
+            path = readExportTestClipboard().second;
+            if (!path.isEmpty())
+                modal->reject();
+        }
+    });
+    until([&] { return copy->isEnabled(); });
+    copy->click();
+    until([&] { return !modal; });
+    require(!path.isEmpty() && !contents(path).isEmpty(),
+            "A published file survives a synchronous close during clipboard notification");
+}
+#endif
 
 void saveCollisionAndDialogTranslations(const ScreenshotPinnedImageSnapshot& snapshot,
                                         const QTemporaryDir& dir) {
@@ -444,6 +470,28 @@ void runImageCompressionTests() {
     clipboardImports(first, source.size());
     {
         ImageCompressionWindowCoordinator windows;
+        const auto smaller = dir.filePath(QStringLiteral("smaller.png"));
+        require(source.copy(0, 0, 64, 48).save(smaller), "write a distinct compression input");
+        SaturatedExportQueue occupied(windows);
+        windows.presentFiles({first, dir.filePath(QStringLiteral("missing.png")), smaller});
+        require(windows.findChildren<AdModal*>().isEmpty(),
+                "queued compression files wait for a worker before opening windows");
+        occupied.release();
+        until([&] {
+            const auto modals =
+                windows.findChildren<AdModal*>(QStringLiteral("imageCompressionWindow"));
+            return modals.size() == 2 && modals[0]->isOpen() && modals[1]->isOpen();
+        });
+        const auto modals =
+            windows.findChildren<AdModal*>(QStringLiteral("imageCompressionWindow"));
+        require(child<AdInputNumber>(modals[0]->contentWidget(), "saveWidthInput")->value() ==
+                        source.width() &&
+                    child<AdInputNumber>(modals[1]->contentWidget(), "saveWidthInput")->value() ==
+                        64,
+                "queued compression windows retain the selected files in order");
+    }
+    {
+        ImageCompressionWindowCoordinator windows;
         selection->paths = {first, dir.filePath(QStringLiteral("ignored.txt")), second};
         windows.presentSelectedFiles(selection, selection->captureTarget());
         until([&] {
@@ -610,6 +658,11 @@ void runImageCompressionTests() {
     const auto decoded = image_codec::decode(jpeg, snow::image::Format::jpeg, "result.jpg");
     require(!decoded.isNull() && decoded.convertToFormat(source.format()) != source,
             "Fixture exposes lossy differences");
+    const auto filename =
+        QStringLiteral("compression-test-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
+    require(settings.setManualSaveFilenameFormat(filename), "Set a unique clipboard export name");
+    require(settings.setCopyImageFileToClipboard(true), "Enable staging for the superseded copy");
+    const QDir clipboardCache(storage::ClipboardFileCache::defaultRootDirectory());
     ImageCompressionWindowCoordinator windows;
     windows.presentSnapshot(snapshot);
     auto* modal = child<AdModal>(&windows, "imageCompressionWindow");
@@ -627,6 +680,11 @@ void runImageCompressionTests() {
     until([&] { return copy->isEnabled() && !copy->busy(); });
     require(!exportNotice(editor) && settings.lastManualSaveFormat() == previousFormat,
             "A superseded copy restores editing without reporting or remembering an export");
+    for (const auto& entry :
+         clipboardCache.entryInfoList({QStringLiteral("export-*")}, QDir::Dirs)) {
+        require(!QDir(entry.absoluteFilePath()).exists(filename + QStringLiteral(".jpg")),
+                "Superseded compression must remove its unpublished file");
+    }
     for (bool withFile : {false, true}) {
         require(settings.setCopyImageFileToClipboard(withFile), "Set clipboard format preference");
         copy->click();
@@ -649,6 +707,8 @@ void runImageCompressionTests() {
                 require(pasted.pixel(x, y) == decoded.pixel(x, y),
                         "Clipboard contains decoded compressed pixels");
         if (withFile) {
+            require(QFileInfo(path).completeBaseName() == filename,
+                    "The test's unique file name reaches the clipboard cache");
             require(settings.manualSaveFormatOptions()
                             .value(QStringLiteral("jpeg"))
                             .toObject()
@@ -664,4 +724,7 @@ void runImageCompressionTests() {
                     "Commit another window's JPEG preference between exports");
         }
     }
+#ifndef Q_OS_WIN
+    clipboardFileSurvivesCloseDuringPublication(snapshot);
+#endif
 }

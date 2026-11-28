@@ -537,6 +537,8 @@ AboutPageWidget::AboutPageWidget(QWidget* parent, UrlOpener urlOpener,
         }
     });
     connect(m_ui->copyFeedbackTimer, &QTimer::timeout, this, &AboutPageWidget::retranslateUi);
+    // Community legal destinations are explicit distribution URLs, not localized
+    // upstream website routes. Keep their exact URLs and the reduced resource UI.
     connect(m_ui->privacyPolicy, &AdButton::clicked, this,
             [this] { openProjectLink(QUrl(snow_shot::app::distribution::privacyPolicyUrl())); });
     connect(m_ui->userAgreement, &AdButton::clicked, this,

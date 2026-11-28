@@ -63,6 +63,10 @@ void translateAction(QAction* action, const char* source) {
 PinnedWindowSelectionController::PinnedWindowSelectionController(QObject* parent,
                                                                  DestroyRecords destroyRecords)
     : QObject(parent), m_destroyRecords(std::move(destroyRecords)) {
+    m_selectionClearTimer.setSingleShot(true);
+    m_selectionClearTimer.setTimerType(Qt::PreciseTimer);
+    connect(&m_selectionClearTimer, &QTimer::timeout, this,
+            &PinnedWindowSelectionController::clearSelection);
     if (qApp)
         qApp->installEventFilter(this);
 }
@@ -131,6 +135,8 @@ void PinnedWindowSelectionController::windowStateChanged(ScreenshotPinnedWindow*
 }
 
 void PinnedWindowSelectionController::notifySelectionChanged() {
+    m_selectionClearTimer.stop();
+    m_pendingClickWindow.clear();
     ++m_selectionRevision;
     if (m_contextMenu)
         m_contextMenu->hide();
@@ -158,6 +164,21 @@ void PinnedWindowSelectionController::deselectWindow(ScreenshotPinnedWindow* win
     if (window)
         window->setWindowSelected(false);
     notifySelectionChanged();
+}
+
+void PinnedWindowSelectionController::deferSelectionClear(ScreenshotPinnedWindow* window) {
+    m_pendingClickWindow = window;
+    m_selectionClearTimer.start(QApplication::doubleClickInterval());
+}
+
+void PinnedWindowSelectionController::resolvePendingSelectionClick(ScreenshotPinnedWindow* window,
+                                                                   bool doubleClick) {
+    if (!m_selectionClearTimer.isActive())
+        return;
+    m_selectionClearTimer.stop();
+    if (!doubleClick || window != m_pendingClickWindow)
+        clearSelection();
+    m_pendingClickWindow.clear();
 }
 
 void PinnedWindowSelectionController::clearSelection() {
@@ -238,10 +259,10 @@ void PinnedWindowSelectionController::stitchWindows(
     }
 }
 
-void PinnedWindowSelectionController::destroyWindows(
+void PinnedWindowSelectionController::destroyDisplayedWindows(
     ScreenshotPinnedWindow* owner, const QList<QPointer<ScreenshotPinnedWindow>>& targets) {
     if (owner && !targets.isEmpty())
-        confirmDestroy(owner, targets, true);
+        confirmDestroy(owner, targets, PinnedBatchScope::Displayed);
 }
 
 void PinnedWindowSelectionController::showFailure(QWidget* owner, const QString& message) {
@@ -302,7 +323,7 @@ void PinnedWindowSelectionController::buildContextMenu(ScreenshotPinnedWindow* o
         add("Copy files to clipboard",
             QStringLiteral("screenshotPinnedSelectionCopyFilesToClipboard"), outlined::Copy());
     connect(copy, &QAction::triggered, this, [owner, targets, valid] {
-        if (valid() && !ScreenshotPinnedWindow::batchSavePending())
+        if (valid())
             owner->copyPinnedWindowFiles(targets);
     });
     auto* copyText =
@@ -324,11 +345,11 @@ void PinnedWindowSelectionController::buildContextMenu(ScreenshotPinnedWindow* o
     auto* save = add("Save as file", QStringLiteral("screenshotPinnedSelectionSaveAsFile"),
                      customIcons::Save());
     connect(save, &QAction::triggered, this, [owner, targets, valid] {
-        if (valid() && !ScreenshotPinnedWindow::batchSavePending())
-            owner->savePinnedWindows(targets, true);
+        if (valid())
+            owner->savePinnedWindows(targets, PinnedBatchScope::OrderedSelection);
     });
-    const auto refreshExports = [copy, save, valid] {
-        const bool enabled = valid() && !ScreenshotPinnedWindow::batchSavePending();
+    const auto refreshExports = [owner, copy, save, valid] {
+        const bool enabled = valid() && owner->canStartBatchExport();
         copy->setEnabled(enabled);
         save->setEnabled(enabled);
     };
@@ -470,7 +491,7 @@ void PinnedWindowSelectionController::buildContextMenu(ScreenshotPinnedWindow* o
     menu->setActionDanger(destroy);
     connect(destroy, &QAction::triggered, this, [this, targets, valid, owner = QPointer(owner)] {
         if (valid() && owner)
-            confirmDestroy(owner, targets);
+            confirmDestroy(owner, targets, PinnedBatchScope::OrderedSelection);
     });
     menu->addSeparator();
     auto* count =
@@ -482,7 +503,8 @@ void PinnedWindowSelectionController::buildContextMenu(ScreenshotPinnedWindow* o
 
 void PinnedWindowSelectionController::confirmDestroy(
     ScreenshotPinnedWindow* owner, const QList<QPointer<ScreenshotPinnedWindow>>& targets,
-    bool displayed) {
+    PinnedBatchScope scope) {
+    const bool displayed = scope == PinnedBatchScope::Displayed;
     QVector<QString> ids;
     QSet<QString> requestedIds;
     for (const auto& window : targets) {

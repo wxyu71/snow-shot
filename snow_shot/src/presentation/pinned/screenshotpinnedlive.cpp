@@ -187,8 +187,8 @@ bool ScreenshotPinnedWindow::liveFrameAvailable() const {
 bool ScreenshotPinnedWindow::liveCommandAllowed(const QString& command) const {
     if (!isLiveWindow())
         return true;
-    if (command == u"apply_crop")
-        return cropApplyAllowed();
+    if (command == u"apply_crop" || command == u"cancel_crop")
+        return cropActionsAllowed();
     if (command == u"copy_to_clipboard" || command == u"save_as_file" ||
         command == u"convert_to_image" || command == u"split_image" ||
         command == u"image_editing" || command == u"image_compression")
@@ -569,7 +569,8 @@ void ScreenshotPinnedWindow::convertLiveToImage() {
 void ScreenshotPinnedWindow::finishLiveConversion(QImage image) {
     if (image.isNull() || !isLiveWindow() || m_closing)
         return;
-    endCropSelection(true);
+    cancelCropInteraction();
+    cancelCropPreparation();
     if (m_interactionCropRect)
         endControlledInteraction(false);
     const QRect geometry = authoritativeContentNativeGeometry();
@@ -607,7 +608,6 @@ void ScreenshotPinnedWindow::finishLiveConversion(QImage image) {
         m_liveStatusView->hide();
     m_canvas->show();
     m_persistenceEnabled = true;
-    m_editingEnabled = m_staticEditingEnabled;
     m_automaticTextRecognition = false;
     m_ocrSupported = screenshotOcrImageWithinPixelLimit(m_originalPixelSize);
     m_firstContentFramePublished = true;

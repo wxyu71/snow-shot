@@ -181,10 +181,6 @@
             <translation>Could not read the selected image files. Please try again</translation>
         </message>
         <message>
-            <source>No available output filename was found</source>
-            <translation>No available output filename was found</translation>
-        </message>
-        <message>
             <source>The editing content could not be prepared for export</source>
             <translation>The editing content could not be prepared for export</translation>
         </message>
@@ -203,10 +199,6 @@
         <message>
             <source>The image is too large or there is not enough memory to load it</source>
             <translation>The image is too large or there is not enough memory to load it</translation>
-        </message>
-        <message>
-            <source>The save directory is not available</source>
-            <translation>The save directory is not available</translation>
         </message>
     </context>
     <context>
@@ -1989,6 +1981,10 @@ Files:
             <translation>Cancel</translation>
         </message>
         <message>
+            <source>Cancel crop</source>
+            <translation>Cancel crop</translation>
+        </message>
+        <message>
             <source>Checkerboard</source>
             <translation>Checkerboard</translation>
         </message>
@@ -2375,6 +2371,10 @@ Files:
             <translation>The pinned image save could not be started</translation>
         </message>
         <message>
+            <source>The pinned window could not be saved to history</source>
+            <translation>The pinned window could not be saved to history</translation>
+        </message>
+        <message>
             <source>The window changed while preparing the image. Please try again</source>
             <translation>The window changed while preparing the image. Please try again</translation>
         </message>
@@ -2523,10 +2523,6 @@ Files:
         <message>
             <source>Save as file</source>
             <translation>Save as file</translation>
-        </message>
-        <message>
-            <source>Text files (*.txt)</source>
-            <translation>Text files (*.txt)</translation>
         </message>
         <message>
             <source>The image could not be loaded</source>

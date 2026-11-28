@@ -1,14 +1,17 @@
 #ifndef SNOW_SHOT_PRESENTATION_SCREENSHOTRECOGNITIONSESSIONCONTROLLER_H
 #define SNOW_SHOT_PRESENTATION_SCREENSHOTRECOGNITIONSESSIONCONTROLLER_H
 
+#include "snow_shot/presentation/screenshotrecognitioncopy.h"
 #include "snow_shot/network/snowshotapiclient.h"
 #include "snow_shot/app/edition.h"
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION
 #include "snow_shot/translation/translationservice.h"
 #endif
 #include "snow_shot/presentation/screenshotocrrecognitionservice.h"
+#include "snow_shot/presentation/screenshotclipboardservice.h"
 #include "snow_shot/presentation/screenshotqrrecognitionservice.h"
 #include "snow_shot/presentation/screenshotrecognitionresults.h"
+#include "snow_shot/presentation/screenshotrecognitionimage.h"
 #include "snow_shot/presentation/screenshotrecognitionmodel.h"
 #include "snow_shot/presentation/screenshotrecognitionfileexport.h"
 
@@ -114,6 +117,8 @@ struct ScreenshotRecognitionSessionActions {
     // Hosts with a separate display presentation propagate prepared colors to it.
     std::function<void(const ScreenshotOcrPresentation&)> applyOcrColors{};
     Qt::WindowModality translationSettingsModality = Qt::WindowModal;
+    // The current host owns export side effects; a standalone session publishes directly.
+    std::function<bool(ScreenshotRecognitionCopy)> requestCopy{};
 };
 
 class ScreenshotRecognitionSessionController final : public QObject {
@@ -158,8 +163,11 @@ class ScreenshotRecognitionSessionController final : public QObject {
     [[nodiscard]] ScreenshotRecognitionResults recognitionResultsSnapshot() const;
     [[nodiscard]] bool hasTarget() const;
     void prefetchText();
+    // Copies the current target's original text independently of its displayed view or draft.
+    bool copySourceTextToClipboard(ScreenshotClipboardService::PublicationId publication = 0,
+                                   std::function<void(bool published)> finished = {});
     void renderTextBackground();
-    void activate(Mode mode);
+    void activate(Mode mode, ScreenshotClipboardService::PublicationId copySourceOnReady = 0);
     void setRecognitionModel(const QString& selection);
     void retryRecognition();
     [[nodiscard]] QString recognitionModelSelection(Mode mode) const;
@@ -204,6 +212,11 @@ class ScreenshotRecognitionSessionController final : public QObject {
     [[nodiscard]] bool originalImageTranslationActive() const;
     // Image-based OCR presentation is visible and eligible for recognition-image export.
     [[nodiscard]] bool originalImageVisible() const;
+    // Freeze the attached on-image view and its currently displayed background for image output.
+    [[nodiscard]] std::optional<ScreenshotRecognitionImageSnapshot>
+    imageExportSnapshot(QImage image, const QRectF& canvasRect, QImage filteredImage,
+                        const QRectF& filteredCanvasRect,
+                        const ScreenshotResultStyle& style = {}) const;
     void setShowOriginalImage(bool show);
     [[nodiscard]] bool showOriginalImage() const {
         return m_showOriginalImage;
@@ -221,7 +234,22 @@ class ScreenshotRecognitionSessionController final : public QObject {
 #if SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION
     [[nodiscard]] ScreenshotDocumentCopyRequest documentCopyRequest() const;
 #endif
-    // Commits active table edits before copying the complete document for file saving.
+    [[nodiscard]] QString clipboardUnavailableMessage() const;
+    using CopyPrepared = std::function<void(std::unique_ptr<QMimeData>, QString)>;
+    // Returns whether the request was accepted. Preparation may finish in a later event turn.
+    bool prepareClipboardCopy(ScreenshotRecognitionCopy intent,
+                              const ScreenshotOcrPresentation* displayed,
+                              ScreenshotClipboardService::PublicationId publication,
+                              CopyPrepared prepared);
+    // Transfer the reservation with the payload so tearing down the view cannot cancel it.
+    bool prepareClipboardCopyForExport(ScreenshotRecognitionCopy intent,
+                                       const ScreenshotOcrPresentation* displayed,
+                                       ScreenshotClipboardService::PublicationId publication,
+                                       CopyPrepared prepared);
+    bool copyToClipboard(ScreenshotRecognitionCopy intent,
+                         const ScreenshotOcrPresentation* displayed = nullptr,
+                         std::function<void(bool)> finished = {},
+                         ScreenshotClipboardService::PublicationId publication = 0);
     // Returns true when a smart full-text copy was accepted (possibly asynchronously).
     bool prepareSmartClipboard(const ScreenshotOcrPresentation* displayedPresentation,
                                bool copyFullTextResult,
@@ -235,9 +263,11 @@ class ScreenshotRecognitionSessionController final : public QObject {
     void handleTableCommandState(const ScreenshotTableCommandState& state);
 
   signals:
+    void clipboardCopyRetired(quint64 publication);
     void textEditingChanged(bool editing);
     void textResultChanged(bool available);
     void translationCompleted();
+    void translationTypographyChanged();
     void textDraftChanged(const QString& text);
     void recognitionResultsChanged();
     void markdownCopied();
@@ -259,6 +289,11 @@ class ScreenshotRecognitionSessionController final : public QObject {
     prepareParagraphs(const QString& key,
                       std::function<void(std::shared_ptr<ScreenshotOcrPresentation>)> completion);
     void cancelParagraphPreparations();
+    void copyPendingSourceText();
+    ScreenshotClipboardService::PublicationId m_pendingSourceCopy = 0;
+    void cancelClipboardCopy();
+    ScreenshotClipboardService::PublicationId m_copyPublication = 0;
+    ScreenshotClipboardCommitHandle m_clipboardCommit;
     [[nodiscard]] bool canPublishUi() const;
     // Asset downloads can surface before recognition acquires a view. Only the current
     // host may publish those prompts, including their eventual cleanup.
@@ -387,7 +422,7 @@ class ScreenshotRecognitionSessionController final : public QObject {
     void applyDocument();
     void showDocumentPreview(std::shared_ptr<const ScreenshotRecognizedDocument> document);
 #if SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION
-    bool copyDocumentPreview(QString selection);
+
 #endif
     void startQrRecognition();
     void startLatexRecognition();
@@ -435,6 +470,7 @@ class ScreenshotRecognitionSessionController final : public QObject {
     void reportOverlayTranslationFailure();
     void failTranslationPreparation(const QString& message);
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION
+    bool eventFilter(QObject* watched, QEvent* event) override;
     bool finishOverlayTranslationLines(snow_shot::translation::TranslationJob* job);
     bool publishOverlayUpdates(const QString& key, ScreenshotOcrPresentation& presentation,
                                const QVector<ScreenshotOcrTextUpdate>& updates);
@@ -460,6 +496,7 @@ class ScreenshotRecognitionSessionController final : public QObject {
     void hideModelDownloadMessage();
     bool showRecognitionMessage() const;
     bool hideRecognitionMessage() const;
+    bool notifyStatusMessage(const QString& message, bool error) const;
     bool showStatus(QString message, bool error) const;
     void cancelOutstandingRequests();
     void resetTargetState();
@@ -595,8 +632,6 @@ class ScreenshotRecognitionSessionController final : public QObject {
     QPointer<QObject> m_documentPreparation;
 #if SNOW_SHOT_ENABLE_DOCUMENT_RECOGNITION
     ScreenshotExportJobHandle m_documentCopyJob;
-    ScreenshotClipboardCommitHandle m_documentClipboardCommit;
-    quint64 m_documentCopyPublication = 0;
 #endif
     Mode m_mode = Mode::Text;
     bool m_active = false;

@@ -12,6 +12,7 @@
 #include "snow_shot/storage/configurationstore.h"
 #include "snow_shot/storage/settingsadapters.h"
 
+#include <QGuiApplication>
 #include <QKeyEvent>
 #include <QKeySequence>
 #include <QMap>
@@ -39,8 +40,12 @@ QString screenshotShortcutForGlobalAction(snow_shot::presentation::GlobalShortcu
     switch (action) {
     case Action::ScreenshotPinToScreen:
         return QStringLiteral("pin_to_screen");
+    case Action::ScreenshotPinWindowToScreen:
+        return QStringLiteral("pin_window_to_screen");
     case Action::ScreenshotOcr:
         return QStringLiteral("text_recognition");
+    case Action::ScreenshotOcrCopy:
+        return QStringLiteral("text_recognition_copy");
     case Action::ScreenshotTranslation:
         return QStringLiteral("text_translation");
     case Action::ScreenshotScrolling:
@@ -281,6 +286,7 @@ struct ScreenshotOverlayShortcutController::Impl {
             QStringLiteral("qr_code_recognition"),
             QStringLiteral("video_recording"),
             QStringLiteral("text_recognition"),
+            QStringLiteral("text_recognition_copy"),
             QStringLiteral("text_translation"),
             QStringLiteral("scrolling_screenshot"),
             QStringLiteral("quick_save"),
@@ -573,6 +579,16 @@ ScreenshotOverlayShortcutController::ScreenshotOverlayShortcutController(
                                     intelligentSelection, std::move(actions))) {}
 
 ScreenshotOverlayShortcutController::~ScreenshotOverlayShortcutController() = default;
+
+void ScreenshotOverlayShortcutController::reconcileExternalDragHolds(
+    QWidget* canvas, Qt::KeyboardModifiers activationModifiers) {
+    if (!m_impl->inputHandler.externalDragActive())
+        return;
+    const auto modifiers = QGuiApplication::queryKeyboardModifiers();
+    for (auto handle : std::as_const(m_impl->externalBindings))
+        m_impl->shortcutManager.reconcileHeldBinding(handle, canvas, modifiers,
+                                                     activationModifiers);
+}
 
 void ScreenshotOverlayShortcutController::reloadConfiguredShortcuts() {
     m_impl->reloadConfiguredShortcuts();

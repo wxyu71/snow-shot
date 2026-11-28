@@ -1,5 +1,4 @@
-#include "snow_shot/shortcuts/screenshotshortcutcontext.h"
-#include "snow_shot/shortcuts/pinnedshortcutcontext.h"
+#include "snow_shot/shortcuts/localshortcutcontext.h"
 #include "snow_shot/storage/configurationstore.h"
 #include "configurationsecretprotection_p.h"
 #include "snow_shot/clouduploadconfiguration.h"
@@ -10,6 +9,7 @@
 #endif
 
 #include "snow_shot/storage/configurationschema.h"
+#include "snow_shot/storage/settingsadapters.h"
 #include "snow_shot/storage/storagelogging.h"
 #include "snow_shot/shortcuts/shortcutbinding.h"
 
@@ -88,13 +88,17 @@ QMap<QString, QJsonValue> overlayFromDocument(const QJsonObject& document) {
             overlay.insert(entry.key, raw);
         }
     }
-    for (const QString& legacyKey : {QStringLiteral("capture_history/enabled"),
-                                     QStringLiteral("screenshot/auto_save_after_copy"),
-                                     QStringLiteral("screenshot/auto_save_after_execution_actions"),
-                                     QStringLiteral("screenshot/copy_after_pinning_to_screen"),
-                                     QStringLiteral("screenshot/screenshot_sound_notification"),
-                                     QStringLiteral("interface/app_font_size_percentage"),
-                                     QStringLiteral("screenshot_selection/selection_target")}) {
+    for (const QString& legacyKey :
+         {QStringLiteral("system/annotation_mode_when_opening_for_editing"),
+          QStringLiteral("context_menu_shortcuts/edit_with_snow_shot"),
+          QStringLiteral("capture_history/enabled"),
+          QStringLiteral("screenshot/auto_save_after_copy"),
+          QStringLiteral("screenshot/auto_save_after_execution_actions"),
+          QStringLiteral("screenshot/copy_after_pinning_to_screen"),
+          QStringLiteral("screenshot/screenshot_sound_notification"),
+          QStringLiteral("interface/app_font_size_percentage"),
+          QStringLiteral("pin_to_screen_shortcuts/show_text_recognition_results"),
+          QStringLiteral("screenshot_selection/selection_target")}) {
         bool present = false;
         const QJsonValue raw = valueAtPath(document, legacyKey, &present);
         if (present) {
@@ -110,7 +114,7 @@ void reconcileLocalShortcutDefaults(MaterializedConfiguration& result,
     if (defaultedKeys.isEmpty())
         return;
 
-    QMap<QString, QList<std::pair<QString, shortcuts::ShortcutBinding>>> assignedByScope;
+    QList<std::pair<QString, shortcuts::ShortcutBinding>> assigned;
     QStringList defaultedLocalKeys;
     const auto bindingsForKey = [&result](const QString& key) {
         return shortcuts::shortcutBindingsFromJson(
@@ -126,34 +130,23 @@ void reconcileLocalShortcutDefaults(MaterializedConfiguration& result,
         if (defaultedKeys.contains(entry.key)) {
             defaultedLocalKeys.push_back(entry.key);
         } else {
-            auto& assigned = assignedByScope[entry.key.section(u'/', 0, 0)];
             for (const auto& binding : bindingsForKey(entry.key))
-                assigned.append({entry.key.section(u'/', 1), binding});
+                assigned.append({entry.key, binding});
         }
     }
     for (const QString& key : defaultedLocalKeys) {
-        auto& assigned = assignedByScope[key.section(u'/', 0, 0)];
         const auto defaults = bindingsForKey(key);
-        const auto actionsMayConflict = [&key](const QString& otherAction) {
-            const QString action = key.section(u'/', 1);
-            if (key.startsWith(QStringLiteral("screenshot_shortcuts/")))
-                return shortcuts::screenshotShortcutActionsMayConflict(action, otherAction);
-            if (key.startsWith(QStringLiteral("pin_to_screen_shortcuts/")))
-                return shortcuts::pinnedShortcutActionsMayConflict(action, otherAction);
-            return true;
-        };
         shortcuts::ShortcutBindingList retained;
         for (const auto& binding : defaults) {
-            if (std::any_of(assigned.cbegin(), assigned.cend(),
-                            [&binding, &actionsMayConflict](const auto& existing) {
-                                return actionsMayConflict(existing.first) &&
-                                       shortcuts::bindingsConflict(
-                                           existing.second, binding,
-                                           shortcuts::ShortcutPolicy::Application);
-                            }))
+            if (std::any_of(
+                    assigned.cbegin(), assigned.cend(), [&binding, &key](const auto& existing) {
+                        return shortcuts::localShortcutKeysMayConflict(key, existing.first) &&
+                               shortcuts::bindingsConflict(existing.second, binding,
+                                                           shortcuts::ShortcutPolicy::Application);
+                    }))
                 continue;
             retained.push_back(binding);
-            assigned.push_back({key.section(u'/', 1), binding});
+            assigned.push_back({key, binding});
         }
         if (retained.size() == defaults.size())
             continue;
@@ -175,9 +168,24 @@ MaterializedConfiguration materializeConfiguration(const QMap<QString, QJsonValu
     result.document = std::move(document);
     const bool mutateDocument = compatibility != ConfigurationCompatibility::FutureVersion;
     const bool replaceAll = policy == ConfigurationOverlayPolicy::ReplaceAll;
-    const QMap<QString, QJsonValue> currentOverlay =
-        mutateDocument ? ConfigurationSchema::migrateLegacyValues(overlay) : overlay;
+    QMap<QString, QJsonValue> currentOverlay =
+        mutateDocument ? ConfigurationSchema::migrateLegacyValues(
+                             overlay, schemaVersion,
+                             defaults.value(QStringLiteral("system/context_menu_mode")).toString())
+                       : overlay;
+    mouse::reconcile(currentOverlay);
     if (mutateDocument) {
+        for (const auto& [group, key] :
+             {std::pair{QStringLiteral("system"),
+                        QStringLiteral("annotation_mode_when_opening_for_editing")},
+              std::pair{QStringLiteral("context_menu_shortcuts"),
+                        QStringLiteral("edit_with_snow_shot")}}) {
+            auto fields = result.document.value(group).toObject();
+            if (!fields.take(key).isUndefined()) {
+                result.document.insert(group, fields);
+                result.dirty = !replaceAll;
+            }
+        }
         auto history = result.document.value(QStringLiteral("capture_history")).toObject();
         if (history.contains(QStringLiteral("enabled"))) {
             history.remove(QStringLiteral("enabled"));
@@ -200,6 +208,12 @@ MaterializedConfiguration materializeConfiguration(const QMap<QString, QJsonValu
                 result.document.insert(QStringLiteral("screenshot"), screenshot);
                 result.dirty = !replaceAll;
             }
+        }
+        auto pinnedShortcuts =
+            result.document.value(QStringLiteral("pin_to_screen_shortcuts")).toObject();
+        if (!pinnedShortcuts.take(QStringLiteral("show_text_recognition_results")).isUndefined()) {
+            result.document.insert(QStringLiteral("pin_to_screen_shortcuts"), pinnedShortcuts);
+            result.dirty = !replaceAll;
         }
         QJsonObject screenshotSelection =
             result.document.value(QStringLiteral("screenshot_selection")).toObject();
@@ -340,6 +354,22 @@ MaterializedConfiguration materializeConfiguration(const QMap<QString, QJsonValu
     }
 
     reconcileLocalShortcutDefaults(result, defaultedShortcutKeys, mutateDocument, replaceAll);
+    QSet<QString> assignedMenuKeys;
+    for (auto it = result.values.lowerBound(QStringLiteral("context_menu_shortcuts/"));
+         it != result.values.end() && it.key().startsWith(u"context_menu_shortcuts/"); ++it) {
+        const auto bindings = shortcuts::shortcutBindingsFromJson(it.value(), false);
+        if (bindings.isEmpty())
+            continue;
+        const auto& key = bindings.first().portableText;
+        if (assignedMenuKeys.contains(key)) {
+            it.value() = QJsonArray{};
+            if (mutateDocument) {
+                insertPath(&result.document, it.key(), it.value());
+                result.dirty = true;
+            }
+        }
+        assignedMenuKeys.insert(key);
+    }
 
     int resolvedVersion = schemaVersion;
     const int currentVersion = ConfigurationSchema::currentVersion();
@@ -476,6 +506,17 @@ QMap<QString, QJsonValue> ConfigurationStore::snapshot() const {
     return m_values;
 }
 
+mouse::Bindings ConfigurationStore::mouseBindings() const {
+    QMutexLocker locker(&m_mutex);
+    return m_mouseBindings;
+}
+
+std::optional<mouse::Action> ConfigurationStore::mouseAction(mouse::Category category,
+                                                             mouse::Binding binding) const {
+    QMutexLocker locker(&m_mutex);
+    return m_mouseBindings.match(category, binding);
+}
+
 quint64 ConfigurationStore::revision() const {
     QMutexLocker locker(&m_mutex);
     return m_revision;
@@ -517,6 +558,8 @@ bool ConfigurationStore::setValue(const QString& key, const QJsonValue& value) {
 bool ConfigurationStore::setValues(const QMap<QString, QJsonValue>& values) {
     QMutexLocker mutationLock(&m_mutationMutex);
     QMap<QString, QJsonValue> normalizedValues;
+    const bool mouseChanged = std::any_of(values.keyBegin(), values.keyEnd(),
+                                          [](const QString& key) { return mouse::isKey(key); });
     for (auto it = values.cbegin(); it != values.cend(); ++it) {
         if (!ConfigurationSchema::contains(it.key())) {
             rejectMutation(it.key(), QStringLiteral("The configuration key is not supported"));
@@ -531,6 +574,19 @@ bool ConfigurationStore::setValues(const QMap<QString, QJsonValue>& values) {
         normalizedValues.insert(it.key(), normalized.value);
     }
 
+    QMap<QString, QJsonValue> menuShortcuts;
+    for (auto it = normalizedValues.lowerBound(QStringLiteral("context_menu_shortcuts/"));
+         it != normalizedValues.end() && it.key().startsWith(u"context_menu_shortcuts/"); ++it)
+        menuShortcuts.insert(it.key(), it.value());
+    if (!menuShortcuts.isEmpty() && !localShortcutChangesValid(snapshot(), menuShortcuts)) {
+        rejectMutation(menuShortcuts.firstKey(),
+                       tr("This context menu shortcut is already assigned"));
+        return false;
+    }
+    if (mouseChanged && !mouse::changesValid(snapshot(), normalizedValues)) {
+        rejectMutation(normalizedValues.firstKey(), tr("The mouse operation is already assigned."));
+        return false;
+    }
     QVector<QPair<QString, QJsonValue>> changed;
     {
         QMutexLocker locker(&m_mutex);
@@ -552,6 +608,8 @@ bool ConfigurationStore::setValues(const QMap<QString, QJsonValue>& values) {
         if (changed.isEmpty()) {
             return true;
         }
+        if (mouseChanged)
+            m_mouseBindings = mouse::Bindings(m_values);
         m_dirty = true;
         ++m_revision;
     }
@@ -616,6 +674,7 @@ bool ConfigurationStore::applySnapshot(const QMap<QString, QJsonValue>& values, 
             return true;
         }
         m_values = std::move(materialized.values);
+        m_mouseBindings = mouse::Bindings(m_values);
         m_document = std::move(materialized.document);
         m_dirty = true;
         ++m_revision;
@@ -775,6 +834,7 @@ void ConfigurationStore::load() {
     {
         QMutexLocker locker(&m_mutex);
         m_values = std::move(loaded);
+        m_mouseBindings = mouse::Bindings(m_values);
         m_document = std::move(document);
         m_compatibility = compatibility;
         m_dirty = dirty && compatibility != ConfigurationCompatibility::FutureVersion;

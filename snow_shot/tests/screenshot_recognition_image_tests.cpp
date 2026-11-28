@@ -79,7 +79,8 @@ void translationsNeverExceedTheirSourceFontSize() {
                     "short-text regression must exercise enlargement in the uncapped fitter");
             require(std::abs(fittedFontSize(translated[0]) - baseline) < 0.0001,
                     "a short translation can retain the source baseline without filling its box");
-            translated[0].text = original.text.repeated(4);
+            // A vertical box can accommodate several columns before the source size must drop.
+            translated[0].text = original.text.repeated(16);
             require(fittedFontSize(translated[0]) < baseline,
                     "long translations may shrink below the cap");
         }
@@ -278,6 +279,18 @@ void smartMergeExportSamplesTheSourceBeforeTheLiveFillArrives() {
         for (int x = 20; x < 280 && !foundInk; ++x)
             foundInk = exported.pixelColor(x, y) == ink;
     require(foundInk, "the exported translation paints in the source ink color");
+
+    snapshot.displayedBackgroundOnly = true;
+    const auto currentView = renderScreenshotRecognitionImage(snapshot);
+    require(!currentView.isNull() && currentView.pixelColor(85, 18) == ink &&
+                currentView != exported,
+            "an image export keeps the visible pixels before the filter arrives");
+    prepared.displayedBackgroundOnly = true;
+    require(renderScreenshotRecognitionImage(prepared) == exported,
+            "image export includes a filter as soon as it is displayed");
+    snapshot.lines.clear();
+    require(renderScreenshotRecognitionImage(snapshot).cacheKey() == snapshot.image.cacheKey(),
+            "an empty recognition view exports the shared base raster directly");
 }
 
 void overflowingSingleLineTranslationWrapsInExport() {

@@ -69,6 +69,26 @@ ScreenshotPinnedWindow* fixturePin(const QString& id) {
     return found;
 }
 
+void cancellingWhileRecapturePreparesReleasesInput() {
+    QWidget hiddenWindow;
+    bool inputTransparent = false;
+    ScreenshotController controller;
+    QImage image(32, 32, QImage::Format_RGBA8888);
+    image.fill(Qt::white);
+    ScreenshotSelectionParams selection;
+    selection.selection = QRect(0, 0, 32, 32);
+    ScreenshotControllerTestAccess::prepareSelection(controller, std::move(image), selection);
+    ScreenshotControllerTestAccess::prepareRecaptureInput(controller, hiddenWindow,
+                                                          inputTransparent);
+    require(inputTransparent && !hiddenWindow.isVisible(),
+            "recapture preparation owns input state and a hidden window");
+
+    controller.mcpCancelCapture();
+
+    require(!inputTransparent, "cancelling must immediately restore prepared recapture input");
+    require(!hiddenWindow.isVisible(), "cancelling must leave retired capture windows hidden");
+}
+
 void reportRestoreFailure(const QString& id, const ScreenshotController& controller) {
     auto* pin = fixturePin(id);
     std::cerr << "restore fixture id=" << qPrintable(id)
@@ -303,26 +323,63 @@ void capturePreparationCannotReplaceWorkCreatedWhileClosingABlocker() {
 }
 
 void capturePreparationRechecksAfterActivityObservers() {
+    for (const bool historyEdit : {false, true}) {
+        int starts = 0;
+        int retires = 0;
+        int waits = 0;
+        std::weak_ptr<int> pendingWait;
+        ScreenshotController controller;
+        controller.setPrepareCaptureAcquisition([&] {
+            const auto pending = std::make_shared<int>(1);
+            pendingWait = pending;
+            return [pending, &waits] { waits += *pending; };
+        });
+        QObject::connect(&controller, &ScreenshotController::captureActivityChanged, &controller,
+                         [&](const QString& source, bool active) {
+                             if (source != QStringLiteral("selection"))
+                                 return;
+                             if (active) {
+                                 require(!pendingWait.expired(),
+                                         "activity must follow acquisition preparation");
+                                 ++starts;
+                                 controller.setCaptureSuspended(true);
+                             } else {
+                                 ++retires;
+                             }
+                         });
+        if (historyEdit)
+            controller.editHistoryRecord(QStringLiteral("blocked-history-edit"));
+        else
+            require(!controller.captureForAction(ScreenshotController::CaptureAction::Copy),
+                    "activity observer suspension must decline capture");
+        require(
+            starts == 1 && retires == 1 && !controller.captureAcquisitionActive(),
+            "activity observer suspension declines before native dispatch and retires activity");
+        require(pendingWait.expired() && waits == 0,
+                "the abandoned capture must release its compositor wait without running it");
+        controller.setCaptureSuspended(false);
+        require(controller.captureAvailable(),
+                "activity observer refusal releases the preparation reservation");
+    }
+}
+
+void plainGlobalMouseScreenshotHasNoPendingAction() {
+    using Action = snow_shot::presentation::settings::SettingsGlobalMouseAction;
     int starts = 0;
-    int retires = 0;
     ScreenshotController controller;
     QObject::connect(&controller, &ScreenshotController::captureActivityChanged, &controller,
                      [&](const QString& source, bool active) {
-                         if (source != QStringLiteral("selection"))
+                         if (source != QStringLiteral("selection") || !active)
                              return;
-                         if (active) {
-                             ++starts;
-                             controller.setCaptureSuspended(true);
-                         } else {
-                             ++retires;
-                         }
+                         ++starts;
+                         require(ScreenshotControllerTestAccess::pendingCaptureAction(controller) ==
+                                     ScreenshotController::CaptureAction::None,
+                                 "a plain global mouse screenshot must enter normal editing");
+                         controller.setCaptureSuspended(true);
                      });
-    require(!controller.captureForAction(ScreenshotController::CaptureAction::Copy) &&
-                starts == 1 && retires == 1 && !controller.captureAcquisitionActive(),
-            "activity observer suspension declines before native dispatch and retires activity");
-    controller.setCaptureSuspended(false);
-    require(controller.captureAvailable(),
-            "activity observer refusal releases the preparation reservation");
+    require(!controller.beginGlobalMouseCapture(Action::Screenshot, 1, QPointF(2, 3)) &&
+                starts == 1 && !controller.captureAcquisitionActive(),
+            "plain screenshot must prepare capture before the fixture blocks native acquisition");
 }
 
 void capturePreparationSurvivesControllerRetirement() {
@@ -482,7 +539,11 @@ int runScreenshotControllerLifetimeTests(int argc, char** argv) {
     drainRetiredCaptureSurfaces();
     capturePreparationRechecksAfterActivityObservers();
     drainRetiredCaptureSurfaces();
+    plainGlobalMouseScreenshotHasNoPendingAction();
+    drainRetiredCaptureSurfaces();
     capturePreparationSurvivesControllerRetirement();
+    drainRetiredCaptureSurfaces();
+    cancellingWhileRecapturePreparesReleasesInput();
     drainRetiredCaptureSurfaces();
     delayedPresentationWaitsForSuspensionRestoration();
     acceptedRestorationBlocksApplicationTransitionsUntilPresentationSettles();

@@ -997,6 +997,8 @@ QVariant SettingsRuntimeSession::readValue(const SettingsFieldDescriptor& descri
             } else if constexpr (std::is_same_v<Payload, SettingsLocalShortcutDefinition>) {
                 return shortcutListVariant(
                     m_backend.localShortcuts(payload.scope, payload.shortcutId));
+            } else if constexpr (std::is_same_v<Payload, SettingsMouseOperationDefinition>) {
+                return mouse::encode(m_backend.mouseBindings().get(payload.action));
             } else if constexpr (std::is_same_v<Payload, SettingsGlobalMouseActionDefinition>) {
                 return globalMouseCombinationVariant(
                     m_backend.globalMouseCombination(payload.action));
@@ -1090,6 +1092,9 @@ bool SettingsRuntimeSession::writeValue(const SettingsFieldDescriptor& descripto
             } else if constexpr (std::is_same_v<Payload, SettingsLocalShortcutDefinition>) {
                 return m_backend.applyLocalShortcuts(payload.scope, payload.shortcutId,
                                                      shortcutListValue(value));
+            } else if constexpr (std::is_same_v<Payload, SettingsMouseOperationDefinition>) {
+                const auto binding = mouse::decode(QJsonValue::fromVariant(value));
+                return binding && m_backend.applyMouseOperation(payload.action, *binding);
             } else if constexpr (std::is_same_v<Payload, SettingsGlobalMouseActionDefinition>) {
                 if (!value.canConvert<SettingsGlobalMouseCombination>()) {
                     return false;
@@ -1248,8 +1253,14 @@ bool SettingsRuntimeSession::valuesEqual(const SettingsFieldDescriptor& descript
         std::holds_alternative<SettingsShortcutActionDefinition>(descriptor.definition->payload)) {
         return shortcutListValue(first) == shortcutListValue(second);
     }
-    if (std::holds_alternative<SettingsMultiSelectDefinition>(descriptor.definition->payload)) {
-        return stringListValue(first) == stringListValue(second);
+    if (const auto* multi =
+            std::get_if<SettingsMultiSelectDefinition>(&descriptor.definition->payload)) {
+        const auto firstValues = stringListValue(first);
+        const auto secondValues = stringListValue(second);
+        if (exportTriggerForBinding(multi->binding))
+            return std::is_permutation(firstValues.cbegin(), firstValues.cend(),
+                                       secondValues.cbegin(), secondValues.cend());
+        return firstValues == secondValues;
     }
     if (std::holds_alternative<SettingsCustomDefinition>(descriptor.definition->payload)) {
         const auto& custom = std::get<SettingsCustomDefinition>(descriptor.definition->payload);
@@ -1642,6 +1653,11 @@ bool SettingsRuntimeSession::applyLocalShortcuts(SettingsLocalShortcutScope scop
         return submitDraft(descriptor->id, shortcutListVariant(canonical));
     }
     return descriptor != nullptr && submitDraft(descriptor->id, shortcutListVariant(shortcuts));
+}
+
+bool SettingsRuntimeSession::applyContextMenuShortcutBatch(
+    const QMap<QString, QJsonValue>& changes) {
+    return m_backend.applyContextMenuShortcutBatch(changes);
 }
 
 quint64 SettingsRuntimeSession::suspendGlobalShortcuts() {

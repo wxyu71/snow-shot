@@ -99,6 +99,37 @@ snow_add_deterministic_test_runner()
         self.assertEqual(selected, {'renamed-community-ocr-contract'})
 
 
+    def test_nsis_registration_is_not_a_community_native_contract(self):
+        # Exercise the same registration function as the Windows application,
+        # without requiring Qt, PowerShell or the obsolete NSIS compiler.
+        source = self.source / 'installer-labels'
+        source.mkdir()
+        build = source / 'build'
+        (source / 'CMakeLists.txt').write_text(f'''
+cmake_minimum_required(VERSION 3.21)
+project(SnowInstallerLabels NONE)
+enable_testing()
+list(APPEND CMAKE_MODULE_PATH "{(ROOT / 'cmake').as_posix()}")
+include(SnowShotNsisInstallerTests)
+snow_shot_add_nsis_running_app_test("${{CMAKE_COMMAND}}" "fixture.ps1")
+add_test(NAME community-native COMMAND "${{CMAKE_COMMAND}}" -E true)
+set_tests_properties(community-native PROPERTIES LABELS "unit;community-fast")
+''', encoding='utf-8')
+        configured = self.run_command(CMAKE, '-S', str(source), '-B', str(build))
+        self.assertEqual(configured.returncode, 0, configured.stdout + configured.stderr)
+        for label, expected in (
+            ('^community-fast$', {'community-native'}),
+            ('^installer-nsis$', {'snow-shot-installer-running-app-tests'}),
+            ('^unit$', {'community-native', 'snow-shot-installer-running-app-tests'}),
+        ):
+            with self.subTest(label=label):
+                result = self.run_command(CTEST, '--test-dir', str(build),
+                                          '--show-only=json-v1', '-L', label)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual({item['name'] for item in json.loads(result.stdout)['tests']},
+                                 expected)
+
+
 
 @unittest.skipUnless(CMAKE and CTEST, 'CMake and CTest are required')
 class ClipboardResourcePolicyTests(unittest.TestCase):

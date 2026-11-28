@@ -1,5 +1,4 @@
-#include "snow_shot/shortcuts/screenshotshortcutcontext.h"
-#include "snow_shot/shortcuts/pinnedshortcutcontext.h"
+#include "snow_shot/shortcuts/localshortcutcontext.h"
 #include "snow_shot/storage/settingsadapters.h"
 #include "snow_shot/shortcuts/annotationoptionshortcut.h"
 #include "snow_shot/storage/floatingtoolbarsettings.h"
@@ -12,6 +11,7 @@
 
 #include "capturehistorypolicy_p.h"
 
+#include <QGuiApplication>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -30,6 +30,26 @@ ConfigurationStore& cache() {
         static_cast<void>(storage.initialize());
     }
     return storage.configuration();
+}
+
+// Older in-process callers still configure gestures by choosing an action. Transfer
+// that gesture atomically so a live window sees the same bindings as the settings page.
+bool setLegacyMouseAction(const QString& key, mouse::Category category, mouse::Binding gesture,
+                          const QString& target) {
+    if (!ConfigurationSchema::normalize(key, target).valid)
+        return false;
+    mouse::Values edits{{key, target}};
+    const auto bindings = cache().mouseBindings();
+    for (const auto& action : mouse::definitions()) {
+        if (action.category != category || action.kind != mouse::Kind::Click ||
+            action.action == mouse::Action::Back)
+            continue;
+        if (QLatin1StringView(action.id) == target)
+            edits.insert(action.key(), mouse::encode(gesture));
+        else if (mouse::conflict(bindings.get(action.action), gesture))
+            edits.insert(action.key(), QJsonObject{});
+    }
+    return cache().setValues(edits);
 }
 
 QStringList stringList(const QJsonValue& value) {
@@ -112,6 +132,7 @@ const QStringList& screenshotShortcutActionIds() {
             QStringLiteral("qr_code_recognition"),
             QStringLiteral("video_recording"),
             QStringLiteral("text_recognition"),
+            QStringLiteral("text_recognition_copy"),
             QStringLiteral("text_translation"),
             QStringLiteral("scrolling_screenshot"),
             QStringLiteral("quick_save"),
@@ -141,7 +162,6 @@ const QStringList& pinToScreenShortcutActionIds() {
         QStringLiteral("print"),
         QStringLiteral("save_as_file"),
         QStringLiteral("upload_to_cloud"),
-        QStringLiteral("show_text_recognition_results"),
         QStringLiteral("drawing_mode"),
         QStringLiteral("resize_window"),
         QStringLiteral("toggle_playback"),
@@ -172,6 +192,13 @@ const QStringList& pinToScreenShortcutActionIds() {
         QStringLiteral("flip_horizontal"),
         QStringLiteral("flip_vertical"),
         QStringLiteral("reset_transform"),
+        QStringLiteral("split_image"),
+        QStringLiteral("image_editing"),
+        QStringLiteral("image_compression"),
+        QStringLiteral("show_all_windows"),
+        QStringLiteral("hide_other_windows"),
+        QStringLiteral("close_other_windows"),
+        QStringLiteral("close_all_windows"),
         QStringLiteral("batch_select_all"),
         QStringLiteral("batch_image_stitching"),
         QStringLiteral("batch_copy_files_to_clipboard"),
@@ -223,13 +250,18 @@ struct LocalShortcutGroup {
     LocalShortcutPolicy policy;
 };
 
-const std::array<LocalShortcutGroup, 4>& localShortcutGroups() {
-    static const std::array<LocalShortcutGroup, 4> groups{{
+const std::array<LocalShortcutGroup, 5>& localShortcutGroups() {
+    static const std::array<LocalShortcutGroup, 5> groups{{
         {QStringLiteral("screenshot_shortcuts/"), screenshotShortcutActionIds(),
          LocalShortcutPolicy::Screenshot},
         {QStringLiteral("drawing_shortcuts/"), drawingShortcutToolIds(),
          LocalShortcutPolicy::Drawing},
         {QStringLiteral("pin_to_screen_shortcuts/"), pinToScreenShortcutActionIds(),
+         LocalShortcutPolicy::WindowCommand},
+        {QStringLiteral("context_menu_shortcuts/"),
+         {QStringLiteral("pin_to_screen"), QStringLiteral("pin_to_screen_and_annotate"),
+          QStringLiteral("stitch_images"), QStringLiteral("split_images"),
+          QStringLiteral("edit_images"), QStringLiteral("compress_images")},
          LocalShortcutPolicy::WindowCommand},
         {QStringLiteral("screen_recording_shortcuts/"), screenRecordingShortcutActionIds(),
          LocalShortcutPolicy::WindowCommand},
@@ -763,6 +795,16 @@ bool ShortcutSettings::setScreenshotQuickSave(
     return setShortcutValue(QStringLiteral("global_shortcuts/screenshot_quick_save"), bindings);
 }
 
+shortcuts::ShortcutBindingList ShortcutSettings::screenshotPinWindowToScreen() const {
+    return shortcutValue(QStringLiteral("global_shortcuts/screenshot_pin_window_to_screen"));
+}
+
+bool ShortcutSettings::setScreenshotPinWindowToScreen(
+    const shortcuts::ShortcutBindingList& bindings) const {
+    return setShortcutValue(QStringLiteral("global_shortcuts/screenshot_pin_window_to_screen"),
+                            bindings);
+}
+
 shortcuts::ShortcutBindingList ShortcutSettings::screenshotFullScreen() const {
     return shortcutValue(QStringLiteral("global_shortcuts/screenshot_full_screen"));
 }
@@ -1139,7 +1181,9 @@ QString ScreenshotSettings::doubleClickAction() const {
 }
 
 bool ScreenshotSettings::setDoubleClickAction(const QString& action) const {
-    return cache().setValue(QStringLiteral("screenshot/double_click_action"), action);
+    return setLegacyMouseAction(QStringLiteral("screenshot/double_click_action"),
+                                mouse::Category::Screenshot,
+                                {mouse::Kind::DoubleClick, Qt::LeftButton}, action);
 }
 
 QString ScreenshotSettings::middleMouseButtonAction() const {
@@ -1147,7 +1191,9 @@ QString ScreenshotSettings::middleMouseButtonAction() const {
 }
 
 bool ScreenshotSettings::setMiddleMouseButtonAction(const QString& action) const {
-    return cache().setValue(QStringLiteral("screenshot/middle_mouse_button_action"), action);
+    return setLegacyMouseAction(QStringLiteral("screenshot/middle_mouse_button_action"),
+                                mouse::Category::Screenshot, {mouse::Kind::Click, Qt::MiddleButton},
+                                action);
 }
 
 bool ScreenshotSettings::quickSelectionModification() const {
@@ -1174,25 +1220,39 @@ bool ScreenshotSettings::setSelectionResizeMode(const QString& mode) const {
     return cache().setValue(QStringLiteral("screenshot/selection_resize_mode"), mode);
 }
 
-ExportTasks ScreenshotSettings::exportTasks(ExportTrigger trigger) const {
-    const auto& row = exportTaskRow(trigger);
-    const auto values = cache().value(row.key.toString()).toArray();
-    ExportTasks tasks;
-    for (const auto& value : values) {
-        const auto id = value.toString();
-        for (const auto& option : exportTaskOptions) {
-            if (option.id == id) {
-                tasks |= option.task;
-                break;
-            }
-        }
+QStringList ScreenshotSettings::selectedExportTaskIds(ExportTrigger trigger) const {
+    const auto key = exportTaskRow(trigger).key.toString();
+    const auto scopedKey = exportTaskScopedKey(trigger);
+    if (scopedKey.isEmpty())
+        return stringList(cache().value(key));
+
+    const auto values = cache().snapshot();
+    return stringList(values.value(key)) + stringList(values.value(scopedKey));
+}
+
+bool ScreenshotSettings::setSelectedExportTaskIds(ExportTrigger trigger,
+                                                  const QStringList& ids) const {
+    const auto key = exportTaskRow(trigger).key.toString();
+    const auto scopedKey = exportTaskScopedKey(trigger);
+    if (scopedKey.isEmpty())
+        return cache().setValue(key, stringArray(ids));
+
+    const auto scopedOptions = exportTaskScopedOptionIds(trigger);
+    QJsonArray allTypes;
+    QJsonArray scoped;
+    for (const auto& id : ids) {
+        auto& group = scopedOptions.contains(id.trimmed(), Qt::CaseInsensitive) ? scoped : allTypes;
+        group.append(id);
     }
-    return tasks & row.allowed;
+    return cache().setValues({{key, allTypes}, {scopedKey, scoped}});
+}
+
+ExportTasks ScreenshotSettings::exportTasks(ExportTrigger trigger, ScreenshotType type) const {
+    return resolveExportTasks(trigger, type, selectedExportTaskIds(trigger));
 }
 
 bool ScreenshotSettings::setExportTasks(ExportTrigger trigger, ExportTasks tasks) const {
-    const auto& row = exportTaskRow(trigger);
-    return cache().setValue(row.key.toString(), stringArray(exportTaskIds(tasks & row.allowed)));
+    return setSelectedExportTaskIds(trigger, exportTaskIds(tasks & exportTaskRow(trigger).allowed));
 }
 
 bool ScreenshotSettings::copyImageFileToClipboard() const {
@@ -1570,8 +1630,23 @@ bool ScreenshotSettings::setWindowElementApi(const QString& api) const {
     return cache().setValue(QStringLiteral("screenshot/window_element_api"), api);
 }
 
-bool ScreenshotShortcutSettings::isReservedShortcut(const shortcuts::ShortcutBinding& shortcut) {
-    return isReservedLocalShortcut(shortcut);
+bool ScreenshotShortcutSettings::isReservedShortcut(const shortcuts::ShortcutBinding& shortcut,
+                                                    const QString& actionId) {
+    if (isReservedLocalShortcut(shortcut))
+        return true;
+    if (actionId != QStringLiteral("text_recognition_copy"))
+        return false;
+
+    // Select Current Screen uses Qt's Select All bindings even with a confirmed selection.
+    const auto selectAll = qobject_cast<QGuiApplication*>(QCoreApplication::instance())
+                               ? QKeySequence::keyBindings(QKeySequence::SelectAll)
+                               : QList<QKeySequence>{QKeySequence(Qt::CTRL | Qt::Key_A)};
+    return std::ranges::any_of(selectAll, [&shortcut](const QKeySequence& sequence) {
+        return shortcuts::bindingsConflict(
+            shortcut,
+            shortcuts::bindingFromPortableText(sequence.toString(QKeySequence::PortableText)),
+            shortcuts::ShortcutPolicy::Application);
+    });
 }
 
 bool ScreenshotShortcutSettings::isReservedShortcutAllowed(
@@ -1600,68 +1675,88 @@ bool ScreenshotShortcutSettings::isReservedShortcutAllowed(
     return false;
 }
 
+bool localShortcutChangesValid(const QMap<QString, QJsonValue>& current,
+                               const QMap<QString, QJsonValue>& changes, bool validateUnchanged) {
+    QSet<QString> affectedGroups;
+    for (auto it = changes.cbegin(); it != changes.cend(); ++it) {
+        const auto* group = localShortcutGroup(it.key());
+        if (group == nullptr)
+            return false;
+        affectedGroups.insert(group->prefix);
+    }
+
+    struct Assignment {
+        QString key;
+        shortcuts::ShortcutBinding binding;
+        bool affected;
+    };
+    QList<Assignment> seen;
+    for (const auto& group : localShortcutGroups()) {
+        const bool checkGroup = affectedGroups.contains(group.prefix);
+        const bool sharedScope =
+            (group.policy == LocalShortcutPolicy::Screenshot &&
+             affectedGroups.contains(QStringLiteral("pin_to_screen_shortcuts/"))) ||
+            (group.prefix == QStringLiteral("pin_to_screen_shortcuts/") &&
+             affectedGroups.contains(QStringLiteral("screenshot_shortcuts/")));
+        if (!checkGroup && !sharedScope)
+            continue;
+        for (const QString& id : group.ids) {
+            const QString key = group.prefix + id;
+            const auto previous = current.value(key);
+            const auto value = changes.value(key, previous);
+            const bool affected = (validateUnchanged && checkGroup) || value != previous;
+            const auto bindings = shortcuts::shortcutBindingsFromJson(
+                value, ConfigurationSchema::allowsModifierOnlyShift(key), -1, nullptr, nullptr,
+                key == QStringLiteral("screenshot_shortcuts/toggle_guides"),
+                shortcuts::ShortcutPolicy::Application);
+            for (const auto& binding : bindings) {
+                if (changes.contains(key) &&
+                    group.prefix == QStringLiteral("pin_to_screen_shortcuts/") &&
+                    PinToScreenShortcutSettings::isReservedShortcut(binding))
+                    return false;
+                if (affected && group.policy == LocalShortcutPolicy::Drawing &&
+                    DrawingShortcutSettings::isReservedShortcut(binding) &&
+                    !DrawingShortcutSettings::isReservedShortcutAllowed(id, binding)) {
+                    return false;
+                }
+                if (affected && group.policy == LocalShortcutPolicy::Screenshot &&
+                    ScreenshotShortcutSettings::isReservedShortcut(binding, id) &&
+                    !ScreenshotShortcutSettings::isReservedShortcutAllowed(id, binding)) {
+                    return false;
+                }
+                if (std::any_of(seen.cbegin(), seen.cend(), [&](const auto& existing) {
+                        if (!(affected || existing.affected))
+                            return false;
+                        // Old configurations could explicitly share a key across these scopes.
+                        // Permit unrelated changes while the two assignments are untouched.
+                        if (!existing.key.startsWith(group.prefix) && !changes.contains(key) &&
+                            !changes.contains(existing.key))
+                            return false;
+                        return shortcuts::localShortcutKeysMayConflict(existing.key, key) &&
+                               shortcuts::bindingsConflict(existing.binding, binding,
+                                                           shortcuts::ShortcutPolicy::Application);
+                    })) {
+                    return false;
+                }
+                seen.push_back({key, binding, affected});
+            }
+        }
+    }
+    return true;
+}
+
 bool setLocalShortcutValuesAtomic(const QMap<QString, QJsonValue>& values) {
     auto& configuration = cache();
     return configuration.mutateIfRevision(configuration.revision(), [&configuration, &values]() {
         QMap<QString, QJsonValue> normalizedValues;
-        QSet<QString> affectedGroups;
         for (auto it = values.cbegin(); it != values.cend(); ++it) {
-            const auto* group = localShortcutGroup(it.key());
-            if (group == nullptr) {
-                return false;
-            }
             const auto normalized = ConfigurationSchema::normalize(it.key(), it.value());
-            if (!normalized.valid) {
+            if (!normalized.valid)
                 return false;
-            }
             normalizedValues.insert(it.key(), normalized.value);
-            affectedGroups.insert(group->prefix);
         }
-
-        const auto current = configuration.snapshot();
-        for (const auto& group : localShortcutGroups()) {
-            if (!affectedGroups.contains(group.prefix)) {
-                continue;
-            }
-            QList<std::pair<QString, shortcuts::ShortcutBinding>> seen;
-            for (const QString& id : group.ids) {
-                const QString key = group.prefix + id;
-                const auto value = normalizedValues.contains(key) ? normalizedValues.value(key)
-                                                                  : current.value(key);
-                const auto bindings = shortcuts::shortcutBindingsFromJson(
-                    value, ConfigurationSchema::allowsModifierOnlyShift(key), -1, nullptr, nullptr,
-                    key == QStringLiteral("screenshot_shortcuts/toggle_guides"));
-                for (const auto& binding : bindings) {
-                    if (group.policy == LocalShortcutPolicy::Drawing &&
-                        DrawingShortcutSettings::isReservedShortcut(binding) &&
-                        !DrawingShortcutSettings::isReservedShortcutAllowed(id, binding)) {
-                        return false;
-                    }
-                    if (group.policy == LocalShortcutPolicy::Screenshot &&
-                        ScreenshotShortcutSettings::isReservedShortcut(binding) &&
-                        !ScreenshotShortcutSettings::isReservedShortcutAllowed(id, binding)) {
-                        return false;
-                    }
-                    if (std::any_of(seen.cbegin(), seen.cend(),
-                                    [&binding, &id, &group](const auto& existing) {
-                                        return (group.policy != LocalShortcutPolicy::Screenshot ||
-                                                shortcuts::screenshotShortcutActionsMayConflict(
-                                                    existing.first, id)) &&
-                                               (group.prefix !=
-                                                    QStringLiteral("pin_to_screen_shortcuts/") ||
-                                                PinToScreenShortcutSettings::actionsMayConflict(
-                                                    existing.first, id)) &&
-                                               shortcuts::bindingsConflict(
-                                                   existing.second, binding,
-                                                   shortcuts::ShortcutPolicy::Application);
-                                    })) {
-                        return false;
-                    }
-                    seen.push_back({id, binding});
-                }
-            }
-        }
-        return configuration.setValues(normalizedValues);
+        return localShortcutChangesValid(configuration.snapshot(), normalizedValues, true) &&
+               configuration.setValues(normalizedValues);
     });
 }
 
@@ -1774,6 +1869,50 @@ shortcuts::ShortcutBindingList
 PinToScreenShortcutSettings::shortcuts(const QString& actionId) const {
     const QString key = pinToScreenShortcutKey(actionId);
     return key.isEmpty() ? shortcuts::ShortcutBindingList{} : shortcutValue(key);
+}
+
+shortcuts::ShortcutBindingList
+PinToScreenShortcutSettings::screenshotShortcuts(const QString& actionId) const {
+    auto bindings = ScreenshotShortcutSettings().shortcuts(actionId);
+    if (bindings.isEmpty() || (actionId != QStringLiteral("text_recognition") &&
+                               actionId != QStringLiteral("text_recognition_copy")))
+        return bindings;
+    // Preserve both explicit assignments from older configurations. The dedicated pin
+    // command keeps its key on pins, and screenshot capture keeps its configured OCR key.
+    const auto key = screenshotShortcutKey(actionId);
+    for (const auto& id : pinToScreenShortcutActionIds()) {
+        if (!shortcuts::localShortcutKeysMayConflict(key, pinToScreenShortcutKey(id)))
+            continue;
+        for (const auto& pinned : shortcuts(id)) {
+            bindings.removeIf([&](const auto& binding) {
+                return shortcuts::bindingsConflict(binding, pinned,
+                                                   shortcuts::ShortcutPolicy::Application);
+            });
+        }
+        if (bindings.isEmpty())
+            break;
+    }
+    return bindings;
+}
+
+bool PinToScreenShortcutSettings::isReservedShortcut(const shortcuts::ShortcutBinding& shortcut) {
+    // Storage can also run under QCoreApplication, without a Qt platform theme.
+    const auto paste = qobject_cast<QGuiApplication*>(QCoreApplication::instance())
+                           ? QKeySequence::keyBindings(QKeySequence::Paste)
+                           : QList<QKeySequence>{QKeySequence(Qt::CTRL | Qt::Key_V),
+#ifdef Q_OS_MACOS
+                                                 QKeySequence(Qt::META | Qt::Key_Y),
+#else
+                                                 QKeySequence(Qt::SHIFT | Qt::Key_Insert),
+#endif
+                                                 QKeySequence(Qt::Key_Paste)};
+    return std::ranges::any_of(paste, [&shortcut](const QKeySequence& sequence) {
+        if (sequence.count() != 1)
+            return false;
+        const shortcuts::ShortcutBinding fixed{sequence.toString(QKeySequence::PortableText)};
+        return shortcut == fixed ||
+               shortcuts::bindingsConflict(shortcut, fixed, shortcuts::ShortcutPolicy::Application);
+    });
 }
 
 bool PinToScreenShortcutSettings::actionsMayConflict(const QString& first, const QString& second) {
@@ -1989,6 +2128,14 @@ QColor ScreenshotUiSettings::selectionCenterGuideLineColor() const {
 
 bool ScreenshotUiSettings::setSelectionCenterGuideLineColor(const QColor& color) const {
     return setColorValue(QStringLiteral("screenshot_ui/selection_center_guide_line_color"), color);
+}
+
+QColor ScreenshotUiSettings::selectionGridGuideLineColor() const {
+    return colorValue(QStringLiteral("screenshot_ui/selection_grid_guide_line_color"));
+}
+
+bool ScreenshotUiSettings::setSelectionGridGuideLineColor(const QColor& color) const {
+    return setColorValue(QStringLiteral("screenshot_ui/selection_grid_guide_line_color"), color);
 }
 
 QColor ScreenshotUiSettings::monitorCenterGuideLineColor() const {
@@ -2700,33 +2847,63 @@ bool WatermarkTemplateSettings::setTemplates(const QVector<WatermarkTemplate>& t
     return cache().setValue(QStringLiteral("drawing/watermark_templates"), array);
 }
 
+namespace {
+QJsonObject encodeDrawTemplate(const DrawTemplate& drawTemplate) {
+    return {{QStringLiteral("name"), drawTemplate.name.trimmed()},
+            {QStringLiteral("payload"), QString::fromLatin1(drawTemplate.payload.toBase64())}};
+}
+
+bool setDrawTemplateRecords(const QJsonArray& records) {
+    const QString key = QStringLiteral("drawing/draw_templates");
+    const auto normalized = ConfigurationSchema::normalize(key, records);
+    // Loading salvages valid entries; an explicit edit must retain every requested template.
+    if (!normalized.valid || normalized.value.toArray().size() != records.size()) {
+        return false;
+    }
+    return cache().setValue(key, normalized.value);
+}
+} // namespace
+
+QJsonArray DrawTemplateSettings::encodedTemplates() const {
+    return cache().value(QStringLiteral("drawing/draw_templates")).toArray();
+}
+
+QByteArray DrawTemplateSettings::decodePayload(const QJsonObject& record) {
+    return QByteArray::fromBase64(record.value(QStringLiteral("payload")).toString().toLatin1());
+}
+
 QVector<DrawTemplate> DrawTemplateSettings::templates() const {
     QVector<DrawTemplate> result;
-    const QJsonArray array = cache().value(QStringLiteral("drawing/draw_templates")).toArray();
-    result.reserve(array.size());
-    for (const QJsonValue& item : array) {
-        const QJsonObject object = item.toObject();
-        result.push_back({object.value(QStringLiteral("name")).toString(),
-                          QByteArray::fromBase64(
-                              object.value(QStringLiteral("payload")).toString().toLatin1())});
+    const QJsonArray records = encodedTemplates();
+    result.reserve(records.size());
+    for (const QJsonValue& item : records) {
+        const QJsonObject record = item.toObject();
+        result.push_back({record.value(QStringLiteral("name")).toString(), decodePayload(record)});
     }
     return result;
 }
 
 bool DrawTemplateSettings::setTemplates(const QVector<DrawTemplate>& templates) const {
-    QJsonArray array;
+    QJsonArray records;
     for (const DrawTemplate& drawTemplate : templates) {
-        array.push_back(QJsonObject{
-            {QStringLiteral("name"), drawTemplate.name.trimmed()},
-            {QStringLiteral("payload"), QString::fromLatin1(drawTemplate.payload.toBase64())}});
+        records.push_back(encodeDrawTemplate(drawTemplate));
     }
-    const QString key = QStringLiteral("drawing/draw_templates");
-    const auto normalized = ConfigurationSchema::normalize(key, array);
-    // Loading salvages valid entries; an explicit edit must retain every requested template.
-    if (!normalized.valid || normalized.value.toArray().size() != templates.size()) {
+    return setDrawTemplateRecords(records);
+}
+
+bool DrawTemplateSettings::appendTemplate(const DrawTemplate& drawTemplate) const {
+    QJsonArray records = encodedTemplates();
+    records.push_back(encodeDrawTemplate(drawTemplate));
+    return setDrawTemplateRecords(records);
+}
+
+bool DrawTemplateSettings::removeTemplate(qsizetype index, const QJsonObject& expected) const {
+    QJsonArray records = encodedTemplates();
+    if (index < 0 || index >= records.size() || records.at(index).toObject() != expected) {
         return false;
     }
-    return cache().setValue(key, normalized.value);
+    records.removeAt(index);
+    return setDrawTemplateRecords(records);
 }
 
 int PinToScreenSettings::textMaximumWidth() const {
@@ -2834,7 +3011,9 @@ QString PinToScreenSettings::doubleClickAction() const {
 }
 
 bool PinToScreenSettings::setDoubleClickAction(const QString& action) const {
-    return cache().setValue(QStringLiteral("pin_to_screen/double_click_action"), action);
+    return setLegacyMouseAction(QStringLiteral("pin_to_screen/double_click_action"),
+                                mouse::Category::Pinned, {mouse::Kind::DoubleClick, Qt::LeftButton},
+                                action);
 }
 
 QString PinToScreenSettings::middleMouseButtonAction() const {
@@ -2842,7 +3021,9 @@ QString PinToScreenSettings::middleMouseButtonAction() const {
 }
 
 bool PinToScreenSettings::setMiddleMouseButtonAction(const QString& action) const {
-    return cache().setValue(QStringLiteral("pin_to_screen/middle_mouse_button_action"), action);
+    return setLegacyMouseAction(QStringLiteral("pin_to_screen/middle_mouse_button_action"),
+                                mouse::Category::Pinned, {mouse::Kind::Click, Qt::MiddleButton},
+                                action);
 }
 
 QColor PinToScreenSettings::borderColor() const {
@@ -3033,17 +3214,6 @@ QStringList TraySettings::menuOptions() const {
 
 bool TraySettings::setMenuOptions(const QStringList& options) const {
     return cache().setValue(QStringLiteral("tray/menu_options"), stringArray(options));
-}
-
-bool SystemSettings::annotationModeWhenOpeningForEditing() const {
-    return cache()
-        .value(QStringLiteral("system/annotation_mode_when_opening_for_editing"))
-        .toBool();
-}
-
-bool SystemSettings::setAnnotationModeWhenOpeningForEditing(bool enabled) const {
-    return cache().setValue(QStringLiteral("system/annotation_mode_when_opening_for_editing"),
-                            enabled);
 }
 
 bool SystemSettings::launchAsAdministrator() const {

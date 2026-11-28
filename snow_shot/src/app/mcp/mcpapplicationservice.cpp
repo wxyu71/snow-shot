@@ -1122,9 +1122,13 @@ void McpApplicationService::Impl::handle(const ScreenshotMcpRequest& request,
                     ports.jobs->fail(id, conflict ? QStringLiteral("stale_revision")
                                                   : QStringLiteral("storage_failed"));
             });
-        watcher->setFuture(runMcpWork(&workers, [path = file.absoluteFilePath()] {
-            return storage::ConfigurationArchive::read(path);
-        }));
+        watcher->setFuture(runMcpWork(
+            &workers, [path = file.absoluteFilePath(),
+                       scope = configuration()
+                                   .defaultValue(QStringLiteral("system/context_menu_mode"))
+                                   .toString()] {
+                return storage::ConfigurationArchive::read(path, scope);
+            }));
         finish({{QStringLiteral("job_id"), id}});
     } else if (method == u"snow_shot_settings_action" || method == u"snow_shot_storage_cleanup") {
         settings::SettingsActionBinding binding;

@@ -1,6 +1,7 @@
 #ifndef SNOW_SHOT_PRESENTATION_SCREENSHOTTABLEEDITOR_H
 #define SNOW_SHOT_PRESENTATION_SCREENSHOTTABLEEDITOR_H
 
+#include "snow_shot/presentation/screenshotrecognitioncopy.h"
 #include "snow_shot/app/edition.h"
 
 #include <QMetaType>
@@ -80,7 +81,11 @@ class ScreenshotTableEditor final : public QTableView {
     bool commitActiveEdit();
     bool cancelActiveEdit();
     [[nodiscard]] std::unique_ptr<QMimeData> clipboardMimeData() const;
+    [[nodiscard]] std::unique_ptr<QMimeData> selectedCellsClipboardMimeData() const;
     [[nodiscard]] bool copySelectionToClipboard();
+    void setCopyRequestHandler(std::function<bool(ScreenshotRecognitionCopy)> handler) {
+        m_requestCopy = std::move(handler);
+    }
 
   public slots:
     void mergeSelection();
@@ -96,7 +101,6 @@ class ScreenshotTableEditor final : public QTableView {
     void commandStateChanged(const ScreenshotTableCommandState& state);
     void documentChanged();
     void operationRejected(const QString& message);
-    void copyCompleted();
 
   protected:
     void mousePressEvent(QMouseEvent* event) override;
@@ -111,6 +115,7 @@ class ScreenshotTableEditor final : public QTableView {
     void updateGeometries() override;
 
   private:
+    std::function<bool(ScreenshotRecognitionCopy)> m_requestCopy;
     friend class ScreenshotTableModel;
     friend class ScreenshotTableDelegate;
 
@@ -135,6 +140,7 @@ class ScreenshotTableEditor final : public QTableView {
     void synchronizeSpans();
     void updateTableMetrics();
     void applyTheme();
+    bool copyTableToClipboard(ScreenshotRecognitionCopy intent);
     void showContextMenu(const QPoint& globalPosition, const QModelIndex& clicked);
     void showCellEditorContextMenu(QPlainTextEdit* editor, const QPoint& globalPosition);
     [[nodiscard]] QModelIndex anchorIndex(const QModelIndex& index) const;

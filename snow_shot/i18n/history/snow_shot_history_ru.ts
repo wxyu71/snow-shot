@@ -181,10 +181,6 @@
             <translation>Не удалось прочитать выбранные файлы изображений. Повторите попытку</translation>
         </message>
         <message>
-            <source>No available output filename was found</source>
-            <translation>Не найдено свободное имя выходного файла</translation>
-        </message>
-        <message>
             <source>The editing content could not be prepared for export</source>
             <translation>Не удалось подготовить содержимое для экспорта</translation>
         </message>
@@ -203,10 +199,6 @@
         <message>
             <source>The image is too large or there is not enough memory to load it</source>
             <translation>Изображение слишком большое или не хватает памяти для его загрузки</translation>
-        </message>
-        <message>
-            <source>The save directory is not available</source>
-            <translation>Каталог для сохранения недоступен</translation>
         </message>
     </context>
     <context>
@@ -1583,7 +1575,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>%n pinned window(s)</source>
-            <translation><numerusform>%n закреплённое окно</numerusform><numerusform>%n закреплённых окна</numerusform><numerusform>%n закреплённых окон</numerusform></translation>
+            <translation>
+            <numerusform>%n закреплённое окно</numerusform>
+            <numerusform>%n закреплённых окна</numerusform>
+            <numerusform>%n закреплённых окон</numerusform>
+        </translation>
         </message>
         <message>
             <source>All sources</source>
@@ -1627,7 +1623,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>Delete %n selected item(s)?</source>
-            <translation><numerusform>Удалить %n выбранный элемент?</numerusform><numerusform>Удалить %n выбранных элемента?</numerusform><numerusform>Удалить %n выбранных элементов?</numerusform></translation>
+            <translation>
+            <numerusform>Удалить %n выбранный элемент?</numerusform>
+            <numerusform>Удалить %n выбранных элемента?</numerusform>
+            <numerusform>Удалить %n выбранных элементов?</numerusform>
+        </translation>
         </message>
         <message>
             <source>Delete all pinned windows</source>
@@ -1755,7 +1755,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>Selected %n item(s)</source>
-            <translation><numerusform>Выбран %n элемент</numerusform><numerusform>Выбрано %n элемента</numerusform><numerusform>Выбрано %n элементов</numerusform></translation>
+            <translation>
+            <numerusform>Выбран %n элемент</numerusform>
+            <numerusform>Выбрано %n элемента</numerusform>
+            <numerusform>Выбрано %n элементов</numerusform>
+        </translation>
         </message>
         <message>
             <source>Selected files</source>
@@ -1802,7 +1806,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>%n screenshot(s)</source>
-            <translation><numerusform>%n скриншот</numerusform><numerusform>%n скриншота</numerusform><numerusform>%n скриншотов</numerusform></translation>
+            <translation>
+            <numerusform>%n скриншот</numerusform>
+            <numerusform>%n скриншота</numerusform>
+            <numerusform>%n скриншотов</numerusform>
+        </translation>
         </message>
         <message>
             <source>All sources</source>
@@ -1842,7 +1850,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>Delete %n selected item(s)?</source>
-            <translation><numerusform>Удалить %n выбранный элемент?</numerusform><numerusform>Удалить %n выбранных элемента?</numerusform><numerusform>Удалить %n выбранных элементов?</numerusform></translation>
+            <translation>
+            <numerusform>Удалить %n выбранный элемент?</numerusform>
+            <numerusform>Удалить %n выбранных элемента?</numerusform>
+            <numerusform>Удалить %n выбранных элементов?</numerusform>
+        </translation>
         </message>
         <message>
             <source>Delete all</source>
@@ -1910,7 +1922,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>Selected %n item(s)</source>
-            <translation><numerusform>Выбран %n элемент</numerusform><numerusform>Выбрано %n элемента</numerusform><numerusform>Выбрано %n элементов</numerusform></translation>
+            <translation>
+            <numerusform>Выбран %n элемент</numerusform>
+            <numerusform>Выбрано %n элемента</numerusform>
+            <numerusform>Выбрано %n элементов</numerusform>
+        </translation>
         </message>
         <message>
             <source>Start date</source>
@@ -1937,7 +1953,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>%n window(s) displayed</source>
-            <translation><numerusform>Показано %n окно</numerusform><numerusform>Показано %n окна</numerusform><numerusform>Показано %n окон</numerusform></translation>
+            <translation>
+            <numerusform>Показано %n окно</numerusform>
+            <numerusform>Показано %n окна</numerusform>
+            <numerusform>Показано %n окон</numerusform>
+        </translation>
         </message>
         <message>
             <source>A pinned window is no longer available to save</source>
@@ -1966,6 +1986,10 @@ Files:
         <message>
             <source>Cancel</source>
             <translation>Отмена</translation>
+        </message>
+        <message>
+            <source>Cancel crop</source>
+            <translation>Отменить обрезку</translation>
         </message>
         <message>
             <source>Checkerboard</source>
@@ -2009,7 +2033,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>Copied %n file(s)</source>
-            <translation><numerusform>Скопирован %n файл</numerusform><numerusform>Скопировано %n файла</numerusform><numerusform>Скопировано %n файлов</numerusform></translation>
+            <translation>
+            <numerusform>Скопирован %n файл</numerusform>
+            <numerusform>Скопировано %n файла</numerusform>
+            <numerusform>Скопировано %n файлов</numerusform>
+        </translation>
         </message>
         <message>
             <source>Copied: %1; failed: %2</source>
@@ -2273,7 +2301,11 @@ Files:
         </message>
         <message numerus="yes">
             <source>Saved %n window(s)</source>
-            <translation><numerusform>Сохранено %n окно</numerusform><numerusform>Сохранено %n окна</numerusform><numerusform>Сохранено %n окон</numerusform></translation>
+            <translation>
+            <numerusform>Сохранено %n окно</numerusform>
+            <numerusform>Сохранено %n окна</numerusform>
+            <numerusform>Сохранено %n окон</numerusform>
+        </translation>
         </message>
         <message>
             <source>Saved: %1; failed: %2</source>
@@ -2346,6 +2378,10 @@ Files:
         <message>
             <source>The pinned image save could not be started</source>
             <translation>Не удалось начать сохранение закреплённого изображения</translation>
+        </message>
+        <message>
+            <source>The pinned window could not be saved to history</source>
+            <translation>Не удалось сохранить закреплённое окно в истории</translation>
         </message>
         <message>
             <source>The window changed while preparing the image. Please try again</source>
@@ -2498,10 +2534,6 @@ Files:
             <translation>Сохранить как файл</translation>
         </message>
         <message>
-            <source>Text files (*.txt)</source>
-            <translation>Текстовые файлы (*.txt)</translation>
-        </message>
-        <message>
             <source>The image could not be loaded</source>
             <translation>Не удалось загрузить изображение</translation>
         </message>
@@ -2593,7 +2625,11 @@ Files:
         <name>snow_shot::presentation::PinnedWindowSelectionController</name>
         <message numerus="yes">
             <source>%n selected window(s)</source>
-            <translation><numerusform>%n выбранное окно</numerusform><numerusform>%n выбранных окна</numerusform><numerusform>%n выбранных окон</numerusform></translation>
+            <translation>
+            <numerusform>%n выбранное окно</numerusform>
+            <numerusform>%n выбранных окна</numerusform>
+            <numerusform>%n выбранных окон</numerusform>
+        </translation>
         </message>
         <message>
             <source>Align bottom</source>
@@ -2657,11 +2693,19 @@ Files:
         </message>
         <message numerus="yes">
             <source>Destroy %n displayed window(s)? This action cannot be undone</source>
-            <translation><numerusform>Уничтожить %n отображаемое окно? Это действие нельзя отменить</numerusform><numerusform>Уничтожить %n отображаемых окна? Это действие нельзя отменить</numerusform><numerusform>Уничтожить %n отображаемых окон? Это действие нельзя отменить</numerusform></translation>
+            <translation>
+            <numerusform>Уничтожить %n отображаемое окно? Это действие нельзя отменить</numerusform>
+            <numerusform>Уничтожить %n отображаемых окна? Это действие нельзя отменить</numerusform>
+            <numerusform>Уничтожить %n отображаемых окон? Это действие нельзя отменить</numerusform>
+        </translation>
         </message>
         <message numerus="yes">
             <source>Destroy %n selected window(s)? This action cannot be undone</source>
-            <translation><numerusform>Уничтожить %n выбранное окно? Это действие нельзя отменить</numerusform><numerusform>Уничтожить %n выбранных окна? Это действие нельзя отменить</numerusform><numerusform>Уничтожить %n выбранных окон? Это действие нельзя отменить</numerusform></translation>
+            <translation>
+            <numerusform>Уничтожить %n выбранное окно? Это действие нельзя отменить</numerusform>
+            <numerusform>Уничтожить %n выбранных окна? Это действие нельзя отменить</numerusform>
+            <numerusform>Уничтожить %n выбранных окон? Это действие нельзя отменить</numerusform>
+        </translation>
         </message>
         <message>
             <source>Destroy displayed windows</source>

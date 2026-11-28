@@ -314,6 +314,7 @@ jobs:
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REUSE_ACCEPTED: ${{ steps.classify.outputs.reuse }}
+          UPSTREAM_DRAFT_REVIEW: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'review/upstream-1.6.7-20261128' && github.base_ref == 'release/community-1.6.3-beta.2' }}
         run: |
           set -euo pipefail
           # Review newly committed lines, not pre-existing whitespace in
@@ -325,7 +326,11 @@ jobs:
             git diff --check "$head^" "$head"
           fi
           python3 scripts/test-upstream-sync.py
-          python3 scripts/upstream_sync.py verify-deletions
+          if [[ "$UPSTREAM_DRAFT_REVIEW" == true ]]; then
+            python3 scripts/upstream_sync.py verify-deletions --review-only
+          else
+            python3 scripts/upstream_sync.py verify-deletions
+          fi
           python3 scripts/test-qt-cmake-contract.py
           python3 snow_shot/scripts/translation_catalogs.py check
           python3 scripts/test-test-runner-policy.py
@@ -562,7 +567,7 @@ jobs:
 
   windows:
     needs: [preflight, native-smoke, windows-contracts, installer-contracts]
-    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && needs.installer-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && needs.installer-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'review/upstream-1.6.7-20261128' && github.base_ref == 'release/community-1.6.3-beta.2'))
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     permissions:
@@ -926,7 +931,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
-      pull-requests: read
+      pull-requests: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -994,3 +999,86 @@ jobs:
               fi
             fi
           done
+
+      - name: Retire the integrated 1.6.3-beta.2 branches
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.2' ]] || exit 0
+          [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] || exit 0
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]]
+          tag="$(python3 scripts/community_release.py tag)"
+          [[ "$(gh release view "$tag" --repo "$GITHUB_REPOSITORY" --json isDraft,isPrerelease --jq '.isDraft == false and .isPrerelease == true')" == true ]]
+          [[ "$(git ls-remote --refs origin "refs/tags/$tag")" == "$GITHUB_SHA"$'\t'"refs/tags/$tag" ]]
+          verified="$(mktemp -d)"
+          trap 'rm -rf -- "$verified"' EXIT
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir "$verified"
+          python3 scripts/community_installer_signing.py --verify-signed --directory "$verified"
+
+          # The review and release PRs must have been merged with real ancestry.
+          merged_head() {
+            local number="$1" branch="$2" base="$3" pr merge head
+            pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")" || return 1
+            jq -e --arg branch "$branch" --arg base "$base" --arg repo "$GITHUB_REPOSITORY" '
+              .merged == true and .head.ref == $branch and .base.ref == $base and
+              .head.repo.full_name == $repo' <<< "$pr" >/dev/null || return 1
+            merge="$(jq -er '.merge_commit_sha' <<< "$pr")" || return 1
+            head="$(jq -er '.head.sha' <<< "$pr")" || return 1
+            git merge-base --is-ancestor "$merge" "$GITHUB_SHA" || return 1
+            git merge-base --is-ancestor "$head" "$GITHUB_SHA" || return 1
+            printf '%s\n' "$head"
+          }
+          release_head="$(merged_head 15 'release/community-1.6.3-beta.2' main)"
+          review_head="$(merged_head 16 'review/upstream-1.6.7-20261128' 'release/community-1.6.3-beta.2')"
+          upstream_head='761fb564df133648c9f8f90573060aa7e82b52c9'
+          webdav_head='541c8ebc94eae68f1f0a16025b8263b721d8129d'
+          git merge-base --is-ancestor "$upstream_head" "$GITHUB_SHA"
+          git merge-base --is-ancestor "$webdav_head" "$GITHUB_SHA"
+
+          # #11 is a tracking dependency, not a second merge of the upstream code.
+          # Close it only if it still refers to the exact integrated review.
+          tracking="$(gh api "repos/$GITHUB_REPOSITORY/pulls/11")"
+          if jq -e --arg head "$upstream_head" --arg repo "$GITHUB_REPOSITORY" '
+              .head.sha == $head and .head.ref == "automation/upstream-sync-59a0ad778038" and
+              .head.repo.full_name == $repo and .base.ref == "main"' <<< "$tracking" >/dev/null; then
+            if [[ "$(jq -r '.state' <<< "$tracking")" == open ]]; then
+              [[ "$(jq -r '.draft' <<< "$tracking")" == true ]]
+              tracking_ref="$(git ls-remote --heads origin refs/heads/automation/upstream-sync-59a0ad778038)"
+              if [[ "$tracking_ref" == "$upstream_head"$'\t'"refs/heads/automation/upstream-sync-59a0ad778038" ]]; then
+                gh pr close 11 --repo "$GITHUB_REPOSITORY"
+              else
+                echo "::warning::Tracking branch moved; preserving #11."
+                upstream_head=''
+              fi
+            fi
+          else
+            echo "::warning::Tracking PR #11 changed; preserving it and its branch."
+            upstream_head=''
+          fi
+
+          gh auth setup-git --hostname github.com
+          retire_beta2() {
+            local branch="$1" expected="$2" ref remote actual open
+            [[ -n "$expected" ]] || return 0
+            ref="refs/heads/$branch"
+            remote="$(git ls-remote --heads origin "$ref")"
+            [[ -n "$remote" ]] || return 0
+            actual="${remote%%$'\t'*}"
+            if [[ "$actual" != "$expected" ]] || ! git merge-base --is-ancestor "$actual" "$GITHUB_SHA"; then
+              echo "::warning::Preserving $branch: its head changed or is not integrated."
+              return 0
+            fi
+            open="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq 'length')"
+            if [[ "$open" != 0 ]]; then
+              echo "::warning::Preserving $branch: an open PR still references it."
+              return 0
+            fi
+            [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]]
+            git push --force-with-lease="$ref:$expected" origin ":$ref"
+          }
+          retire_beta2 'review/upstream-1.6.7-20261128' "$review_head"
+          retire_beta2 'release/community-1.6.3-beta.2' "$release_head"
+          retire_beta2 'feat/community-webdav-settings-sync' "$webdav_head"
+          retire_beta2 'automation/upstream-sync-59a0ad778038' "$upstream_head"

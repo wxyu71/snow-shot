@@ -1,4 +1,5 @@
 #include "snow_shot/presentation/screenshotimageconversionview.h"
+#include "snow_shot/presentation/screenshotclipboardservice.h"
 #include "snow_shot/presentation/screenshotimageconversionclipboard.h"
 #include "snow_shot/presentation/screenshotdocumentformatting.h"
 
@@ -197,6 +198,15 @@ void ScreenshotImageConversionView::render() {
     m_browser->horizontalScrollBar()->setValue(horizontal);
 }
 
+bool ScreenshotImageConversionView::hasTextSelection() const {
+    return m_browser->textCursor().hasSelection();
+}
+
+std::unique_ptr<QMimeData> ScreenshotImageConversionView::clipboardMimeData() const {
+    return snow_shot::presentation::imageConversionClipboardMimeData(m_format, m_source,
+                                                                     m_browser->textCursor());
+}
+
 bool ScreenshotImageConversionView::copyToClipboard() const {
     if (m_editMode) {
         const QTextCursor cursor = m_rawEditor->textCursor();
@@ -206,11 +216,13 @@ bool ScreenshotImageConversionView::copyToClipboard() const {
             cursor.hasSelection() ? selected : m_source, QClipboard::Clipboard);
         return true;
     }
-    auto mimeData = snow_shot::presentation::imageConversionClipboardMimeData(
-        m_format, m_source, m_browser->textCursor());
+    if (const auto request = m_requestCopy)
+        return request();
+    auto mimeData = clipboardMimeData();
     if (mimeData == nullptr) {
         return false;
     }
+    static_cast<void>(ScreenshotClipboardService::reservePublication());
     QApplication::clipboard()->setMimeData(mimeData.release(), QClipboard::Clipboard);
     return true;
 }

@@ -1,4 +1,5 @@
 #include "recognition_attachment_test_access.h"
+#include "physical_key_test_support.h"
 #include "translation_test_support.h"
 #include "snow_shot/presentation/screenshottableeditor.h"
 #include "snow_shot/presentation/screenshotocrpresentation.h"
@@ -31,6 +32,7 @@
 #include <QCoreApplication>
 #include <QEventLoop>
 #include <QImage>
+#include <QItemSelectionModel>
 #include <QRectF>
 #include <QString>
 #include <QStringList>
@@ -656,6 +658,58 @@ void tablePreparationPreservesSessionAndSiblingPopovers() {
     }
 }
 
+void tableSelectionCopyPreservesMergedCells() {
+    using Session = ScreenshotRecognitionSessionController;
+    ScreenshotRecognitionWindow window({});
+    const QRect windowRect(20, 20, 360, 240);
+    require(window.present(
+                {QGuiApplication::primaryScreen(), nullptr, windowRect, QRectF(0, 0, 360, 240)}),
+            "present the cached table copy fixture");
+    ScreenshotRecognitionSessionActions actions;
+    actions.ensureContent = [&] { return &window; };
+    Session session(nullptr, nullptr, nullptr, std::move(actions));
+    QImage image(windowRect.size(), QImage::Format_ARGB32);
+    image.fill(Qt::white);
+    ScreenshotRecognitionResults cached;
+    cached.key = QStringLiteral("table-selection-copy");
+    const QString html =
+        QStringLiteral("<table><tr><th>Outside</th><th colspan=\"2\">Merged</th></tr>"
+                       "<tr><td>Left</td><td>Final</td><td></td></tr>"
+                       "<tr><td>Margin</td><td>Bottom</td><td>Edge</td></tr></table>");
+    cached.table = SnowShotTableResult{html, {}, {}, 0};
+    session.setTarget({cached.key, image, QRectF(0, 0, 360, 240)});
+    session.seedRecognitionResults(std::move(cached));
+    session.activate(Session::Mode::Table);
+    auto* table = window.findChild<ScreenshotTableEditor*>();
+    require(table && session.ownsContentAttachment(), "cached result attaches a table editor");
+    table->selectionModel()->select(
+        QItemSelection(table->model()->index(0, 1), table->model()->index(1, 2)),
+        QItemSelectionModel::ClearAndSelect);
+
+    require(session.copyToClipboard(ScreenshotRecognitionCopy::TableSelection),
+            "selected table cells can be copied through the attached session");
+    const auto* mime = QApplication::clipboard()->mimeData();
+    require(mime && mime->text() == QStringLiteral("Merged\t\nFinal\t") && mime->hasHtml(),
+            "the selected clipboard text includes the merged and empty cell positions");
+    const auto selected = ScreenshotTableDocument::fromClipboardMimeData(*mime);
+    const auto* merged = selected.anchorCellAt(0, 0);
+    require(selected.rowCount() == 2 && selected.columnCount() == 2 && merged &&
+                merged->columnSpan == 2 && merged->header && selected.cellText(1, 1).isEmpty() &&
+                ScreenshotTableDocument::fromHtml(mime->html(), true) == selected,
+            "selected table clipboard formats preserve merged headers and empty cells");
+    require(window.isVisible() && session.tableModeActive() &&
+                table->selectedRange() == ScreenshotTableRange{0, 1, 1, 2},
+            "copying the table selection keeps the recognition session active");
+
+    const auto fullTable = ScreenshotTableDocument::fromHtml(html, true);
+    for (auto intent : {ScreenshotRecognitionCopy::Result, ScreenshotRecognitionCopy::Preview}) {
+        require(session.copyToClipboard(intent), "existing table copy command is accepted");
+        const auto* fullMime = QApplication::clipboard()->mimeData();
+        require(fullMime && ScreenshotTableDocument::fromClipboardMimeData(*fullMime) == fullTable,
+                "existing preview and result copy commands still export the full table");
+    }
+}
+
 // Recognition port stand-in whose asset readiness and download phase are
 // steered by the test, mirroring ScreenshotOcrAssets status reporting.
 class ControllableOcrRecognition final : public ScreenshotOcrRecognitionPort {
@@ -696,9 +750,13 @@ class ControllableOcrRecognition final : public ScreenshotOcrRecognitionPort {
         return m_status;
     }
 
-    void completeWithEmptyPresentation() {
+    void completeWithText(QString text = {}) {
         ScreenshotOcrRecognitionResult result;
         result.presentation = std::make_shared<ScreenshotOcrPresentation>();
+        if (!text.isEmpty()) {
+            result.presentation->lines.append(
+                {std::move(text), 1.0, QPolygonF(QRectF(0, 0, 50, 20))});
+        }
         result.presentation->prepareForRendering();
         if (m_completion) {
             m_completion(std::move(result));
@@ -757,6 +815,80 @@ makeTextSession(ControllableOcrRecognition& recognition, PromptRecorder& recorde
     return controller;
 }
 
+void copyingBeforeOcrCompletesPreservesWorkflowResult() {
+    ControllableOcrRecognition recognition;
+    recognition.m_ready = true;
+    PromptRecorder recorder;
+    auto session = makeTextSession(recognition, recorder);
+    session->activate(ScreenshotRecognitionSessionController::Mode::Text);
+    require(recognition.requests == 1 && session->workflowState().value(u"busy").toBool(),
+            "hold the OCR request open while attempting to copy");
+
+    const auto previousClipboard = QStringLiteral("Previous clipboard");
+    QApplication::clipboard()->setText(previousClipboard);
+    require(!session->copyToClipboard(ScreenshotRecognitionCopy::Result) &&
+                recorder.statuses.contains(session->clipboardUnavailableMessage()) &&
+                QApplication::clipboard()->text() == previousClipboard,
+            "an early Copy reports that no result is ready and preserves the clipboard");
+
+    const auto text = QStringLiteral("Recognized text");
+    recognition.completeWithText(text);
+    const auto status = session->workflowState();
+    require(!status.value(u"busy").toBool() && status.value(u"error").toString().isEmpty() &&
+                session->workflowResult().value(u"text").toString() == text,
+            "an early Copy does not turn the completed OCR workflow into a failure");
+}
+
+void sourceCopyRespectsRecognitionAvailability() {
+    ControllableOcrRecognition recognition;
+    PromptRecorder recorder;
+    auto session = makeTextSession(recognition, recorder);
+    const auto key = QStringLiteral("oversized");
+    const QImage image(3840, 2161, QImage::Format_Grayscale8);
+    session->setTarget({key, image, QRectF(QPointF{}, image.size())});
+    QApplication::clipboard()->setText(QStringLiteral("Previous clipboard"));
+    const auto activateCopy = [&] {
+        session->activate(
+            ScreenshotRecognitionSessionController::Mode::Text,
+            ScreenshotClipboardService::reservePublication(QApplication::clipboard()));
+    };
+    activateCopy();
+    require(!session->active() && recognition.requests == 0 &&
+                QApplication::clipboard()->text() == QStringLiteral("Previous clipboard"),
+            "an oversized uncached target cannot start OCR or copy");
+    ScreenshotRecognitionResults cached;
+    cached.key = key;
+    auto source = std::make_shared<ScreenshotOcrPresentation>();
+    source->lines.append({QStringLiteral("Cached text"), 1.0, QPolygonF(QRectF(0, 0, 50, 20))});
+    cached.text = ScreenshotOcrRecognitionResult{source};
+    session->seedRecognitionResults(std::move(cached));
+    activateCopy();
+    require(session->active() && recognition.requests == 0,
+            "an oversized cached target requires no new OCR request");
+    translation_tests::waitUntil(
+        [] { return QApplication::clipboard()->text() == QStringLiteral("Cached text"); },
+        "a cached source remains available even when the image exceeds the OCR limit");
+
+    const snow_shot::storage::TextRecognitionSettings settings;
+    const auto previousFormatting = settings.defaultFormatting();
+    const auto previousPunctuation = settings.defaultPunctuation();
+    const auto restore = qScopeGuard([&] {
+        settings.setDefaultFormatting(previousFormatting);
+        settings.setDefaultPunctuation(previousPunctuation);
+    });
+    require(settings.setDefaultFormatting(QStringLiteral("remove")) &&
+                settings.setDefaultPunctuation(QStringLiteral("full")),
+            "enable OCR transformations that would change imported text");
+    auto document = std::make_shared<QTextDocument>();
+    const auto original = QStringLiteral("First line!\nSecond line?");
+    document->setHtml(QStringLiteral("<p><b>First line!</b></p><p>Second line?</p>"));
+    session->setTarget(
+        {QStringLiteral("formatted"), image, QRectF(QPointF{}, image.size()), document, original});
+    activateCopy();
+    require(QApplication::clipboard()->text() == original && recognition.requests == 0,
+            "explicit copy preserves imported line breaks and punctuation");
+}
+
 void smartTypesettingUsesRecognizedLayout() {
     ControllableOcrRecognition recognition;
     PromptRecorder recorder;
@@ -811,7 +943,16 @@ void smartTypesettingUsesRecognizedLayout() {
                                                      [&](auto mime) { copied = mime->text(); }),
             "smart copy is explicitly prepared");
     require(copied.isEmpty(), "smart copy waits for grouping");
+    std::optional<bool> published;
+    require(defaultController->copySourceTextToClipboard(
+                0, [&](bool success) { published = success; }) &&
+                !published.has_value(),
+            "explicit smart copy waits for the same pending grouping");
+    QApplication::clipboard()->setText(QStringLiteral("Newer clipboard"));
     QCoreApplication::processEvents();
+    require(published == false &&
+                QApplication::clipboard()->text() == QStringLiteral("Newer clipboard"),
+            "supersession during grouping completes the copy without replacing newer text");
     const QString expectedDefault = snow_shot::presentation::convertOcrPunctuation(expected, true);
     require(defaultController->recognitionClipboardMimeData()->text() == expectedDefault,
             "default Smart Typesetting copy uses the same paragraphs as the toolbar");
@@ -832,6 +973,10 @@ void smartTypesettingUsesRecognizedLayout() {
                     selection &&
                 defaultController->recognitionClipboardMimeData()->text() == selection,
             "copying an OCR selection keeps its line breaks and hyphen with Smart Typesetting set");
+    require(defaultController->copySourceTextToClipboard() &&
+                QApplication::clipboard()->text() == expectedDefault &&
+                presentation->selectedText() == selection && recognition.paragraphRequests == 2,
+            "explicit source copy reuses smart grouping and preserves the visible selection");
     const auto automaticCopy = defaultController->recognitionClipboardMimeData(
         presentation.get(), /*copyFullTextResult=*/true);
     require(automaticCopy && automaticCopy->text() == expectedDefault &&
@@ -853,6 +998,88 @@ void smartTypesettingUsesRecognizedLayout() {
     require(settings.setDefaultFormatting(priorFormatting) &&
                 settings.setDefaultPunctuation(priorPunctuation),
             "restore OCR defaults after Smart Typesetting coverage");
+}
+
+void smartTypesettingShortcutWaitsForClipboard() {
+    const snow_shot::storage::TextRecognitionSettings settings;
+    const auto previousFormatting = settings.defaultFormatting();
+    const auto previousPunctuation = settings.defaultPunctuation();
+    const auto restore = qScopeGuard([&] {
+        settings.setDefaultFormatting(previousFormatting);
+        settings.setDefaultPunctuation(previousPunctuation);
+    });
+    require(settings.setDefaultFormatting(QStringLiteral("smart")) &&
+                settings.setDefaultPunctuation(QStringLiteral("none")),
+            "configure smart formatting for Ctrl+C");
+
+    ControllableOcrRecognition recognition;
+    recognition.holdParagraphs = true;
+    PromptRecorder recorder;
+    std::unique_ptr<ScreenshotRecognitionSessionController> session;
+    auto* clipboard = QApplication::clipboard();
+    int finishes = 0;
+    QString copiedAtFinish;
+    ScreenshotRecognitionWindowActions actions;
+    actions.resultCopied = [&] {
+        ++finishes;
+        copiedAtFinish = clipboard->text();
+        session->invalidate();
+    };
+    ScreenshotRecognitionWindow window(std::move(actions));
+    session = makeTextSession(recognition, recorder, &window);
+
+    const QRect bounds(0, 0, 64, 64);
+    auto presentation = std::make_shared<ScreenshotOcrPresentation>();
+    presentation->selection = bounds;
+    presentation->lines = {
+        {QStringLiteral("Text recog-"), 1, {{0, 0}, {60, 0}, {60, 10}, {0, 10}}},
+        {QStringLiteral("nition"), 1, {{0, 15}, {40, 15}, {40, 25}, {0, 25}}},
+    };
+    presentation->prepareForRendering();
+    ScreenshotRecognitionResults cached;
+    cached.key = QStringLiteral("session");
+    cached.text = ScreenshotOcrRecognitionResult{presentation};
+    session->seedRecognitionResults(cached);
+    require(window.present({QGuiApplication::primaryScreen(), nullptr, bounds, QRectF(bounds)}),
+            "present a top-level OCR window that receives Ctrl+C");
+    session->activate(ScreenshotRecognitionSessionController::Mode::Text);
+    window.activateWindow();
+    window.setFocus();
+    QCoreApplication::processEvents();
+    const auto pressCopy = [&] {
+        for (auto type : {QEvent::KeyPress, QEvent::KeyRelease}) {
+            PhysicalKeyEvent event(type, Qt::Key_C, Qt::ControlModifier);
+            QApplication::sendEvent(&window, &event);
+        }
+    };
+
+    const auto previous = QStringLiteral("Previous clipboard");
+    clipboard->setText(previous);
+    pressCopy();
+    require(recognition.paragraphRequests == 1 && session->active() && finishes == 0 &&
+                clipboard->text() == previous,
+            "Ctrl+C keeps the screenshot open while Smart Typesetting is pending");
+    const auto newer = QStringLiteral("Newer clipboard");
+    clipboard->setText(newer);
+    std::exchange(recognition.pendingParagraph, {})({{{0, 1}}, {}});
+    QCoreApplication::processEvents();
+    require(session->active() && finishes == 0 && clipboard->text() == newer,
+            "a superseded Ctrl+C preserves the clipboard and leaves the screenshot open");
+
+    pressCopy();
+    QObject replacement;
+    const auto replacementToken = window.attachSession(&replacement, {});
+    QCoreApplication::processEvents();
+    require(window.ownsAttachment(&replacement, replacementToken) && finishes == 0 &&
+                clipboard->text() == newer,
+            "a prepared copy cannot write or finish after another owner takes the same window");
+    session->activate(ScreenshotRecognitionSessionController::Mode::Text);
+    pressCopy();
+    translation_tests::waitUntil([&] { return finishes != 0; },
+                                 "successful Ctrl+C ends the screenshot");
+    require(finishes == 1 && !session->active() && recognition.paragraphRequests == 1 &&
+                copiedAtFinish == QStringLiteral("Text recognition"),
+            "Ctrl+C writes the smart-formatted text before ending the screenshot");
 }
 
 void paragraphFailuresAndStaleEdits() {
@@ -897,10 +1124,15 @@ void paragraphFailuresAndStaleEdits() {
 
 void recognizedTextDefaultsApplyOnFirstEditAndOriginalCopy() {
     const snow_shot::storage::TextRecognitionSettings settings;
+    const snow_shot::storage::ScreenshotTranslationSettings translationSettings;
+    const bool priorCopyAsImage = translationSettings.copyTranslationResultsAsImage();
+    const auto restoreTranslationCopy = qScopeGuard(
+        [&] { translationSettings.setCopyTranslationResultsAsImage(priorCopyAsImage); });
     const QString priorFormatting = settings.defaultFormatting();
     const QString priorPunctuation = settings.defaultPunctuation();
     require(settings.setDefaultFormatting(QStringLiteral("remove")) &&
-                settings.setDefaultPunctuation(QStringLiteral("full")),
+                settings.setDefaultPunctuation(QStringLiteral("full")) &&
+                translationSettings.setCopyTranslationResultsAsImage(false),
             "set OCR defaults for the recognition session");
 
     QString selectedFormatting;
@@ -966,13 +1198,15 @@ void recognizedTextDefaultsApplyOnFirstEditAndOriginalCopy() {
     require(session.textDraft() == QStringLiteral("User\n?"),
             "re-entering edit mode preserves the manually changed draft");
     session.endTextEditing();
-    require(session.activateCachedTextTranslation() && session.originalImageTranslationActive() &&
-                session.recognitionClipboardMimeData()->text() ==
-                    QStringLiteral("Translated,\noverlay!"),
+    require(session.activateCachedTextTranslation() && session.originalImageTranslationActive(),
+            "activate the cached translated overlay");
+    const auto translatedCopy = session.recognitionClipboardMimeData();
+    require(translatedCopy && translatedCopy->text() == QStringLiteral("Translated,\noverlay!"),
             "translated overlay copy bypasses OCR defaults");
-    require(window.copyVisibleContentToClipboard() &&
-                QApplication::clipboard()->text() == QStringLiteral("Translated,\noverlay!"),
-            "translated overlay window copy bypasses OCR defaults");
+    require(window.copyVisibleContentToClipboard(), "the translated overlay accepts Copy");
+    translation_tests::waitUntil(
+        [] { return QApplication::clipboard()->text() == QStringLiteral("Translated,\noverlay!"); },
+        "translated overlay window copy bypasses OCR defaults");
     session.setTarget({QStringLiteral("other"), image, QRectF(0, 0, 80, 60)});
     session.setTarget({QStringLiteral("defaults"), image, QRectF(0, 0, 80, 60)});
     session.activate(ScreenshotRecognitionSessionController::Mode::Text);
@@ -1160,7 +1394,7 @@ void originalImageOverridePreservesSessionState() {
     session.setTarget({QStringLiteral("original-toggle"), image, QRectF(0, 0, 64, 64)});
     session.activate(Mode::Text);
     session.setShowOriginalImage(true);
-    recognition.completeWithEmptyPresentation();
+    recognition.completeWithText();
     auto* content = window.findChild<QWidget*>(QStringLiteral("screenshotRecognitionContent"));
     require(session.showOriginalImage() && original && content->isHidden(),
             "asynchronous recognition completion cannot reveal hidden content");
@@ -1270,7 +1504,7 @@ void cachedVerificationStaysSilent() {
 
     recognition.m_ready = true;
     recognition.m_status = {ScreenshotOcrAssetPhase::ReadyCached, QStringLiteral("assets")};
-    recognition.completeWithEmptyPresentation();
+    recognition.completeWithText();
     processFor(250);
     require(recorder.modelDownloadShows == 0 && recorder.modelDownloadHides == 0,
             "a cached launch must never touch the download prompt");
@@ -1605,7 +1839,7 @@ void liveDownloadsStillSurfaceThePrompt() {
             "the plain recognition message should return once the download finishes");
 
     const int showsAfterDownload = recorder.modelDownloadShows;
-    recognition.completeWithEmptyPresentation();
+    recognition.completeWithText();
     processFor(250);
     require(recorder.modelDownloadShows == showsAfterDownload && recorder.modelDownloadHides >= 1,
             "recognition completion must not leave the download prompt behind");
@@ -1638,7 +1872,7 @@ void prefetchVerificationStaysSilentWhileDownloadsSurface() {
             "a completed background download should hide the download prompt");
     require(recorder.recognitionShows == 0,
             "an inactive prefetch must not show the recognition message");
-    recognition.completeWithEmptyPresentation();
+    recognition.completeWithText();
 }
 
 void prefetchDownloadPromptsFollowCurrentHost() {
@@ -1680,7 +1914,7 @@ void prefetchDownloadPromptsFollowCurrentHost() {
             require(recorder.modelDownloadHides == initialDownloadHides + (currentHost ? 1 : 0) &&
                         recorder.recognitionShows == 0,
                     "asset prompt cleanup preserves inactive non-current host UI");
-            recognition.completeWithEmptyPresentation();
+            recognition.completeWithText();
         }
     }
 }
@@ -2134,7 +2368,11 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--ocr-defaults-only"))) {
+        copyingBeforeOcrCompletesPreservesWorkflowResult();
+        sourceCopyRespectsRecognitionAvailability();
         smartTypesettingUsesRecognizedLayout();
+        // The competing write needs the offscreen clipboard to avoid native clipboard locks.
+        smartTypesettingShortcutWaitsForClipboard();
         paragraphFailuresAndStaleEdits();
         recognizedTextDefaultsApplyOnFirstEditAndOriginalCopy();
         snow_shot::storage::ApplicationStorage::instance().shutdown();
@@ -2147,6 +2385,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--table-only"))) {
+        tableSelectionCopyPreservesMergedCells();
         tablePreparationPreservesSessionAndSiblingPopovers();
         snow_shot::storage::ApplicationStorage::instance().shutdown();
         return 0;
@@ -2181,11 +2420,14 @@ int main(int argc, char** argv) {
         snow_shot::storage::ApplicationStorage::instance().shutdown();
         return 0;
     }
+    copyingBeforeOcrCompletesPreservesWorkflowResult();
+    sourceCopyRespectsRecognitionAvailability();
     smartTypesettingUsesRecognizedLayout();
     headlessWorkflowResultsAndEdits();
     cachedTextResultAccess();
     originalImagePreviewFollowsTextSessionLifecycle();
     deactivationNotifiesOnlyOnStateTransition();
+    tableSelectionCopyPreservesMergedCells();
     tablePreparationPreservesSessionAndSiblingPopovers();
     textBackgroundPolicyControlsRendering();
     cachedRecognitionUsesTheSelectedFillStyle();

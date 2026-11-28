@@ -210,7 +210,8 @@ QString ConfigurationArchive::write(const QString& archivePath,
     return {};
 }
 
-ConfigurationArchiveReadResult ConfigurationArchive::read(const QString& archivePath) {
+ConfigurationArchiveReadResult ConfigurationArchive::read(const QString& archivePath,
+                                                          const QString& defaultContextMenuScope) {
     ConfigurationArchiveReadResult result;
     const QString invalidArchive =
         configArchiveTranslate(QT_TRANSLATE_NOOP("snow_shot::storage::ConfigurationArchive",
@@ -335,7 +336,17 @@ ConfigurationArchiveReadResult ConfigurationArchive::read(const QString& archive
     for (auto it = configuration.begin(); it != configuration.end(); ++it) {
         values.insert(it.key(), it.value());
     }
-    values = ConfigurationSchema::migrateLegacyValues(std::move(values));
+    const auto menuScopeKey = QStringLiteral("system/context_menu_mode");
+    const bool legacyMenuScope =
+        ConfigurationSchema::normalize(menuScopeKey, configuration.value(menuScopeKey)).valid;
+    const bool legacyAnnotation =
+        configuration.value(QStringLiteral("system/annotation_mode_when_opening_for_editing"))
+            .isBool();
+    values = ConfigurationSchema::migrateLegacyValues(std::move(values), schemaVersion,
+                                                      defaultContextMenuScope);
+    const auto menuOptionsKey = QStringLiteral("system/context_menu_options");
+    const bool inferredMenuOptions =
+        !configuration.contains(menuOptionsKey) && !legacyMenuScope && !legacyAnnotation;
     for (auto it = values.cbegin(); it != values.cend(); ++it) {
         if (it.key() == QLatin1String("storage/schema_version") ||
             !ConfigurationSchema::contains(it.key())) {
@@ -347,7 +358,9 @@ ConfigurationArchiveReadResult ConfigurationArchive::read(const QString& archive
             result.values.insert(it.key(), normalized.value);
         }
     }
-    if (result.values.isEmpty()) {
+    // An inferred default cannot make an otherwise incompatible legacy archive importable.
+    if (result.values.isEmpty() || (inferredMenuOptions && result.values.size() == 1 &&
+                                    result.values.contains(menuOptionsKey))) {
         return fail(configArchiveTranslate(
             QT_TRANSLATE_NOOP("snow_shot::storage::ConfigurationArchive",
                               "The configuration archive contains no compatible settings")));

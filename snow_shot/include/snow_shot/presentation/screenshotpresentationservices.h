@@ -22,6 +22,7 @@
 struct ScreenshotCaptureState;
 struct CapturedDisplayModel;
 struct ScreenshotColorPickerContext;
+class QScreen;
 class ScreenshotDisplaySession;
 class ScreenshotGeometryMapper;
 class ScreenshotInteractionState;
@@ -49,6 +50,7 @@ struct ScreenshotPresentationServicesContext {
     ScreenshotPresentationFrameScheduler::Backend frameSchedulerBackend =
         ScreenshotPresentationFrameScheduler::Backend::Automatic;
     std::function<void(const QPointF&)> presentSelectionDragColorPicker = {};
+    std::function<void()> sampleExternalDrag = {};
 };
 
 class ScreenshotPresentationServices final {
@@ -75,6 +77,7 @@ class ScreenshotPresentationServices final {
     void updateOverlayState();
     // Continuous drags mutate the model immediately and prepare presentation at the frame boundary.
     void requestSelectionDragPresentation();
+    void requestExternalDragFrame(QScreen* screen);
     // Wheel edits retain every model delta; only their presentation is coalesced.
     void requestSelectionEffectPresentation();
     void updatePointerPresentation(ScreenshotOverlayWindow* overlay, const QPointF& localPosition);
@@ -98,6 +101,7 @@ class ScreenshotPresentationServices final {
     void scheduleFrame();
     [[nodiscard]] qint64 nowNanoseconds() const;
     void presentOverlayState(const QRectF& selection, bool semanticChanged, bool geometryChanged);
+    void presentSelectionGridGuide() const;
     void presentGuideLines(ScreenshotOverlayWindow* owner, const CapturedDisplayModel* display,
                            const QPointF& localPosition, bool anchored) const;
     [[nodiscard]] ScreenshotToolbarPresentationState toolbarPresentationState() const;

@@ -1600,6 +1600,38 @@ class SettingsTestShortcutBackend final : public snow_shot::presentation::Global
     void unregisterShortcut(int) override {}
 };
 
+void pinWindowShortcutSettings(const settings::SettingsRegistry& registry) {
+    using namespace snow_shot::presentation;
+    constexpr auto action = GlobalShortcutAction::ScreenshotPinWindowToScreen;
+    GlobalShortcutManager shortcuts(std::make_unique<SettingsTestShortcutBackend>(), nullptr,
+                                    [] { return false; });
+    settings::BuiltInSettingsBackend backend(shortcuts);
+    settings::SettingsRuntimeSession session(registry, backend);
+    SettingsPageWidget page(registry, QStringLiteral("global-hotkeys"), session);
+    page.resize(880, 760);
+    page.show();
+    page.reveal({QStringLiteral("global-hotkeys"), QStringLiteral("screenshot"),
+                 QStringLiteral("quick.screenshot-pin-window-to-screen")});
+    drainEvents();
+    auto* row = page.findChild<ShortcutKeyRow*>(
+        QStringLiteral("settings-item-quick-screenshot-pin-window-to-screen"));
+    require(row != nullptr, "Global shortcuts must show the Pin window to screen row");
+    auto* button = row->findChild<adqt::widgets::AdButton*>(QStringLiteral("shortcutKeyButton"));
+    require(button && button->text() == QStringLiteral("Not set"),
+            "the window pin shortcut must show Not set with a fresh configuration");
+
+    const snow_shot::shortcuts::ShortcutBindingList bindings{QStringLiteral("Ctrl+Alt+F12")};
+    const snow_shot::storage::ShortcutSettings stored;
+    require(session.applyShortcuts(action, bindings) &&
+                stored.screenshotPinWindowToScreen() == bindings &&
+                button->text() != QStringLiteral("Not set"),
+            "the global window pin shortcut can be assigned, displayed, and persisted");
+    require(session.reset(settings::SettingsSectionReset::ScreenshotShortcuts) &&
+                stored.screenshotPinWindowToScreen().isEmpty() &&
+                button->text() == QStringLiteral("Not set"),
+            "resetting Screenshot shortcuts restores the unset window pin shortcut");
+}
+
 void selectedImagesSettings(const settings::SettingsRegistry& registry) {
     using namespace snow_shot::presentation;
     constexpr auto action = GlobalShortcutAction::StitchSelectedImages;
@@ -1802,6 +1834,39 @@ void skinControlsCommitAndRetranslate(const settings::SettingsRegistry& registry
                 session.reset(settings::SettingsSectionReset::Skin),
             "skin controls must restore English and the independent Skin defaults");
 }
+void inputSettingsPanelsNavigate(const settings::SettingsRegistry& registry,
+                                 settings::SettingsRuntimeSession& session) {
+    const QString shortcuts = QStringLiteral("shortcuts-mouse");
+    const QString mouse = QStringLiteral("mouse-operations");
+    for (const QString& pageId : {shortcuts, mouse}) {
+        SettingsPageWidget page(registry, pageId, session);
+        page.resize(880, 760);
+        page.show();
+        drainEvents();
+        auto* panel = page.findChild<QWidget*>(QStringLiteral("settings-related-") + pageId);
+        require(panel && panel->isVisible(), "both input settings pages show related settings");
+
+        settings::SettingsLocation destination;
+        QObject::connect(&page, &SettingsPageWidget::commandRequested, &page,
+                         [&](const settings::SettingsCommand& command) {
+                             require(command.kind == settings::SettingsCommandKind::Navigate,
+                                     "input settings links issue navigation commands");
+                             destination = command.location;
+                         });
+        for (const QString& target :
+             {pageId == shortcuts ? mouse : shortcuts, QStringLiteral("global-hotkeys"),
+              QStringLiteral("global-mouse")}) {
+            auto* link = panel->findChild<adqt::widgets::AdButton*>(
+                QStringLiteral("settings-link-%1-%2").arg(pageId, target));
+            require(link && link->isVisible() && !link->text().isEmpty(),
+                    "the panel links to the other input page and both global input pages");
+            link->click();
+            require(destination == settings::SettingsLocation{target, {}, {}},
+                    "each input settings link opens the intended page");
+        }
+    }
+}
+
 void relatedSettingsLayoutAndKeyboard(const settings::SettingsRegistry& registry,
                                       settings::SettingsRuntimeSession& session) {
     using snow_shot::presentation::styles::ThemeMode;
@@ -2310,6 +2375,11 @@ int main(int argc, char** argv) {
         storage.shutdown();
         return 0;
     }
+    if (application.arguments().contains(QStringLiteral("--pin-window-shortcut-only"))) {
+        pinWindowShortcutSettings(registry);
+        storage.shutdown();
+        return 0;
+    }
     if (application.arguments().contains(QStringLiteral("--tray-selection-only"))) {
         everyTrayOptionRemainsSelected(registry, session);
         storage.shutdown();
@@ -2332,6 +2402,7 @@ int main(int argc, char** argv) {
         return 0;
     }
     if (application.arguments().contains(QStringLiteral("--navigation-only"))) {
+        inputSettingsPanelsNavigate(registry, session);
         relatedSettingsLayoutAndKeyboard(registry, session);
         reorganizedSettingsPreserveIndependentState(registry, session);
         pinnedSettingsGroups(registry, session);
@@ -2358,6 +2429,7 @@ int main(int argc, char** argv) {
     unchangedPresentation(registry, session);
     skinControlsCommitAndRetranslate(registry, session);
     selectedImagesSettings(registry);
+    pinWindowShortcutSettings(registry);
     storage.shutdown();
     return 0;
 }

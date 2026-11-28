@@ -1,4 +1,5 @@
 #include "snow_shot/storage/configurationschema.h"
+#include "snow_shot/storage/exporttasks.h"
 #include "snow_shot/app/edition.h"
 #include "snow_shot/shortcuts/shortcutbinding.h"
 
@@ -123,6 +124,9 @@ QJsonObject communityToolbarBaseline(QJsonObject entry) {
 #endif
 
 void publicMetadataMatchesOriginal(const QJsonArray& actual) {
+    require(ConfigurationSchema::defaultValue(QStringLiteral("screenshot_ui/selection_grid_guide_line_color")) ==
+                QStringLiteral("#4096FF00"),
+            "selection grid guide retains the upstream RGBA default");
     // The Community safety policy makes startup registration opt-in on every
     // platform, including Windows. The original-author fixtures stay frozen.
     require(

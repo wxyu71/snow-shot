@@ -1,3 +1,4 @@
+#include "snow_shot/presentation/pinnedwindowselectioncontroller.h"
 #include "snow_shot/presentation/screenshotpinnedwindow.h"
 #include "snow_shot/presentation/screenshotexportartifact.h"
 #include "snow_shot/presentation/screenshotclipboardservice.h"
@@ -7,7 +8,6 @@
 #include "snow_shot/storage/exportfilename.h"
 #include "snow_shot/storage/clipboardfilecache.h"
 #include "snow_shot/storage/settingsadapters.h"
-#include "snow_draw_engine_qt/snow_canvas_widget.h"
 #include "widgets/message.h"
 #include "../services/screenshotexportfiletransfer_p.h"
 #include <limits>
@@ -96,11 +96,10 @@ class ScreenshotPinnedBatchSaveSession final : public QObject {
   public:
     ScreenshotPinnedBatchSaveSession(ScreenshotPinnedWindow* owner,
                                      const QList<QPointer<ScreenshotPinnedWindow>>& targets,
-                                     ScreenshotClipboardService::PublicationId copyPublication = 0,
-                                     bool selected = false)
+                                     ScreenshotClipboardService::PublicationId copyPublication = 0)
         : QObject(owner), m_owner(owner), m_ownerId(owner->persistenceId()),
           m_ownerGeneration(owner->m_presentationGeneration), m_copyFiles(copyPublication != 0),
-          m_selected(selected), m_publicationId(copyPublication) {
+          m_publicationId(copyPublication) {
         activeBatchFileOperation = this;
         for (const auto& window : targets)
             m_targets.append({window, window ? window->persistenceId() : QString(),
@@ -125,7 +124,7 @@ class ScreenshotPinnedBatchSaveSession final : public QObject {
             m_artifact->cancel();
     }
 
-    void chooseDirectory() {
+    void chooseDirectory(snow_shot::presentation::PinnedBatchScope scope) {
         const snow_shot::storage::ScreenshotSettings settings;
         const QString initial = ScreenshotImageFileService::saveDialogDirectory(
             settings.lastManualSaveDirectory(), settings.imageSaveDirectory());
@@ -134,8 +133,9 @@ class ScreenshotPinnedBatchSaveSession final : public QObject {
         m_owner->setProperty("saveDialogOpen", true);
         const QString directory = QFileDialog::getExistingDirectory(
             m_owner,
-            m_selected ? ScreenshotPinnedWindow::tr("Save selected windows")
-                       : ScreenshotPinnedWindow::tr("Save displayed windows"),
+            scope == snow_shot::presentation::PinnedBatchScope::OrderedSelection
+                ? ScreenshotPinnedWindow::tr("Save selected windows")
+                : ScreenshotPinnedWindow::tr("Save displayed windows"),
             initial);
         if (!lifetime)
             return;
@@ -308,31 +308,22 @@ class ScreenshotPinnedBatchSaveSession final : public QObject {
             return;
         }
 #endif
-        if (window->m_originalImage.isNull()) {
-            window->requestMaterializedImage([lifetime, target](bool success) {
-                if (!lifetime)
-                    return;
-                if (success && target.valid())
-                    lifetime->prepare(target);
-                else
-                    lifetime->complete(ScreenshotExportTaskResult::failure(
-                        ScreenshotExportFailureStage::Source,
-                        ScreenshotPinnedWindow::tr("The pinned image could not be prepared")));
-            });
-            return;
-        }
-        const bool editingReady = window->animatedImage() || !window->m_canvas ||
-                                  window->m_canvas->resetEditingStatePreservingTool();
-        if (!lifetime)
-            return;
-        if (!editingReady || !target.valid()) {
-            complete(ScreenshotExportTaskResult::failure(
-                ScreenshotExportFailureStage::Source,
-                ScreenshotPinnedWindow::tr("The pinned image could not be prepared")));
-            return;
-        }
-        m_artifact = window->fileSaveArtifact();
-        saveArtifact(target);
+        window->requestImageOutputArtifact([lifetime, target](auto artifact) {
+            if (!lifetime)
+                return;
+            if (!lifetime->ownerValid()) {
+                lifetime->cancel();
+                return;
+            }
+            if (!artifact || !target.valid()) {
+                lifetime->complete(ScreenshotExportTaskResult::failure(
+                    ScreenshotExportFailureStage::Source,
+                    ScreenshotPinnedWindow::tr("The pinned image could not be prepared")));
+                return;
+            }
+            lifetime->m_artifact = std::move(artifact);
+            lifetime->saveArtifact(target);
+        });
     }
 
     void saveArtifact(const Target& target) {
@@ -515,7 +506,6 @@ class ScreenshotPinnedBatchSaveSession final : public QObject {
     bool m_cancelled = false;
     bool m_dialogOpen = false;
     bool m_copyFiles;
-    bool m_selected;
     QString m_directory;
     QString m_baseName;
     QString m_lastError;
@@ -535,15 +525,16 @@ bool ScreenshotPinnedWindow::batchSavePending() {
     return !activeBatchFileOperation.isNull();
 }
 
-void ScreenshotPinnedWindow::saveDisplayedPinnedWindows() {
-    savePinnedWindows(displayedPinnedWindows(), false);
+bool ScreenshotPinnedWindow::canStartBatchExport() const {
+    return !m_closing && !m_printPending && !property("saveDialogOpen").toBool() &&
+           !batchSavePending();
 }
 
 void ScreenshotPinnedWindow::savePinnedWindows(
-    const QList<QPointer<ScreenshotPinnedWindow>>& targets, bool selected) {
-    if (!m_closing && !m_printPending && !property("saveDialogOpen").toBool() &&
-        !batchSavePending())
-        (new ScreenshotPinnedBatchSaveSession(this, targets, 0, selected))->chooseDirectory();
+    const QList<QPointer<ScreenshotPinnedWindow>>& targets,
+    snow_shot::presentation::PinnedBatchScope scope) {
+    if (canStartBatchExport())
+        (new ScreenshotPinnedBatchSaveSession(this, targets))->chooseDirectory(scope);
 }
 
 void ScreenshotPinnedWindow::saveDisplayedPinnedWindowsToDirectory(const QString& directory) {
@@ -553,8 +544,7 @@ void ScreenshotPinnedWindow::saveDisplayedPinnedWindowsToDirectory(const QString
 
 void ScreenshotPinnedWindow::copyPinnedWindowFiles(
     const QList<QPointer<ScreenshotPinnedWindow>>& targets) {
-    if (!m_closing && !m_printPending && !property("saveDialogOpen").toBool() &&
-        !batchSavePending()) {
+    if (canStartBatchExport()) {
         const auto publicationId = beginCopyRequest();
         (new ScreenshotPinnedBatchSaveSession(this, targets, publicationId))->startCopy();
     }
@@ -603,7 +593,8 @@ void ScreenshotPinnedWindow::copyPinnedWindowText(
         }
     }
     if (!parts.isEmpty()) {
-        static_cast<void>(beginCopyRequest());
-        clipboard->setText(parts.join(u'\n'), QClipboard::Clipboard);
+        auto mime = std::make_unique<QMimeData>();
+        mime->setText(parts.join(u'\n'));
+        publishCopyMime(std::move(mime), beginCopyRequest());
     }
 }

@@ -1,6 +1,7 @@
 #include "snow_shot/storage/configurationarchive.h"
 #include "snow_shot/storage/configurationschema.h"
 #include "snow_shot/storage/configurationstore.h"
+#include "snow_shot/storage/exporttasks.h"
 #include "snow_shot/platform/minizippath.h"
 #include "snow_shot/customaimodelconfiguration.h"
 
@@ -253,12 +254,39 @@ void autoSaveAfterExecutionArchivesMigrateAndRoundTrip(const QTemporaryDir& temp
                 store.value(QStringLiteral("export_tasks/pinned_copy")) ==
                     QJsonArray{QStringLiteral("upload_to_cloud")},
             "snapshot replacement preserves the independent pinned rows");
+    const auto scopedKey = storage::exportTaskScopedKey(storage::ExportTrigger::ScreenshotCopy);
+    const QJsonArray selected{QStringLiteral("auto_save.normal"),
+                              QStringLiteral("upload_to_cloud.current_monitor")};
+    require(store.setValues({{key, save}, {scopedKey, selected}}),
+            "select all-types and scoped options together");
     const QString exported = temporary.filePath(QStringLiteral("tasks-round-trip.zip"));
     require(storage::ConfigurationArchive::write(exported, store.snapshot(),
                                                  storage::ConfigurationSchema::currentVersion())
-                    .isEmpty() &&
-                storage::ConfigurationArchive::read(exported).values.value(key) == save,
+                .isEmpty(),
+            "export both task records");
+    const auto roundTrip = storage::ConfigurationArchive::read(exported);
+    require(roundTrip.isValid() && roundTrip.values.value(key) == save &&
+                roundTrip.values.value(scopedKey) == selected,
             "export task selections survive archive round trip");
+}
+
+void pinnedOcrShortcutArchiveMigrates(const QTemporaryDir& temporary) {
+    const auto legacy = QStringLiteral("pin_to_screen_shortcuts/show_text_recognition_results");
+    const auto shared = QStringLiteral("screenshot_shortcuts/text_recognition");
+    const QJsonArray custom{QStringLiteral("F8")};
+    const auto expected = storage::ConfigurationSchema::normalize(shared, custom).value;
+    const auto version = storage::ConfigurationSchema::currentVersion();
+    const auto archive = temporary.filePath(QStringLiteral("legacy-pinned-ocr.zip"));
+    writeZip(
+        archive,
+        {{QStringLiteral("manifest.json"), manifestBytes(version)},
+         {QStringLiteral("config.json"),
+          configurationBytes(
+              {{legacy, custom}, {shared, storage::ConfigurationSchema::defaultValue(shared)}})}});
+    const auto imported = storage::ConfigurationArchive::read(archive);
+    require(imported.isValid() && imported.values.value(shared) == expected &&
+                !imported.values.contains(legacy),
+            "older archives preserve a custom pin OCR shortcut in the shared setting");
 }
 
 void recognitionModelPreferencesSurviveRestart(const QTemporaryDir& temporary) {
@@ -445,6 +473,34 @@ void readRejectsInvalidArchives(const QTemporaryDir& temporary) {
                                               {QStringLiteral("also/unknown"), true}})}});
     require(!storage::ConfigurationArchive::read(unknownKeys).isValid(),
             "an archive without any compatible settings must be rejected");
+
+    const auto legacyMode = QStringLiteral("system/context_menu_mode");
+    const auto legacyAnnotation = QStringLiteral("system/annotation_mode_when_opening_for_editing");
+    const auto legacyShortcut = QStringLiteral("context_menu_shortcuts/edit_with_snow_shot");
+    const auto menuOptions = QStringLiteral("system/context_menu_options");
+    const auto readLegacy = [&](const QJsonObject& values) {
+        writeZip(unknownKeys, {{QStringLiteral("manifest.json"), manifestBytes(11)},
+                               {QStringLiteral("config.json"), configurationBytes(values)}});
+        return storage::ConfigurationArchive::read(unknownKeys);
+    };
+    for (const auto& invalid :
+         {QJsonObject{{QStringLiteral("not/a_key"), 1}}, QJsonObject{{legacyMode, 42}},
+          QJsonObject{{legacyAnnotation, QStringLiteral("false")}},
+          QJsonObject{{legacyShortcut, QJsonArray{QStringLiteral("Ctrl+E")}}}})
+        require(!readLegacy(invalid).isValid(),
+                "an inferred menu default cannot make invalid legacy settings importable");
+    const auto validShortcut = readLegacy({{legacyShortcut, QJsonArray{QStringLiteral("E")}}});
+    require(validShortcut.isValid() && !validShortcut.explicitlyImported.contains(menuOptions) &&
+                validShortcut.explicitlyImported.contains(
+                    QStringLiteral("context_menu_shortcuts/pin_to_screen_and_annotate")),
+            "a valid legacy shortcut remains importable on its own");
+    const auto mixed =
+        readLegacy({{legacyMode, 42},
+                    {legacyAnnotation, QStringLiteral("false")},
+                    {QStringLiteral("interface/theme_mode"), QStringLiteral("dark")}});
+    require(
+        mixed.isValid() && !mixed.explicitlyImported.contains(menuOptions),
+        "invalid legacy menu fields cannot publish inferred options during a compatible import");
 
     const QString oversized = temporary.filePath(QStringLiteral("oversized.zip"));
     writeZip(oversized, {{QStringLiteral("manifest.json"),
@@ -823,6 +879,7 @@ int main(int argc, char** argv) {
     exportsOmitLocalDirectories(temporary);
     importsPreserveOmittedDirectories(temporary);
     autoSaveAfterExecutionArchivesMigrateAndRoundTrip(temporary);
+    pinnedOcrShortcutArchiveMigrates(temporary);
     readRejectsInvalidArchives(temporary);
     writeRejectsUnwritableTargets(temporary);
     unicodePathsRoundTrip();

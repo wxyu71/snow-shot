@@ -1,3 +1,4 @@
+#include "snow_shot/presentation/screenshotcanvastools.h"
 #include "snow_shot/platform/screenshotwindownames.h"
 #include "widgets/detail/window_modality.h"
 #include "snow_shot/runtime/runtimeactivitytracker.h"
@@ -966,13 +967,17 @@ struct ScreenRecordingController::Impl {
             areaWindow->setInputMode(ScreenRecordingAreaWindow::InputMode::RegionEditing);
         }
         QObject::connect(palette, &ScreenshotToolPalette::recordingStartRequested,
-                         uiSession->connections.get(), [this]() { start(); });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Start); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingStopRequested,
-                         uiSession->connections.get(), [this]() { stop(false); });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Stop); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingPauseRequested,
-                         uiSession->connections.get(), [this]() { pause(); });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Pause); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingResumeRequested,
-                         uiSession->connections.get(), [this]() { resume(); });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Resume); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingMicrophoneToggled,
                          uiSession->connections.get(), [this](bool enabled) {
                              setOption(microphoneEnabled, enabled);
@@ -1009,30 +1014,20 @@ struct ScreenRecordingController::Impl {
                              uiSession->connections.get(), [this](bool) { syncAudioMeter(); });
         }
         QObject::connect(palette, &ScreenshotToolPalette::recordingOpenFolderRequested,
-                         uiSession->connections.get(), [this]() { openFolder(); });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::OpenFolder); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingCloseRequested,
-                         uiSession->connections.get(), [this]() { close(); });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Close); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingCopyRequested,
-                         uiSession->connections.get(), [this]() {
-                             if (trimSession)
-                                 trimSession->exportClip(false);
-                             else
-                                 stop(true);
-                         });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Copy); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingTrimRequested,
-                         uiSession->connections.get(), [this] {
-                             if (trimRequested)
-                                 exitTrim();
-                             else
-                                 beginTrim(false);
-                         });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Trim); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingSaveRequested,
-                         uiSession->connections.get(), [this] {
-                             if (trimSession)
-                                 trimSession->exportClip(true);
-                             else
-                                 beginTrim(true);
-                         });
+                         uiSession->connections.get(),
+                         [this] { invokeRecordingCommand(Command::Save); });
         QObject::connect(palette, &ScreenshotToolPalette::recordingOutputFormatChanged,
                          uiSession->connections.get(), [this](const QString& format) {
                              setOption(outputFormat, format);
@@ -1228,66 +1223,11 @@ struct ScreenRecordingController::Impl {
         };
         snow_shot::presentation::recording::connectScreenRecordingSelection(
             palette, *areaWindow, *uiSession->connections);
-        QObject::connect(&palette, &ScreenshotToolPalette::speechBubbleRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::SpeechBubble); });
-        QObject::connect(&palette, &ScreenshotToolPalette::shapeRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Shape); });
-        QObject::connect(&palette, &ScreenshotToolPalette::distanceToolRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Distance); });
-        QObject::connect(&palette, &ScreenshotToolPalette::angleToolRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Angle); });
-        QObject::connect(&palette, &ScreenshotToolPalette::bracketToolRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Bracket); });
-        QObject::connect(&palette, &ScreenshotToolPalette::arrowRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Arrow); });
-        QObject::connect(&palette, &ScreenshotToolPalette::lineRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Line); });
-        QObject::connect(&palette, &ScreenshotToolPalette::brushRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::FreeDraw); });
-        QObject::connect(&palette, &ScreenshotToolPalette::highlightRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::RectangleHighlight); });
-        QObject::connect(&palette, &ScreenshotToolPalette::brushHighlightRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::PenHighlight); });
-        QObject::connect(&palette, &ScreenshotToolPalette::rectangleFilterRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::RectangleFilter); });
-        QObject::connect(&palette, &ScreenshotToolPalette::brushFilterRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::PenFilter); });
-        QObject::connect(&palette, &ScreenshotToolPalette::autoFilterRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::AutoFilter); });
-        QObject::connect(&palette, &ScreenshotToolPalette::spotlightRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Spotlight); });
-        QObject::connect(&palette, &ScreenshotToolPalette::rectangleEraserRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::RectangleEraser); });
-        QObject::connect(&palette, &ScreenshotToolPalette::brushEraserRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::BrushEraser); });
-        QObject::connect(&palette, &ScreenshotToolPalette::eraserRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Eraser); });
-        QObject::connect(&palette, &ScreenshotToolPalette::watermarkRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Watermark); });
-        QObject::connect(&palette, &ScreenshotToolPalette::textRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::Text); });
-        QObject::connect(&palette, &ScreenshotToolPalette::sequenceNumberRequested,
-                         uiSession->connections.get(),
-                         [activate]() { activate(SnowCanvasTool::SerialNumber); });
+        snow_shot::presentation::bindScreenshotCanvasToolRequests(
+            palette, *uiSession->connections, activate, [](SnowCanvasTool tool) {
+                // Selection owns its input mode. The recording surface has no magnifier.
+                return tool != SnowCanvasTool::Select && tool != SnowCanvasTool::Magnifier;
+            });
         QObject::connect(&palette, &ScreenshotToolPalette::undoRequested,
                          uiSession->connections.get(),
                          [canvas]() { static_cast<void>(canvas->undo()); });
@@ -1347,6 +1287,49 @@ struct ScreenRecordingController::Impl {
         }
     }
 
+    using Command = ScreenshotToolPalette::RecordingCommand;
+    bool invokeRecordingCommand(Command command) {
+        if (sessionEnding ||
+            !sessionStatus.allows(command, trimRequested,
+                                  trimRequested && (!trimSession || !trimSession->ready())))
+            return false;
+        switch (command) {
+        case Command::Start:
+            start();
+            break;
+        case Command::Stop:
+            stop(false);
+            break;
+        case Command::Pause:
+            pause();
+            break;
+        case Command::Resume:
+            resume();
+            break;
+        case Command::Copy:
+        case Command::Save:
+            if (trimSession)
+                trimSession->exportClip(command == Command::Save);
+            else if (command == Command::Save)
+                beginTrim(true);
+            else
+                stop(true);
+            break;
+        case Command::Trim:
+            if (trimRequested)
+                return exitTrim();
+            beginTrim(false);
+            break;
+        case Command::Close:
+            close();
+            break;
+        case Command::OpenFolder:
+            openFolder();
+            break;
+        }
+        return true;
+    }
+
     void start() {
         if (sessionEnding)
             return;
@@ -1404,6 +1387,7 @@ struct ScreenRecordingController::Impl {
         // Earlier retained sources remain on disk; earlier exports cease being
         // eligible for this recording's Copy action.
         retainedSourcePath.clear();
+        renderFailurePolicy = RecordingRenderJob::FailurePolicy::AwaitDecision;
         sessionExportContext = {};
         finalizedOutputPath.clear();
         finalizedDurationMilliseconds = 0;
@@ -2033,6 +2017,7 @@ struct ScreenRecordingController::Impl {
                 finishExport(outcome == RecordingRenderJob::Outcome::Succeeded, error,
                              renderedDuration, false);
             };
+            renderJob->setFailurePolicy(renderFailurePolicy);
             renderJob->start();
             return;
         }
@@ -2249,6 +2234,15 @@ struct ScreenRecordingController::Impl {
     }
 
     void close() {
+        if (!sessionEnding && automationOwned) {
+            renderFailurePolicy = RecordingRenderJob::FailurePolicy::KeepSource;
+            if (renderJob)
+                renderJob->setFailurePolicy(renderFailurePolicy);
+        }
+        finishAndClose();
+    }
+
+    void finishAndClose() {
         if (sessionEnding)
             return;
         // Snapshot the preference for an in-flight start while its UI still
@@ -2302,6 +2296,9 @@ struct ScreenRecordingController::Impl {
         // Disconnect before hiding: hide/focus events can emit canvas and geometry signals.
         retiring->preview->setEligible(false);
         retiring->preview->stopAndClear();
+        // Startup owns the borrowed FFI handle until creation returns. The native
+        // session then owns its own source, so this window no longer needs a lease.
+        webcam.reset();
         retiring->connections.reset();
         retiring->colorSampler.reset();
         retiring->shortcuts.reset();
@@ -3019,6 +3016,8 @@ struct ScreenRecordingController::Impl {
     QString finalizedOutputPath;
     qint64 finalizedDurationMilliseconds = 0;
     bool automationOwned = false;
+    RecordingRenderJob::FailurePolicy renderFailurePolicy =
+        RecordingRenderJob::FailurePolicy::AwaitDecision;
     bool automationCommand = false;
     quint64 automationRevision = snow_shot::presentation::nextAutomationRevision();
     bool automationNextStart = false;
@@ -3261,20 +3260,15 @@ bool ScreenRecordingController::blocksMemoryTrimming() const {
 }
 
 void ScreenRecordingController::startRecording() {
-    m_impl->start();
+    m_impl->invokeRecordingCommand(Impl::Command::Start);
 }
 
 void ScreenRecordingController::stopRecordingAndCopy() {
-    if (m_impl->sessionEnding)
-        return;
-    if (m_impl->trimSession)
-        m_impl->trimSession->exportClip(false);
-    else
-        m_impl->stop(true);
+    m_impl->invokeRecordingCommand(Impl::Command::Copy);
 }
 
 void ScreenRecordingController::openRecordingFolder() {
-    m_impl->openFolder();
+    m_impl->invokeRecordingCommand(Impl::Command::OpenFolder);
 }
 
 void ScreenRecordingController::prepareForSessionEnd(int timeoutMs) {
@@ -3575,8 +3569,7 @@ bool ScreenRecordingController::startAutomation(const QRect& region, const QJson
     s.open(region);
     if (!s.isOpen())
         return fail("capture_unavailable");
-    s.start();
-    return true;
+    return s.invokeRecordingCommand(Impl::Command::Start);
 }
 
 bool ScreenRecordingController::controlAutomation(const QString& action, const QJsonObject& payload,
@@ -3600,7 +3593,9 @@ bool ScreenRecordingController::controlAutomation(const QString& action, const Q
             ok = s.renderJob->release(false);
         else if (action == QStringLiteral("discard"))
             ok = s.renderJob->release(true);
-        else if (action == QStringLiteral("close") || action == QStringLiteral("cancel")) {
+        else if (action == QStringLiteral("close"))
+            return s.invokeRecordingCommand(Impl::Command::Close);
+        else if (action == QStringLiteral("cancel")) {
             s.destroyUi();
             return true;
         } else
@@ -3608,15 +3603,15 @@ bool ScreenRecordingController::controlAutomation(const QString& action, const Q
         return ok || fail("invalid_state");
     }
     s.automationError.clear();
-    if (action == QStringLiteral("cancel") || action == QStringLiteral("close")) {
-        s.close();
+    if (action == QStringLiteral("close"))
+        return s.invokeRecordingCommand(Impl::Command::Close);
+    if (action == QStringLiteral("cancel")) {
+        s.finishAndClose();
         return true;
     }
     if (s.trimRequested) {
-        if (action == QStringLiteral("copy") && s.trimSession && s.trimSession->ready()) {
-            s.trimSession->exportClip(false);
+        if (action == QStringLiteral("copy") && s.invokeRecordingCommand(Impl::Command::Copy))
             return true;
-        }
         return fail("invalid_state");
     }
     if (action == QStringLiteral("copy") && !s.finalizedOutputPath.isEmpty()) {
@@ -3625,21 +3620,22 @@ bool ScreenRecordingController::controlAutomation(const QString& action, const Q
     }
     if (s.sessionStatus.busy() || s.startScheduled)
         return fail("busy");
-    if (action == QStringLiteral("pause")) {
-        if (s.sessionStatus.state() != ScreenshotToolPalette::RecordingState::Recording)
-            return fail("invalid_state");
-        s.pause();
-    } else if (action == QStringLiteral("resume")) {
-        if (s.sessionStatus.state() != ScreenshotToolPalette::RecordingState::Paused)
-            return fail("invalid_state");
-        s.resume();
-    } else if (action == QStringLiteral("stop") || action == QStringLiteral("copy")) {
-        if (!s.recordingSession)
-            return fail("invalid_state");
-        s.stop(action == QStringLiteral("copy"));
-    } else if (s.areaWindow &&
-               (action == QStringLiteral("annotations") || action == QStringLiteral("undo") ||
-                action == QStringLiteral("redo") || action == QStringLiteral("reset"))) {
+    using Command = Impl::Command;
+    static constexpr std::pair<QLatin1StringView, Command> transports[]{
+        {QLatin1StringView("pause"), Command::Pause},
+        {QLatin1StringView("resume"), Command::Resume},
+        {QLatin1StringView("stop"), Command::Stop},
+        {QLatin1StringView("copy"), Command::Copy}};
+    for (const auto& [id, command] : transports) {
+        if (action == id) {
+            if (!s.recordingSession || !s.invokeRecordingCommand(command))
+                return fail("invalid_state");
+            return s.automationError.isEmpty() || fail("recording_failed");
+        }
+    }
+    if (s.areaWindow &&
+        (action == QStringLiteral("annotations") || action == QStringLiteral("undo") ||
+         action == QStringLiteral("redo") || action == QStringLiteral("reset"))) {
         if (s.followMouse)
             return fail("action_unavailable");
         auto& runtime = s.areaWindow->canvasRuntime();
