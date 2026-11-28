@@ -5,7 +5,8 @@ use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 use windows::Win32::Foundation::{
-    CloseHandle, ERROR_ACCESS_DENIED, ERROR_FILE_NOT_FOUND, ERROR_PATH_NOT_FOUND, ERROR_SUCCESS,
+    CloseHandle, ERROR_ACCESS_DENIED, ERROR_FILE_NOT_FOUND, ERROR_MORE_DATA, ERROR_PATH_NOT_FOUND,
+    ERROR_SUCCESS,
     HANDLE, WAIT_OBJECT_0, WIN32_ERROR,
 };
 use windows::Win32::Globalization::{CSTR_EQUAL, CompareStringOrdinal};
@@ -19,6 +20,9 @@ use windows::Win32::System::Registry::{
     REG_SAM_FLAGS, REG_SZ, REG_VALUE_TYPE, RRF_RT_REG_SZ, RRF_SUBKEY_WOW6432KEY,
     RRF_SUBKEY_WOW6464KEY, RegCloseKey, RegCreateKeyExW, RegGetValueW, RegOpenKeyExW,
     RegSetValueExW,
+};
+use windows::Win32::System::RestartManager::{
+    RmEndSession, RmGetList, RmRegisterResources, RmStartSession,
 };
 use windows::Win32::System::Threading::{
     OpenProcess, PROCESS_ACCESS_RIGHTS, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -139,6 +143,74 @@ pub fn remove_application_file(destination: &Path, retired: &Path) -> Result<()>
         .map_err(|error| replacement_error(destination, retired, error))?;
     let _ = std::fs::remove_file(retired);
     Ok(())
+}
+
+// A manually launched installer must never close or terminate a running
+// recording/editor. Restart Manager is used only to query holders of exact
+// installation paths, not to request shutdown. In-app updates have a separate
+// authenticated parent-exit protocol.
+pub fn require_installer_application_closed(root: &Path) -> Result<()> {
+    let paths = [
+        crate::edition::APP_PATH,
+        crate::edition::UPDATER_PATH,
+        "bin/snow-shot-mcp.exe",
+        "bin/snow-ocr-process.exe",
+        "bin/crashpad_handler.exe",
+    ];
+    let mut buffers = Vec::new();
+    for path in paths {
+        let path = absolute(&root.join(path));
+        match std::fs::metadata(&path) {
+            Ok(metadata) if metadata.is_file() => buffers.push(wide(path)),
+            Ok(_) => {
+                return Err(UpdateError::new(
+                    "installer_process_check_failed",
+                    "An installation executable is not a regular file",
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                return Err(io_error(
+                    "installer_process_check_failed",
+                    "Could not inspect installation executables",
+                    error,
+                ));
+            }
+        }
+    }
+    if buffers.is_empty() {
+        return Ok(());
+    }
+    let names: Vec<PCWSTR> = buffers.iter().map(|path| PCWSTR(path.as_ptr())).collect();
+    let check_status = |status: WIN32_ERROR| {
+        if status == ERROR_SUCCESS {
+            Ok(())
+        } else {
+            Err(UpdateError::new(
+                "installer_process_check_failed",
+                "Could not check whether Snow Shot is running",
+            )
+            .detail(format!("Restart Manager error {}", status.0)))
+        }
+    };
+    let mut session = 0;
+    let mut key = [0u16; 33];
+    check_status(unsafe { RmStartSession(&mut session, None, PWSTR(key.as_mut_ptr())) })?;
+    let result = (|| {
+        check_status(unsafe { RmRegisterResources(session, Some(&names), None, None) })?;
+        let (mut needed, mut count, mut reasons) = (0, 0, 0);
+        let status = unsafe { RmGetList(session, &mut needed, &mut count, None, &mut reasons) };
+        if status == ERROR_MORE_DATA || (status == ERROR_SUCCESS && needed != 0) {
+            return Err(UpdateError::new(
+                "installer_application_running",
+                "Finish recording or editing, exit Snow Shot and its tools, then retry",
+            ));
+        }
+        check_status(status)
+    })();
+    let end = unsafe { RmEndSession(session) };
+    result?;
+    check_status(end)
 }
 
 pub fn path_has_reparse(path: &Path) -> bool {
@@ -265,17 +337,39 @@ fn registered_installation_for_key(
     }
 }
 
+fn registered_installation(root: &Path) -> Result<Option<RegisteredInstallation>> {
+    // Beta 1 changed CPack's vendor string; installations from the upstream
+    // vendor must still be recognized without writing a new registry identity.
+    if !crate::edition::MINI {
+        if let Some(registration) = registered_installation_for_key(
+            root, r"Software\Snow Shot Community\SnowShot",
+        )? {
+            return Ok(Some(registration));
+        }
+    }
+    registered_installation_for_key(root, INSTALL_KEY)
+}
+
+fn registered_uninstall_key(registration: RegisteredInstallation) -> Result<String> {
+    let inno = format!("{UNINSTALL_KEY}_is1");
+    let modern = read_registry_string(registration, &inno, "UninstallString")?.is_some();
+    let legacy = read_registry_string(registration, UNINSTALL_KEY, "UninstallString")?.is_some();
+    require(!(modern && legacy), "ambiguous_installation_registration",
+            "Multiple uninstall registrations match this installation")?;
+    Ok(if modern { inno } else { UNINSTALL_KEY.to_owned() })
+}
+
 pub fn registered_target_matches(root: &Path) -> Result<bool> {
-    registered_installation_for_key(root, INSTALL_KEY).map(|registration| registration.is_some())
+    registered_installation(root).map(|registration| registration.is_some())
 }
 
 // No registry mutation: for a missing key, check creation rights on its nearest
 // existing ancestor. A successful check is repeated in the elevated bootstrap.
 pub fn registered_version_requires_elevation(root: &Path) -> Result<bool> {
-    let Some(registration) = registered_installation_for_key(root, INSTALL_KEY)? else {
+    let Some(registration) = registered_installation(root)? else {
         return Ok(false);
     };
-    registered_version_requires_elevation_for_key(registration, UNINSTALL_KEY)
+    registered_version_requires_elevation_for_key(registration, &registered_uninstall_key(registration)?)
 }
 
 fn registered_version_requires_elevation_for_key(
@@ -314,10 +408,10 @@ fn registered_version_requires_elevation_for_key(
 }
 
 pub fn write_registered_version(root: &Path, version: &str) -> Result<()> {
-    let Some(registration) = registered_installation_for_key(root, INSTALL_KEY)? else {
+    let Some(registration) = registered_installation(root)? else {
         return Ok(());
     };
-    write_registered_version_for_key(registration, UNINSTALL_KEY, version)
+    write_registered_version_for_key(registration, &registered_uninstall_key(registration)?, version)
 }
 
 fn write_registered_version_for_key(

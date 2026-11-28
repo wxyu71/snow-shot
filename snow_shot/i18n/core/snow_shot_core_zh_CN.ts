@@ -93,8 +93,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Current version: %1</source>
             <translation>当前版本：%1</translation>
         </message>
-        
-        
         <message>
             <source>Download update</source>
             <translation>下载更新</translation>
@@ -143,7 +141,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Make the next experience better</source>
             <translation>让下一次体验更好</translation>
         </message>
-        
         <message>
             <source>Open Microsoft Store</source>
             <translation>打开 Microsoft Store</translation>
@@ -164,7 +161,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Privacy policy</source>
             <translation>隐私政策</translation>
         </message>
-        
         <message>
             <source>Ready to install %1</source>
             <translation>已准备好安装 %1</translation>
@@ -767,9 +763,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>No translation services are available</source>
             <translation>没有可用的翻译服务</translation>
         </message>
-        
-        
-        
         <message>
             <source>Table recognition failed</source>
             <translation>表格识别失败</translation>
@@ -838,7 +831,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>The translation response is too large</source>
             <translation>翻译响应过大</translation>
         </message>
-        
         <message>
             <source>This service does not support the selected language combination</source>
             <translation>此服务不支持所选语言组合</translation>
@@ -863,10 +855,6 @@ so every moment on screen can be expressed clearly and shared easily</source>
             <source>Translation stream ended unexpectedly</source>
             <translation>翻译流意外结束</translation>
         </message>
-        
-        
-        
-        
         <message>
             <source>Your daily free allowance is exhausted. Try again after it resets</source>
             <translation>今日免费额度已用尽，请在额度重置后重试</translation>

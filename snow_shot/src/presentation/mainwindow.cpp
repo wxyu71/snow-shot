@@ -292,6 +292,8 @@ void MainWindow::buildUi() {
             &MainWindow::screenshotHistorySplitRequested);
     connect(m_contentCard, &ContentCardWidget::screenshotHistoryImageEditingRequested, this,
             &MainWindow::screenshotHistoryImageEditingRequested);
+    connect(m_contentCard, &ContentCardWidget::screenshotHistoryOnlineOcrRequested, this,
+            &MainWindow::screenshotHistoryOnlineOcrRequested);
     connect(m_contentCard, &ContentCardWidget::screenshotHistoryImageCompressionRequested, this,
             &MainWindow::screenshotHistoryImageCompressionRequested);
     connect(m_contentCard, &ContentCardWidget::pinnedWindowStitchImagesRequested, this,

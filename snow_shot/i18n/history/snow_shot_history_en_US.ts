@@ -87,6 +87,10 @@
             <translation>More actions</translation>
         </message>
         <message>
+            <source>Online OCR</source>
+            <translation>Online OCR</translation>
+        </message>
+        <message>
             <source>Pin this screenshot to the screen</source>
             <translation>Pin this screenshot to the screen</translation>
         </message>
@@ -111,6 +115,10 @@
             <translation>Screenshot display</translation>
         </message>
         <message>
+            <source>Screenshot history is unavailable</source>
+            <translation>Screenshot history is unavailable</translation>
+        </message>
+        <message>
             <source>Screenshot result</source>
             <translation>Screenshot result</translation>
         </message>
@@ -125,6 +133,10 @@
         <message>
             <source>This screenshot cannot be pinned</source>
             <translation>This screenshot cannot be pinned</translation>
+        </message>
+        <message>
+            <source>Unable to read the history screenshot</source>
+            <translation>Unable to read the history screenshot</translation>
         </message>
     </context>
     <context>
@@ -694,6 +706,10 @@
             <translation>Drag image files here, or choose add images</translation>
         </message>
         <message>
+            <source>Drag to move an image. Hold %1 to snap to other images. Drag a handle to resize around the center.</source>
+            <translation>Drag to move an image. Hold %1 to snap to other images. Drag a handle to resize around the center.</translation>
+        </message>
+        <message>
             <source>Drop images to stitch</source>
             <translation>Drop images to stitch</translation>
         </message>
@@ -708,6 +724,10 @@
         <message>
             <source>Flip vertically</source>
             <translation>Flip vertically</translation>
+        </message>
+        <message>
+            <source>Free</source>
+            <translation>Free</translation>
         </message>
         <message>
             <source>Gray</source>
@@ -788,6 +808,14 @@
         <message>
             <source>Percentage</source>
             <translation>Percentage</translation>
+        </message>
+        <message>
+            <source>Percentage of the first image’s original height after rotation</source>
+            <translation>Percentage of the first image’s original height after rotation</translation>
+        </message>
+        <message>
+            <source>Percentage of the greatest original image height after rotation</source>
+            <translation>Percentage of the greatest original image height after rotation</translation>
         </message>
         <message>
             <source>Percentage of the grid cell width</source>

@@ -1,6 +1,10 @@
 #include "snow_shot/network/baidupaddleocrclient.h"
 
 #include <QBuffer>
+#include <QCoreApplication>
+#include <QCryptographicHash>
+#include <QDeadlineTimer>
+#include <QHash>
 #include <QHttpMultiPart>
 #include <QIODevice>
 #include <QJsonArray>
@@ -19,6 +23,38 @@ constexpr int kTimeoutMs = 30000;
 constexpr int kPollIntervalMs = 5000;
 constexpr int kMaxPolls = 120;
 constexpr qsizetype kMaxResultBytes = 8 * 1024 * 1024;
+// No quota-query/reset-time endpoint is documented. Remember explicit
+// exhaustion briefly in this process only, then allow a fresh server check.
+constexpr qint64 kQuotaCooldownMs = 15 * 60 * 1000;
+constexpr qsizetype kMaxQuotaEntries = 128;
+
+QHash<QByteArray, QDeadlineTimer>& exhaustedModels() {
+    static thread_local QHash<QByteArray, QDeadlineTimer> entries;
+    for (auto it = entries.begin(); it != entries.end();) {
+        if (it.value().hasExpired())
+            it = entries.erase(it);
+        else
+            ++it;
+    }
+    return entries;
+}
+
+QByteArray quotaKey(const QUrl& endpoint, const QString& token, const QString& model) {
+    return QCryptographicHash::hash(endpoint.toEncoded() + '\n' + token.toUtf8() + '\n' +
+                                        model.toUtf8(),
+                                    QCryptographicHash::Sha256);
+}
+
+bool quotaCoolingDown(const QUrl& endpoint, const QString& token, const QString& model) {
+    return exhaustedModels().contains(quotaKey(endpoint, token, model));
+}
+
+void rememberQuotaExhaustion(const QUrl& endpoint, const QString& token, const QString& model) {
+    auto& entries = exhaustedModels();
+    if (entries.size() >= kMaxQuotaEntries)
+        entries.clear();
+    entries.insert(quotaKey(endpoint, token, model), QDeadlineTimer(kQuotaCooldownMs));
+}
 
 QString responseError(const QJsonObject& object) {
     const auto data = object.value(QStringLiteral("data")).toObject();
@@ -28,7 +64,7 @@ QString responseError(const QJsonObject& object) {
     QString message = object.value(QStringLiteral("msg")).toString();
     if (message.isEmpty())
         message = object.value(QStringLiteral("message")).toString();
-    return message.isEmpty() ? QStringLiteral("The PaddleOCR service returned an error") : message;
+    return message;
 }
 
 QString parseJsonlToMarkdown(const QByteArray& body, QString* error) {
@@ -40,7 +76,7 @@ QString parseJsonlToMarkdown(const QByteArray& body, QString* error) {
         QJsonParseError parseError;
         const QJsonDocument json = QJsonDocument::fromJson(line.trimmed(), &parseError);
         if (parseError.error != QJsonParseError::NoError || !json.isObject()) {
-            *error = QStringLiteral("Invalid PaddleOCR JSONL document");
+            *error = QCoreApplication::translate("BaiduPaddleOcrClient", "Invalid PaddleOCR JSONL document");
             return {};
         }
         const QJsonObject root = json.object();
@@ -72,31 +108,42 @@ QString parseJsonlToMarkdown(const QByteArray& body, QString* error) {
         }
     }
     if (!pages)
-        *error = QStringLiteral("PaddleOCR JSONL has no recognized text or document Markdown");
+        *error = QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR JSONL has no recognized text or document Markdown");
     return parts.join(QStringLiteral("\n\n"));
 }
 
 QString httpFailure(int status, const QByteArray& body, const QString& networkError) {
     const QJsonObject result = QJsonDocument::fromJson(body).object();
     const int code = result.value(QStringLiteral("code")).toInt(-1);
+    // The asynchronous v2 business code is authoritative, not the HTTP status alone.
+    if (code == 12001)
+        return QCoreApplication::translate("BaiduPaddleOcrClient", "AI Studio daily OCR quota exhausted (12001 / HTTP 403)");
+    if (code == 10010)
+        return QCoreApplication::translate("BaiduPaddleOcrClient", "AI Studio job queue is full (10010); retry later");
+    if (code == 12002)
+        return QCoreApplication::translate("BaiduPaddleOcrClient", "AI Studio rate limit (12002 / HTTP 429), retry later");
     if (status == 401 || code == 401)
-        return QStringLiteral("AI Studio Access Token rejected (HTTP 401)");
-    if (status == 429 || code == 12002)
-        return QStringLiteral("AI Studio rate limit (12002 / HTTP 429), retry later");
-    if (status == 403 || code == 12001)
-        return QStringLiteral("AI Studio daily OCR quota exhausted (12001 / HTTP 403)");
+        return QCoreApplication::translate("BaiduPaddleOcrClient", "AI Studio Access Token rejected (HTTP 401)");
     if (code == 10007)
-        return QStringLiteral("AI Studio does not support the selected model (10007)");
-    return QStringLiteral("PaddleOCR API failed (HTTP %1, code %2): %3")
+        return QCoreApplication::translate("BaiduPaddleOcrClient", "AI Studio does not support the selected model (10007)");
+    const QString providerError = responseError(result);
+    return QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR API failed (HTTP %1, code %2): %3")
         .arg(status).arg(code)
-        .arg(networkError.isEmpty() ? responseError(result) : networkError);
+        .arg(!providerError.isEmpty() ? providerError
+             : status > 0 ? QCoreApplication::translate("BaiduPaddleOcrClient", "The PaddleOCR service returned an error")
+                          : networkError);
 }
 } // namespace
 
 BaiduPaddleOcrClient::BaiduPaddleOcrClient(QObject* parent) : QObject(parent) {
     m_pollTimer.setSingleShot(true);
     m_pollTimer.setInterval(kPollIntervalMs);
-    connect(&m_pollTimer, &QTimer::timeout, this, [this] { poll(); });
+    connect(&m_pollTimer, &QTimer::timeout, this, [this] {
+        if (m_jobId.isEmpty())
+            submit();
+        else
+            poll();
+    });
 }
 
 BaiduPaddleOcrClient::~BaiduPaddleOcrClient() {
@@ -121,6 +168,10 @@ void BaiduPaddleOcrClient::cancel() {
     m_completion = {};
     m_token.clear();
     m_jobId.clear();
+    m_pendingPng.clear();
+    m_actualModel.clear();
+    m_candidates.clear();
+    m_submitRetries = 0;
     if (m_reply) {
         auto* reply = m_reply.data();
         m_reply.clear();
@@ -132,8 +183,11 @@ void BaiduPaddleOcrClient::cancel() {
 
 void BaiduPaddleOcrClient::finish(QString markdown, QString error) {
     m_pollTimer.stop();
+    if (!m_token.isEmpty())
+        error.replace(m_token, QStringLiteral("[redacted]"));
     m_token.clear();
     m_jobId.clear();
+    m_pendingPng.clear();
     auto completion = std::move(m_completion);
     m_completion = {};
     if (completion)
@@ -157,7 +211,7 @@ void BaiduPaddleOcrClient::requestFinished(
                 if (m_reply == reply)
                     m_reply.clear();
                 if (body.size() > kMaxResultBytes) {
-                    finish({}, QStringLiteral("PaddleOCR response exceeds 8 MiB"));
+                    finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR response exceeds 8 MiB"));
                     return;
                 }
                 handler(status, body, error);
@@ -172,16 +226,36 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
     if (!m_completion)
         return;
     if (image.isNull() || options.accessToken.trimmed().isEmpty()) {
-        finish({}, QStringLiteral("A screenshot and PaddleOCR Access Token are required"));
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "A screenshot and PaddleOCR Access Token are required"));
         return;
     }
-    if (options.model != QStringLiteral("PP-OCRv6") &&
+    m_automatic = options.model == QStringLiteral("auto");
+    m_outputFormat = options.outputFormat;
+    if (m_outputFormat != QStringLiteral("markdown") && m_outputFormat != QStringLiteral("text") &&
+        m_outputFormat != QStringLiteral("jsonl") && m_outputFormat != QStringLiteral("html")) {
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "Unsupported PaddleOCR output format"));
+        return;
+    }
+    if (!m_automatic && options.model != QStringLiteral("PP-OCRv6") &&
         options.model != QStringLiteral("PP-StructureV3") &&
         options.model != QStringLiteral("PaddleOCR-VL-1.6")) {
-        finish({}, QStringLiteral("Unsupported PaddleOCR model"));
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "Unsupported PaddleOCR model"));
         return;
     }
 
+    // Structured formats must not silently degrade to unstructured OCR.
+    // An explicitly selected OCRv6 still supports plain-text Markdown for
+    // legacy/MCP callers; the interactive settings offers text or JSONL.
+    if (m_automatic) {
+        if (m_outputFormat == QStringLiteral("text") || m_outputFormat == QStringLiteral("jsonl"))
+            m_candidates.append(QStringLiteral("PP-OCRv6"));
+        m_candidates.append(QStringLiteral("PaddleOCR-VL-1.6"));
+        m_candidates.append(QStringLiteral("PP-StructureV3"));
+    } else {
+        m_candidates.append(options.model);
+    }
+    m_candidateIndex = 0;
+    m_submitRetries = 0;
     QString base = options.apiUrl.trimmed();
     while (base.endsWith(u'/'))
         base.chop(1);
@@ -192,38 +266,50 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
     m_pollIntervalMs = m_endpoint.scheme() == u"http" ? 10 : kPollIntervalMs;
     m_pollTimer.setInterval(m_pollIntervalMs);
     if (!acceptableUrl(m_endpoint) || m_endpoint.hasQuery()) {
-        finish({}, QStringLiteral("PaddleOCR API URL must be HTTPS (or localhost for testing)"));
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR API URL must be HTTPS (or localhost for testing)"));
         return;
     }
     QByteArray png;
     QBuffer buffer(&png);
     if (!buffer.open(QIODevice::WriteOnly) || !image.save(&buffer, "PNG") ||
         png.size() > 15 * 1024 * 1024) {
-        finish({}, QStringLiteral("Unable to prepare PNG image (15 MiB limit)"));
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "Unable to prepare PNG image (15 MiB limit)"));
         return;
     }
     m_token = options.accessToken.trimmed();
+    m_pendingPng = std::move(png);
+    submit();
+}
 
+void BaiduPaddleOcrClient::submit() {
+    if (!m_completion || m_pendingPng.isEmpty())
+        return;
+    while (m_automatic && m_candidateIndex < m_candidates.size() &&
+           quotaCoolingDown(m_endpoint, m_token, m_candidates.at(m_candidateIndex)))
+        ++m_candidateIndex;
+    if (m_candidateIndex >= m_candidates.size()) {
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient",
+                                                "All compatible PaddleOCR models reached their daily quota (12001)"));
+        return;
+    }
+    m_actualModel = m_candidates.at(m_candidateIndex);
     auto* multipart = new QHttpMultiPart(QHttpMultiPart::FormDataType);
     QHttpPart modelPart;
     modelPart.setHeader(QNetworkRequest::ContentDispositionHeader,
                         QVariant(QStringLiteral("form-data; name=\"model\"")));
-    modelPart.setBody(options.model.toUtf8());
+    modelPart.setBody(m_actualModel.toUtf8());
     multipart->append(modelPart);
 
-    // AI Studio's official optionalPayload enables tables, formula OCR and
-    // layout-preserving Markdown rather than depending on provider defaults.
-    QJsonObject pipeline;
-    if (options.model == QStringLiteral("PP-StructureV3")) {
-        pipeline.insert(QStringLiteral("useTableRecognition"), true);
-        pipeline.insert(QStringLiteral("useFormulaRecognition"), true);
-        pipeline.insert(QStringLiteral("prettifyMarkdown"), true);
-    } else if (options.model == QStringLiteral("PaddleOCR-VL-1.6")) {
-        pipeline.insert(QStringLiteral("useLayoutDetection"), true);
-        pipeline.insert(QStringLiteral("prettifyMarkdown"), true);
-    } else {
-        pipeline.insert(QStringLiteral("useDocOrientationClassify"), false);
-    }
+    // Match the AI Studio v2 local-file examples: optionalPayload is a JSON
+    // string in multipart form data, not arbitrary pipeline configuration.
+    QJsonObject pipeline{
+        {QStringLiteral("useDocOrientationClassify"), false},
+        {QStringLiteral("useDocUnwarping"), false},
+    };
+    pipeline.insert(m_actualModel == QStringLiteral("PP-OCRv6")
+                        ? QStringLiteral("useTextlineOrientation")
+                        : QStringLiteral("useChartRecognition"),
+                    false);
     QHttpPart payloadPart;
     payloadPart.setHeader(QNetworkRequest::ContentDispositionHeader,
                           QVariant(QStringLiteral("form-data; name=\"optionalPayload\"")));
@@ -234,33 +320,49 @@ void BaiduPaddleOcrClient::recognize(const QImage& image, Options options,
     imagePart.setHeader(QNetworkRequest::ContentDispositionHeader,
                         QVariant(QStringLiteral("form-data; name=\"file\"; filename=\"screenshot.png\"")));
     imagePart.setHeader(QNetworkRequest::ContentTypeHeader, QVariant(QStringLiteral("image/png")));
-    imagePart.setBody(png);
+    imagePart.setBody(m_pendingPng);
     multipart->append(imagePart);
 
     QNetworkRequest request(m_endpoint);
-    request.setRawHeader("Authorization", "Bearer " + m_token.toUtf8());
+    request.setRawHeader("Authorization", "bearer " + m_token.toUtf8());
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(kTimeoutMs);
     auto* reply = m_network.post(request, multipart);
     multipart->setParent(reply);
     requestFinished(reply, [this](int status, QByteArray body, QString error) {
-        if (status < 200 || status >= 300 || !error.isEmpty()) {
-            finish({}, httpFailure(status, body, error));
-            return;
-        }
         const QJsonDocument json = QJsonDocument::fromJson(body);
         const QJsonObject object = json.object();
-        if (!json.isObject() || object.value(QStringLiteral("code")).toInt(-1) != 0) {
-            finish({}, httpFailure(status, body, {}));
+        const int code = object.value(QStringLiteral("code")).toInt(-1);
+        // Only explicit pre-admission refusals are safe to resubmit. Never
+        // repeat an ambiguous timeout/network failure or a job with an ID.
+        const bool refused = object.value(QStringLiteral("data")).toObject()
+                                 .value(QStringLiteral("jobId")).toVariant().toString().isEmpty();
+        if (refused && code == 12001) {
+            rememberQuotaExhaustion(m_endpoint, m_token, m_actualModel);
+            if (m_automatic) {
+                ++m_candidateIndex;
+                m_submitRetries = 0;
+                m_pollTimer.start(m_pollIntervalMs);
+                return;
+            }
+        }
+        if (refused && (code == 10010 || code == 12002) && m_submitRetries < 3) {
+            m_pollTimer.start(m_pollIntervalMs * (1 << m_submitRetries++));
+            return;
+        }
+        if (status < 200 || status >= 300 || !error.isEmpty() || !json.isObject() ||
+            (object.contains(QStringLiteral("code")) && code != 0)) {
+            finish({}, httpFailure(status, body, error));
             return;
         }
         m_jobId = object.value(QStringLiteral("data")).toObject()
                       .value(QStringLiteral("jobId")).toVariant().toString();
         if (m_jobId.isEmpty()) {
-            finish({}, QStringLiteral("PaddleOCR response has no jobId"));
+            finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR response has no jobId"));
             return;
         }
+        m_pendingPng.clear();
         m_pollTimer.start(m_pollIntervalMs);
     });
 }
@@ -269,20 +371,20 @@ void BaiduPaddleOcrClient::poll() {
     if (!m_completion)
         return;
     if (++m_attempts > kMaxPolls) {
-        finish({}, QStringLiteral("PaddleOCR job timed out"));
+        finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR job timed out"));
         return;
     }
     QUrl url(m_endpoint.toString() + u'/' +
              QString::fromLatin1(QUrl::toPercentEncoding(m_jobId)));
     QNetworkRequest request(url);
-    request.setRawHeader("Authorization", "Bearer " + m_token.toUtf8());
+    request.setRawHeader("Authorization", "bearer " + m_token.toUtf8());
     request.setAttribute(QNetworkRequest::RedirectPolicyAttribute,
                          QNetworkRequest::ManualRedirectPolicy);
     request.setTransferTimeout(kTimeoutMs);
     requestFinished(m_network.get(request), [this](int status, QByteArray body, QString error) {
         if (status < 200 || status >= 300 || !error.isEmpty()) {
-            if ((status == 429 || QJsonDocument::fromJson(body).object()
-                                   .value(QStringLiteral("code")).toInt() == 12002) &&
+            if (QJsonDocument::fromJson(body).object()
+                    .value(QStringLiteral("code")).toInt() == 12002 &&
                 m_rateLimitRetries++ < 3) {
                 m_pollTimer.start(m_pollIntervalMs * (1 << m_rateLimitRetries));
                 return;
@@ -292,7 +394,8 @@ void BaiduPaddleOcrClient::poll() {
         }
         const QJsonDocument json = QJsonDocument::fromJson(body);
         const QJsonObject object = json.object();
-        if (!json.isObject() || object.value(QStringLiteral("code")).toInt(-1) != 0) {
+        if (!json.isObject() || (object.contains(QStringLiteral("code")) &&
+                                object.value(QStringLiteral("code")).toInt(-1) != 0)) {
             if (object.value(QStringLiteral("code")).toInt() == 12002 &&
                 m_rateLimitRetries++ < 3) {
                 m_pollTimer.start(m_pollIntervalMs * (1 << m_rateLimitRetries));
@@ -304,11 +407,14 @@ void BaiduPaddleOcrClient::poll() {
         const QJsonObject data = object.value(QStringLiteral("data")).toObject();
         const QString state = data.value(QStringLiteral("state")).toString();
         if (state == QStringLiteral("pending") || state == QStringLiteral("running")) {
+            m_rateLimitRetries = 0;
             m_pollTimer.start(m_pollIntervalMs);
             return;
         }
         if (state != QStringLiteral("done")) {
-            finish({}, responseError(object));
+            const QString detail = responseError(object);
+            finish({}, detail.isEmpty() ? QCoreApplication::translate("BaiduPaddleOcrClient", "The PaddleOCR service returned an error")
+                                        : detail);
             return;
         }
         // Per AI Studio documentation, the durable job result is JSONL. For
@@ -322,8 +428,8 @@ void BaiduPaddleOcrClient::poll() {
         }
         // Some document-parsing API deployments only return Markdown links.
         const QUrl markdownUrl(resultUrl.value(QStringLiteral("markdownUrl")).toString());
-        if (!acceptableUrl(markdownUrl)) {
-            finish({}, QStringLiteral("PaddleOCR returned no valid JSONL or Markdown URL"));
+        if (m_outputFormat == QStringLiteral("jsonl") || !acceptableUrl(markdownUrl)) {
+            finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR returned no valid JSONL or Markdown URL"));
             return;
         }
         downloadResult(markdownUrl, false);
@@ -339,7 +445,7 @@ void BaiduPaddleOcrClient::downloadResult(const QUrl& url, bool jsonl) {
     request.setTransferTimeout(kTimeoutMs);
     requestFinished(m_network.get(request), [this, jsonl](int status, QByteArray body, QString error) {
         if (status < 200 || status >= 300 || !error.isEmpty()) {
-            finish({}, QStringLiteral("PaddleOCR result download failed (HTTP %1): %2")
+            finish({}, QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR result download failed (HTTP %1): %2")
                            .arg(status).arg(error));
             return;
         }
@@ -348,10 +454,11 @@ void BaiduPaddleOcrClient::downloadResult(const QUrl& url, bool jsonl) {
                                       : QString::fromUtf8(body);
         if (!parseError.isEmpty() || markdown.trimmed().isEmpty()) {
             finish({}, parseError.isEmpty()
-                           ? QStringLiteral("PaddleOCR returned empty Markdown") : parseError);
+                           ? QCoreApplication::translate("BaiduPaddleOcrClient", "PaddleOCR returned empty Markdown") : parseError);
             return;
         }
-        finish(markdown.trimmed(), {});
+        finish(m_outputFormat == QStringLiteral("jsonl") && jsonl
+                   ? QString::fromUtf8(body).trimmed() : markdown.trimmed(), {});
     });
 }
 

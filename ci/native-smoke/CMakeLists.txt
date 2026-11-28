@@ -83,11 +83,23 @@ target_include_directories(snow-shot-community-native-cloud-ocr-widget PRIVATE
 target_link_libraries(snow-shot-community-native-cloud-ocr-widget PRIVATE
     Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets)
 
-# Link the real production widget object into an offscreen Qt Test binary.
-# This closes the gap between policy tests and the full Settings acceptance:
-# fast CI now instantiates the same controls that ship in the application.
+# Type-check the actual AdQt rendering backend in both native gates, without
+# linking the full application UI dependency graph.
+add_library(snow-shot-community-native-cloud-ocr-controls OBJECT EXCLUDE_FROM_ALL
+    "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/cloudocrsettingscontrols.cpp")
+set_target_properties(snow-shot-community-native-cloud-ocr-controls PROPERTIES AUTOMOC OFF)
+target_include_directories(snow-shot-community-native-cloud-ocr-controls PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include"
+    "${SNOW_SHOT_ROOT}/ant_design_qt/packages/ant_design_qt/src"
+    "${SNOW_SHOT_ROOT}/ant_design_qt/packages/adqt_icon_core/src")
+target_link_libraries(snow-shot-community-native-cloud-ocr-controls PRIVATE
+    Qt6::Core Qt6::Gui Qt6::Widgets)
+
+# Link the same production settings state/logic with a small Qt editor backend.
+# The full Windows test below the main application CMake links actual AdQt.
 add_executable(snow-shot-community-native-cloud-ocr-widget-tests
     community_cloud_ocr_widget_tests.cpp
+    cloud_ocr_qt_controls.cpp
     "${SNOW_SHOT_ROOT}/snow_shot/src/network/communitycloudocrsettings.cpp"
     "${SNOW_SHOT_ROOT}/snow_shot/src/network/baidupaddleocrclient.cpp"
     "${SNOW_SHOT_ROOT}/snow_shot/src/presentation/components/cloudocrenginechoices.cpp")
@@ -97,6 +109,8 @@ target_include_directories(snow-shot-community-native-cloud-ocr-widget-tests PRI
 target_link_libraries(snow-shot-community-native-cloud-ocr-widget-tests PRIVATE
     snow-shot-community-native-cloud-ocr-widget
     Qt6::Core Qt6::Gui Qt6::Network Qt6::Widgets Qt6::Test)
+add_dependencies(snow-shot-community-native-cloud-ocr-widget-tests
+    snow-shot-community-native-cloud-ocr-controls)
 add_test(NAME snow-shot-community-native-cloud-ocr-widget-tests
     COMMAND snow-shot-community-native-cloud-ocr-widget-tests)
 set_tests_properties(snow-shot-community-native-cloud-ocr-widget-tests PROPERTIES
@@ -126,3 +140,14 @@ if(WIN32)
         "${SNOW_SHOT_ROOT}/snow_shot/include")
     target_link_libraries(snow-shot-community-native-windows-qos PRIVATE Qt6::Core)
 endif()
+
+# WebDAV sync core is compiled from production sources, without live credentials.
+add_executable(snow-shot-community-native-webdav-tests
+    "${SNOW_SHOT_ROOT}/snow_shot/tests/webdav_settings_sync_tests.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/src/network/webdavsettingssync.cpp"
+    "${SNOW_SHOT_ROOT}/snow_shot/include/snow_shot/network/webdavsettingssync.h")
+target_include_directories(snow-shot-community-native-webdav-tests PRIVATE
+    "${SNOW_SHOT_ROOT}/snow_shot/include")
+target_link_libraries(snow-shot-community-native-webdav-tests PRIVATE Qt6::Core Qt6::Network Qt6::Test)
+add_test(NAME snow-shot-community-native-webdav-tests COMMAND snow-shot-community-native-webdav-tests)
+set_tests_properties(snow-shot-community-native-webdav-tests PROPERTIES TIMEOUT 30 LABELS "native;community;webdav")

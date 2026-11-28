@@ -1,3 +1,9 @@
 {
-  "keys": []
+  "keys": [
+    {
+      "id": "community-release-v1",
+      "modulus": "ioKvlfqMRJVQKvFjA8Y/0uRC+Z57UrqPgk5LSXrfJodF5JyNekAxIXJPZIvAupDcpwylw3GC5RY9s8tt7LbFcsF5AJlkHY2nQA/BMsggCMGiphbAbZZ/wrxynZyaFIFjvKSKvexnMPEX7RvNz974+hxdFXgN7GjvFhovOlPqUNEZrWZdvRbp2Ue9E/JNnqR6nkKJHqlic3NsTXOOUDP8Dyy8oIVFoa5mrP6heYcI8nehf0BXUZ0KM9lC2tsfwutl6aNmsO9TiN1nX423ZQDWO4jMntaVQzDm8dTl5nbl/qFrKbUZnZX9Bn7PYIstKt+9NDNBf/C5yl5WOZDlhQjHioWvEknb6itQ67w6KIqgTjG5KgeIgqjYTMtcCfi93rKf6x9d2ypwun6u26TeVyr6Zoqwtdl3qzljqqvKWbPs6dQJDdRjXIpPNsFzip4dJcjxKPrj2ZHvJjhMTDrHTfSWgqYvle398mY+sDTkOoeQn0Mt4Lq/gr+Cqo2hFbX2Tq27",
+      "exponent": "AQAB"
+    }
+  ]
 }

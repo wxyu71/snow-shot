@@ -17,6 +17,7 @@
 #include "snow_shot/storage/applicationstorage.h"
 #include "widgets/scroll_area.h"
 #include "widgets/color_picker.h"
+#include "widgets/combo_box.h"
 #include "widgets/select.h"
 #include "widgets/multi_select.h"
 #include "widgets/slider.h"
@@ -58,6 +59,7 @@
 #include <QtTest/QTest>
 #include <QTranslator>
 
+#include <algorithm>
 #include <cstdlib>
 #include <iostream>
 
@@ -513,8 +515,8 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                                settings::SettingsRuntimeSession& session) {
     // Legacy Vision/HTML/LaTeX preferences must never override the Community
     // product contract, even before the settings widget is saved again.
-    QSettings legacy(QSettings::IniFormat, QSettings::UserScope,
-                     QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
+    QSettings legacy(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("SnowShot"),
+                     QStringLiteral("CloudOcr"));
     legacy.setValue(QStringLiteral("engine"), QStringLiteral("vision"));
     legacy.setValue(QStringLiteral("output_format"), QStringLiteral("html"));
     legacy.sync();
@@ -536,37 +538,49 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
     // custom controls after construction; the constructor-local name is replaced.
     auto* widget = page.findChild<QWidget*>(settings::generatedObjectName(
         QStringLiteral("settings-item"), QStringLiteral("text-recognition.cloud-ocr")));
-    auto* engine = page.findChild<QComboBox*>(QStringLiteral("onlineOcrEngine"));
-    auto* output = page.findChild<QComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
+    auto* engine = page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("onlineOcrEngine"));
+    auto* output =
+        page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("onlineOcrOutputFormat"));
     auto* endpoint = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrApiUrl"));
     auto* token = page.findChild<QLineEdit*>(QStringLiteral("paddleOcrAccessToken"));
-    auto* model = page.findChild<QComboBox*>(QStringLiteral("paddleOcrModel"));
+    auto* model = page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("paddleOcrModel"));
     auto* save = page.findChild<QPushButton*>(QStringLiteral("paddleOcrSave"));
-    auto* testConnection =
-        page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
+    auto* testConnection = page.findChild<QPushButton*>(QStringLiteral("paddleOcrTestConnection"));
     auto* status = page.findChild<QLabel*>(QStringLiteral("paddleOcrConnectionStatus"));
-    require(widget && engine && output && endpoint && token && model && save &&
-                testConnection && status,
+    require(widget && engine && output && endpoint && token && model && save && testConnection &&
+                status,
             "Online OCR settings materialize the real PaddleOCR controls");
-    require(page.findChild<QComboBox*>(QStringLiteral("onlineOcrVisionModel")) == nullptr &&
-                engine->count() == 1 &&
-                engine->currentData().toString() == QStringLiteral("paddleocr") &&
-                engine->findData(QStringLiteral("vision")) == -1 &&
+    require(page.findChild<adqt::widgets::AdComboBox*>(QStringLiteral("onlineOcrVisionModel")) ==
+                    nullptr &&
+                engine->options().size() == 1 &&
+                engine->currentValue().toString() == QStringLiteral("paddleocr") &&
+                engine->options().first().value.toString() == QStringLiteral("paddleocr") &&
                 !engine->isEnabled(),
             "Community Online OCR exposes only the fixed PaddleOCR provider");
-    require(output->count() == 1 &&
-                output->currentData().toString() == QStringLiteral("markdown") &&
-                output->findData(QStringLiteral("html")) == -1 &&
-                output->findData(QStringLiteral("latex")) == -1 &&
-                !output->isEnabled(),
-            "Community Online OCR exposes only Markdown output");
-    require(token->echoMode() == QLineEdit::Password,
-            "Cloud OCR token uses a password editor");
-    require(model->count() == 3 &&
-                model->findText(QStringLiteral("PaddleOCR-VL-1.6")) >= 0 &&
-                model->findText(QStringLiteral("PP-StructureV3")) >= 0 &&
-                model->findText(QStringLiteral("PP-OCRv6")) >= 0,
-            "Cloud OCR settings expose all supported PaddleOCR models");
+    const auto outputOptions = output->options();
+    const auto hasOutputFormat = [&outputOptions](const QString& format) {
+        return std::any_of(
+            outputOptions.cbegin(), outputOptions.cend(),
+            [&format](const auto& option) { return option.value.toString() == format; });
+    };
+    require(
+        outputOptions.size() == 4 && hasOutputFormat(QStringLiteral("markdown")) &&
+            hasOutputFormat(QStringLiteral("text")) && hasOutputFormat(QStringLiteral("jsonl")) &&
+            hasOutputFormat(QStringLiteral("html")) &&
+            output->currentValue().toString() == QStringLiteral("markdown") && output->isEnabled(),
+        "document-capable PaddleOCR models expose all four output formats");
+    require(token->echoMode() == QLineEdit::Password, "Cloud OCR token uses a password editor");
+    const auto modelOptions = model->options();
+    const auto containsModel = [&modelOptions](const QString& modelId) {
+        return std::any_of(
+            modelOptions.cbegin(), modelOptions.cend(),
+            [&modelId](const auto& option) { return option.value.toString() == modelId; });
+    };
+    require(modelOptions.size() == 4 && containsModel(QStringLiteral("auto")) &&
+                containsModel(QStringLiteral("PaddleOCR-VL-1.6")) &&
+                containsModel(QStringLiteral("PP-StructureV3")) &&
+                containsModel(QStringLiteral("PP-OCRv6")),
+            "Cloud OCR settings expose automatic selection and all supported PaddleOCR models");
 
     endpoint->setText(QStringLiteral("not-a-url"));
     token->setText(QStringLiteral("token"));
@@ -577,7 +591,14 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
 
     endpoint->setText(QStringLiteral("http://127.0.0.1:5102"));
     token->setText(QStringLiteral("native-test-token"));
-    model->setCurrentText(QStringLiteral("PP-OCRv6"));
+    model->setCurrentValue(QStringLiteral("PP-OCRv6"));
+    const auto textOnlyOptions = output->options();
+    require(textOnlyOptions.size() == 2 &&
+                textOnlyOptions.at(0).value.toString() == QStringLiteral("text") &&
+                textOnlyOptions.at(1).value.toString() == QStringLiteral("jsonl") &&
+                output->currentValue().toString() == QStringLiteral("text"),
+            "PP-OCRv6 exposes only its supported text and JSONL output formats");
+    output->setCurrentValue(QStringLiteral("jsonl"));
     save->click();
     drainEvents();
     const auto stored = snow_shot::network::readCommunityCloudOcrSettings();
@@ -586,15 +607,16 @@ void communityCloudOcrSettings(const settings::SettingsRegistry& registry,
                 stored.accessToken == QStringLiteral("native-test-token") &&
                 stored.model == QStringLiteral("PP-OCRv6") &&
                 stored.engine == QStringLiteral("paddleocr") &&
-                stored.outputFormat == QStringLiteral("markdown"),
+                stored.outputFormat == QStringLiteral("jsonl"),
             "the Online OCR widget saves its supported PaddleOCR configuration");
-    QSettings persisted(QSettings::IniFormat, QSettings::UserScope,
-                        QStringLiteral("SnowShot"), QStringLiteral("CloudOcr"));
-    require(persisted.value(QStringLiteral("engine")).toString() ==
-                QStringLiteral("paddleocr") &&
+    QSettings persisted(QSettings::IniFormat, QSettings::UserScope, QStringLiteral("SnowShot"),
+                        QStringLiteral("CloudOcr"));
+    require(persisted.value(QStringLiteral("engine")).toString() == QStringLiteral("paddleocr") &&
                 persisted.value(QStringLiteral("output_format")).toString() ==
-                    QStringLiteral("markdown"),
-            "saving Online OCR overwrites obsolete Vision and HTML preferences");
+                    QStringLiteral("jsonl") &&
+                persisted.value(QStringLiteral("paddle_output_format_v2")).toString() ==
+                    QStringLiteral("jsonl"),
+            "saving Online OCR persists the selected PaddleOCR output format");
 #ifdef Q_OS_WIN
     require(persisted.value(QStringLiteral("access_token")).toString().isEmpty() &&
                 !persisted.value(QStringLiteral("access_token_dpapi_v1")).toString().isEmpty(),

@@ -764,9 +764,92 @@ pub fn apply_transaction(
     report_progress(hooks.progress, ProgressPhase::Preparing, 0, 0);
     validate_root(root)?;
     let _lock = acquire_lock(root, "Another update transaction is running")?;
-    let result = apply_locked(root, archive, release, hooks);
+    let result = apply_locked(root, archive, release, hooks, None);
     prune_finished_work(root);
     result
+}
+
+// The manually executed setup EXE can explicitly select a different full
+// installer variant. Remote in-app updates always preserve the installed variant.
+#[cfg(windows)]
+pub fn apply_local_installer(
+    root: &Path,
+    archive: &Path,
+    manifest: &Path,
+    manifest_hash: &str,
+) -> Result<()> {
+    use sha2::{Digest, Sha256};
+    validate_root(root)?;
+    require(platform::registered_target_matches(root)?, "invalid_installation_root",
+            "The installation directory is not registered")?;
+    let bytes = read_limited(manifest, crate::contract::MAX_METADATA_BYTES as u64)?;
+    require(format!("{:x}", Sha256::digest(&bytes)) == manifest_hash,
+            "update_payload_mismatch", "Installer payload manifest checksum mismatch")?;
+    let (release, variant) = parse_local_installer(&bytes)?;
+    // This entry point never elevates itself. The setup process owns explicit
+    // consent and scope. Unlike network updates, this manifest is embedded in
+    // the manually launched EXE, along with its expected digest.
+    no_links(archive)?;
+    let _lock = acquire_lock(root, "Another update transaction is running")?;
+    platform::require_installer_application_closed(root)?;
+    let result = apply_locked(root, archive, &release, TransactionHooks::default(), Some(&variant));
+    prune_finished_work(root);
+    result
+}
+
+#[cfg(any(windows, test))]
+fn parse_local_installer(bytes: &[u8]) -> Result<(UpdateRelease, String)> {
+    let invalid = || UpdateError::new("invalid_installer_payload", "Invalid local installer payload");
+    let value: Value = serde_json::from_slice(bytes).map_err(|_| invalid())?;
+    let object = value.as_object().ok_or_else(invalid)?;
+    let version = value["version"].as_str().ok_or_else(invalid)?;
+    let parsed = crate::contract::parse_version(version)?;
+    let variant = value["variant"].as_str().ok_or_else(invalid)?;
+    let size = value["size"].as_u64().ok_or_else(invalid)?;
+    let sha256 = value["sha256"].as_str().ok_or_else(invalid)?;
+    require(!crate::edition::MINI && crate::edition::PLATFORM == "windows-x64"
+        && object.len() == 8 && value["schema"] == 1
+        && value["product"] == "snow-shot-community" && value["platform"] == "windows-x64"
+        && parsed.build.is_empty() && parsed.pre.as_str().strip_prefix("beta.")
+            .is_some_and(|n| !n.is_empty() && n.bytes().all(|b| b.is_ascii_digit()))
+        && matches!(variant, "online" | "offline")
+        && size > 0 && size <= crate::contract::MAX_PAYLOAD_BYTES
+        && sha256.len() == 64 && sha256.bytes().all(|b| b.is_ascii_digit() || (b'a'..=b'f').contains(&b)),
+        "invalid_installer_payload", "Invalid local installer payload")?;
+    let files = parse_file_inventory(object.get("files"))?;
+    for required in [crate::edition::APP_PATH, crate::edition::UPDATER_PATH, INSTALLATION_RECORD] {
+        require(files.iter().any(|file| file.path == required),
+                "incomplete_update_archive", "Incomplete update archive")?;
+    }
+    require(!files.iter().any(|file| file.path.eq_ignore_ascii_case(crate::edition::MARKER_PATH)),
+        "invalid_installer_payload", "Invalid local installer payload")?;
+    Ok((UpdateRelease {
+        platform: "windows-x64".to_owned(),
+        version: version.to_owned(),
+        envelope: Vec::new(),
+        packages: vec![UpdatePackage {
+            variant: variant.to_owned(), kind: "update".to_owned(),
+            path: format!("setup/snow-shot_windows-x64-{variant}-update.zip"),
+            size, sha256: sha256.to_owned(), files,
+        }],
+    }, variant.to_owned()))
+}
+
+#[cfg(all(test, not(feature = "mini"), not(target_arch = "aarch64")))]
+#[test]
+fn local_installer_manifest_has_no_portable_or_foreign_payload() {
+    let file = |path: &str| serde_json::json!({"path":path,"size":1,"sha256":"a".repeat(64)});
+    let mut value = serde_json::json!({
+        "schema":1,"product":"snow-shot-community","platform":"windows-x64",
+        "version":"1.6.3-beta.2","variant":"offline","size":3,"sha256":"b".repeat(64),
+        "files":[file(crate::edition::APP_PATH),file(crate::edition::UPDATER_PATH),file(INSTALLATION_RECORD)]
+    });
+    assert_eq!(parse_local_installer(&serde_json::to_vec(&value).unwrap()).unwrap().1, "offline");
+    value["variant"] = serde_json::json!("portable");
+    assert!(parse_local_installer(&serde_json::to_vec(&value).unwrap()).is_err());
+    value["variant"] = serde_json::json!("offline");
+    value["files"][0]["path"] = serde_json::json!("bin/../foreign.exe");
+    assert!(parse_local_installer(&serde_json::to_vec(&value).unwrap()).is_err());
 }
 
 fn apply_locked(
@@ -774,6 +857,7 @@ fn apply_locked(
     archive: &Path,
     release: &UpdateRelease,
     hooks: TransactionHooks<'_>,
+    target_variant: Option<&str>,
 ) -> Result<()> {
     if transaction_pending(root) {
         restore_with_progress(root, hooks.progress)?;
@@ -784,7 +868,10 @@ fn apply_locked(
         "update_not_newer",
         "The update must be newer than the installed release",
     )?;
-    let package = release.update_package(&installed.variant)?;
+    let variant = target_variant.unwrap_or(&installed.variant);
+    require(target_variant.is_none() || matches!(installed.variant.as_str(), "online" | "offline"),
+            "invalid_installer_payload", "Unsupported installed variant")?;
+    let package = release.update_package(variant)?;
     report_progress(hooks.progress, ProgressPhase::Verifying, 0, 0);
     verify_file(archive, package.size, &package.sha256)?;
     report_progress(hooks.progress, ProgressPhase::Preparing, 0, 0);
@@ -813,7 +900,7 @@ fn apply_locked(
     let staged_record = installation_record(&stage)?;
     verify_record_inventory(&staged_record, package)?;
     require(
-        staged_record.version == release.version && staged_record.variant == installed.variant,
+        staged_record.version == release.version && staged_record.variant == variant,
         "installation_inventory_mismatch",
         "Update installation metadata does not match the signed release",
     )?;

@@ -9,6 +9,7 @@ branch and resolve conflicts before the PR can pass the ancestry gate.
 from __future__ import annotations
 
 import argparse
+import base64
 import fnmatch
 import json
 import os
@@ -76,6 +77,8 @@ COMMUNITY_SCAN_SUFFIXES = {
     ".py", ".js", ".ts", ".rs", ".cmake", ".txt", ".json", ".yml", ".yaml", ".sh", ".ps1",
 }
 COMMUNITY_SCAN_EXCLUSIONS = {
+    # This policy file lists forbidden upstream-only sources so Mini cannot link them.
+    "cmake/SnowShotMiniBuildContract.cmake",
     "scripts/upstream_sync.py",
     "scripts/test-upstream-sync.py",
 }
@@ -201,16 +204,29 @@ def assert_forbidden_runtime_content_absent() -> None:
         )
 
 
-def assert_community_update_signers_disabled() -> None:
+def assert_community_update_signer_trust() -> None:
     try:
         document = json.loads(COMMUNITY_UPDATE_KEYS.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise SystemExit(f"Community update trust store is invalid: {error}") from error
-    if not isinstance(document, dict) or set(document) != {"keys"} or document["keys"] != []:
+    keys = document.get("keys") if isinstance(document, dict) else None
+    if (not isinstance(document, dict) or set(document) != {"keys"} or
+            not isinstance(keys, list) or len(keys) != 1):
         raise SystemExit(
-            "Community updater must not embed remote release signing keys; "
-            "publishers are disabled until the community establishes its own signer."
+            "Community updater must trust exactly its pinned release signer; "
+            "upstream and additional signers are forbidden."
         )
+    key = keys[0]
+    if (not isinstance(key, dict) or set(key) != {"id", "modulus", "exponent"} or
+            key.get("id") != "community-release-v1"):
+        raise SystemExit("Community updater trust store contains an unapproved signer.")
+    try:
+        modulus = base64.b64decode(key["modulus"], validate=True)
+        exponent = base64.b64decode(key["exponent"], validate=True)
+    except (TypeError, ValueError) as error:
+        raise SystemExit("Community updater signer key is malformed.") from error
+    if len(modulus) != 384 or not modulus[0] & 0x80 or exponent != b"\x01\x00\x01":
+        raise SystemExit("Community updater requires its RSA-3072 signer with exponent 65537.")
 
 
 def immutable_git_dependency(specification: dict) -> bool:
@@ -587,7 +603,7 @@ def main() -> None:
     if args.command == "verify-deletions":
         assert_deleted_files_absent()
         assert_forbidden_runtime_content_absent()
-        assert_community_update_signers_disabled()
+        assert_community_update_signer_trust()
         assert_external_source_pins()
         print("Community policy: PASS")
     elif args.command == "classify":

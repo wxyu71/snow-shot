@@ -2,6 +2,93 @@
 <!DOCTYPE TS>
 <TS version="2.1" language="en_US" sourcelanguage="en_US">
     <context>
+        <name>BaiduPaddleOcrClient</name>
+        <message>
+            <source>A screenshot and PaddleOCR Access Token are required</source>
+            <translation>A screenshot and PaddleOCR Access Token are required</translation>
+        </message>
+        <message>
+            <source>AI Studio Access Token rejected (HTTP 401)</source>
+            <translation>AI Studio Access Token rejected (HTTP 401)</translation>
+        </message>
+        <message>
+            <source>AI Studio daily OCR quota exhausted (12001 / HTTP 403)</source>
+            <translation>AI Studio daily OCR quota exhausted (12001 / HTTP 403)</translation>
+        </message>
+        <message>
+            <source>AI Studio does not support the selected model (10007)</source>
+            <translation>AI Studio does not support the selected model (10007)</translation>
+        </message>
+        <message>
+            <source>AI Studio job queue is full (10010); retry later</source>
+            <translation>AI Studio job queue is full (10010); retry later</translation>
+        </message>
+        <message>
+            <source>AI Studio rate limit (12002 / HTTP 429), retry later</source>
+            <translation>AI Studio rate limit (12002 / HTTP 429), retry later</translation>
+        </message>
+        <message>
+            <source>All compatible PaddleOCR models reached their daily quota (12001)</source>
+            <translation>All compatible PaddleOCR models reached their daily quota (12001)</translation>
+        </message>
+        <message>
+            <source>Invalid PaddleOCR JSONL document</source>
+            <translation>Invalid PaddleOCR JSONL document</translation>
+        </message>
+        <message>
+            <source>PaddleOCR API URL must be HTTPS (or localhost for testing)</source>
+            <translation>PaddleOCR API URL must be HTTPS (or localhost for testing)</translation>
+        </message>
+        <message>
+            <source>PaddleOCR API failed (HTTP %1, code %2): %3</source>
+            <translation>PaddleOCR API failed (HTTP %1, code %2): %3</translation>
+        </message>
+        <message>
+            <source>PaddleOCR JSONL has no recognized text or document Markdown</source>
+            <translation>PaddleOCR JSONL has no recognized text or document Markdown</translation>
+        </message>
+        <message>
+            <source>PaddleOCR job timed out</source>
+            <translation>PaddleOCR job timed out</translation>
+        </message>
+        <message>
+            <source>PaddleOCR response exceeds 8 MiB</source>
+            <translation>PaddleOCR response exceeds 8 MiB</translation>
+        </message>
+        <message>
+            <source>PaddleOCR response has no jobId</source>
+            <translation>PaddleOCR response has no jobId</translation>
+        </message>
+        <message>
+            <source>PaddleOCR result download failed (HTTP %1): %2</source>
+            <translation>PaddleOCR result download failed (HTTP %1): %2</translation>
+        </message>
+        <message>
+            <source>PaddleOCR returned empty Markdown</source>
+            <translation>PaddleOCR returned empty Markdown</translation>
+        </message>
+        <message>
+            <source>PaddleOCR returned no valid JSONL or Markdown URL</source>
+            <translation>PaddleOCR returned no valid JSONL or Markdown URL</translation>
+        </message>
+        <message>
+            <source>The PaddleOCR service returned an error</source>
+            <translation>The PaddleOCR service returned an error</translation>
+        </message>
+        <message>
+            <source>Unable to prepare PNG image (15 MiB limit)</source>
+            <translation>Unable to prepare PNG image (15 MiB limit)</translation>
+        </message>
+        <message>
+            <source>Unsupported PaddleOCR model</source>
+            <translation>Unsupported PaddleOCR model</translation>
+        </message>
+        <message>
+            <source>Unsupported PaddleOCR output format</source>
+            <translation>Unsupported PaddleOCR output format</translation>
+        </message>
+    </context>
+    <context>
         <name>OcrTextOptions</name>
         <message>
             <source>Full-width</source>
@@ -89,12 +176,44 @@
     <context>
         <name>ScreenshotOcrController</name>
         <message>
+            <source>An online OCR job is already running in the background.</source>
+            <translation>An online OCR job is already running in the background.</translation>
+        </message>
+        <message>
             <source>Barcode recognition components are missing or damaged</source>
             <translation>Barcode recognition components are missing or damaged</translation>
         </message>
         <message>
             <source>Barcode recognition failed</source>
             <translation>Barcode recognition failed</translation>
+        </message>
+        <message>
+            <source>Configure the PaddleOCR Access Token in Settings before online OCR.</source>
+            <translation>Configure the PaddleOCR Access Token in Settings before online OCR.</translation>
+        </message>
+        <message>
+            <source>Online OCR completed (%1). The result was copied to the clipboard.</source>
+            <translation>Online OCR completed (%1). The result was copied to the clipboard.</translation>
+        </message>
+        <message>
+            <source>Online OCR completed, but copying failed: %1</source>
+            <translation>Online OCR completed, but copying failed: %1</translation>
+        </message>
+        <message>
+            <source>Online OCR completed, but the clipboard is unavailable.</source>
+            <translation>Online OCR completed, but the clipboard is unavailable.</translation>
+        </message>
+        <message>
+            <source>Online OCR completed. A newer copy operation was preserved.</source>
+            <translation>Online OCR completed. A newer copy operation was preserved.</translation>
+        </message>
+        <message>
+            <source>Online OCR failed: %1</source>
+            <translation>Online OCR failed: %1</translation>
+        </message>
+        <message>
+            <source>Online OCR is running in the background. You can continue using Snow Shot.</source>
+            <translation>Online OCR is running in the background. You can continue using Snow Shot.</translation>
         </message>
         <message>
             <source>Select an area to recognize</source>

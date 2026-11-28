@@ -179,6 +179,8 @@ QWidget* ContentCardWidget::createPage(
                 &ContentCardWidget::screenshotHistorySplitRequested);
         connect(historyPage, &ScreenshotHistoryPageWidget::imageEditingRequested, this,
                 &ContentCardWidget::screenshotHistoryImageEditingRequested);
+        connect(historyPage, &ScreenshotHistoryPageWidget::onlineOcrRequested, this,
+                &ContentCardWidget::screenshotHistoryOnlineOcrRequested);
         connect(historyPage, &ScreenshotHistoryPageWidget::imageCompressionRequested, this,
                 &ContentCardWidget::screenshotHistoryImageCompressionRequested);
         page = historyPage;

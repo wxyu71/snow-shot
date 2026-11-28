@@ -7,13 +7,17 @@
     "scripts/test-close-legacy-issues.ps1",
     "scripts/test-snow-shot-website.ps1",
     "snow_shot/include/snow_shot/app/accountsessionservice.h",
+    "snow_shot/include/snow_shot/storage/cloudsyncconfiguration.h",
     "snow_shot/include/snow_shot/presentation/components/accountpagewidget.h",
     "snow_shot/include/snow_shot/storage/accountsecretstore.h",
     "snow_shot/src/app/accountsessionservice.cpp",
+    "snow_shot/src/app/cloudsettingslayout_p.h",
     "snow_shot/src/platform/macos/accountsecretstore.mm",
     "snow_shot/src/presentation/components/accountpagewidget.cpp",
     "snow_shot/src/presentation/components/icons/resources/credits-coin.svg",
     "snow_shot/src/storage/accountsecretstore.cpp",
+    "snow_shot/src/storage/cloudsyncconfiguration.cpp",
+    "snow_shot/src/storage/cloudsyncconfigurationkeys_p.h",
     "snow_shot/tests/account_tests.cpp",
     "snow_shot/tests/macos_account_secret_store_tests.mm",
     "docs-macos-build.md",
@@ -37,7 +41,10 @@
     "snow_shot/tests/macos_smart_selection.md",
     "snow_shot/tests/macos_toolbar_tests.md",
     ".github/upstream-review-pending.md",
-    ".github/workflows/community-live-paddleocr.yml"
+    ".github/workflows/community-live-paddleocr.yml",
+    "snow_shot/include/snow_shot/app/cloudsettingssyncservice.h",
+    "snow_shot/src/app/cloudsettingssyncservice.cpp",
+    "snow_shot/tests/cloud_settings_sync_tests.cpp"
   ],
   "protected_globs": [
     ".gitmodules",
@@ -123,6 +130,7 @@
     "snow_shot/rust/snow-shot-updater/src/gitee.rs",
     "snow_shot/i18n/settings/*.ts",
     "snow_shot/i18n/core/*.ts",
+    "snow_shot/i18n/modules.json",
     "snow_shot/tests/baidu_paddleocr_client_tests.cpp",
     "README.md",
     "README.zh-CN.md",
@@ -155,6 +163,12 @@
     "AGENTS.md",
     "CONTRIBUTING.md",
     "docs/images/readme/README.md",
-    "snow-crates/docs/macos-media.md"
+    "snow-crates/docs/macos-media.md",
+    "snow_shot/include/snow_shot/network/webdavsettingssync.h",
+    "snow_shot/src/network/webdavsettingssync.cpp",
+    "snow_shot/tests/webdav_settings_sync_tests.cpp",
+    "ci/native-smoke/CMakeLists.txt",
+    "snow_shot/packaging/community/*",
+    "scripts/community_installer_signing.py"
   ]
 }

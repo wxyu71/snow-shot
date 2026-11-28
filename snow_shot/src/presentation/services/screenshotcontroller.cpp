@@ -51,6 +51,7 @@
 #include "snow_shot/shortcuts/shortcutdisplayservice.h"
 
 #include "snow_shot/app/editionfeatures.h"
+#include "snow_shot/network/communitycloudocrsettings.h"
 #if SNOW_SHOT_ENABLE_LATEX_RECOGNITION
 #include "snow_shot/presentation/screenshotclipboardformularenderer.h"
 #endif
@@ -505,6 +506,7 @@ struct ScreenshotController::Impl final : public ScreenshotToolbarCommandSink,
                            ScreenshotImageOutputOptions output, bool scrolling);
     void pinClipboardContentToScreen();
     void pinHistoryRecord(const QString& recordId);
+    void recognizeHistoryRecordOnline(const QString& recordId);
     void pinSelectedFilesToScreen(snow_shot::platform::SelectedFileTarget target);
     void cancelContentPin();
     [[nodiscard]] bool clipboardPinPending() const;
@@ -728,6 +730,7 @@ struct ScreenshotController::Impl final : public ScreenshotToolbarCommandSink,
     bool m_pendingClipboardShake = false;
     bool m_clipboardDecodeBeforePresentation = false;
     ScreenshotExportQueue m_historyPinQueue{ScreenshotExportCoordinator::shared()};
+    ScreenshotExportQueue m_historyOnlineOcrQueue{ScreenshotExportCoordinator::shared()};
     quint64 m_historyPinEpoch = 0;
     PendingSelectionAction m_pendingSelectionAction = PendingSelectionAction::None;
     ScreenshotGlobalMouseDrag m_globalMouseDrag;
@@ -844,10 +847,6 @@ ScreenshotController::Impl::Impl(ScreenshotController& controller,
                            m_ocrRecognition != nullptr) {
                     m_ocrRecognition->setModelType(
                         screenshotOcrModelTypeFromValue(value.toString()));
-                } else if (key == QStringLiteral("text_recognition/detector_resize_policy") &&
-                           m_ocrRecognition != nullptr) {
-                    m_ocrRecognition->setDetectorResizePolicy(
-                        screenshotOcrDetectorResizePolicyFromValue(value.toString()));
                 } else if (key == QStringLiteral("text_recognition/text_detection_processing") &&
                            m_ocrRecognition != nullptr) {
                     m_ocrRecognition->setTextDetectionProcessing(
@@ -1302,10 +1301,6 @@ bool ScreenshotController::Impl::ensureRecognitionFeature() {
         screenshotOcrModelTypeFromValue(applicationStorage.configuration()
                                             .value(QStringLiteral("text_recognition/model_type"))
                                             .toString());
-    ocrOptions.detectorResizePolicy = screenshotOcrDetectorResizePolicyFromValue(
-        applicationStorage.configuration()
-            .value(QStringLiteral("text_recognition/detector_resize_policy"))
-            .toString());
     ocrOptions.textDetectionProcessing = screenshotOcrTextDetectionProcessingFromValue(
         applicationStorage.configuration()
             .value(QStringLiteral("text_recognition/text_detection_processing"))
@@ -2820,6 +2815,9 @@ void ScreenshotController::Impl::activateRecognitionToolForSelection(ScreenshotA
     } else if (tool == ScreenshotActiveTool::Latex) {
         m_ocrController->activateLatex();
     } else if (tool == ScreenshotActiveTool::Markdown || tool == ScreenshotActiveTool::Html) {
+        if (tool == ScreenshotActiveTool::Markdown && !m_mcpObserving &&
+            m_ocrController->startBackgroundOnlineOcr())
+            return;
         m_ocrController->activateImageConversion(tool == ScreenshotActiveTool::Markdown
                                                      ? SnowShotImageConversionFormat::Markdown
                                                      : SnowShotImageConversionFormat::Html);
@@ -2991,6 +2989,8 @@ void ScreenshotController::Impl::setMarkdownTool() {
     if (!ensureRecognitionFeature()) {
         return;
     }
+    if (!m_mcpObserving && m_ocrController->startBackgroundOnlineOcr())
+        return;
     m_ocrController->activateImageConversion(SnowShotImageConversionFormat::Markdown);
     m_presentationServices->updateOverlayState();
     restoreToolUiAfterScrollingCapture(stopped);
@@ -3880,6 +3880,77 @@ void ScreenshotController::Impl::cancelContentPin() {
 void ScreenshotController::Impl::cancelHistoryPins() {
     ++m_historyPinEpoch;
     m_historyPinQueue.cancel();
+}
+
+void ScreenshotController::Impl::recognizeHistoryRecordOnline(const QString& recordId) {
+    if (!snow_shot::app::editionActionToolAvailable(QStringLiteral("convert-to-markdown")))
+        return;
+    const auto report = [this](const QString& message) {
+        if (m_messages)
+            m_messages->error(QStringLiteral("history-online-ocr"), message);
+    };
+    if (m_historyOnlineOcrQueue.active() ||
+        (m_ocrController && m_ocrController->backgroundOnlineOcrBusy())) {
+        report(QCoreApplication::translate("ScreenshotOcrController",
+                                            "An online OCR job is already running in the background."));
+        return;
+    }
+    if (snow_shot::network::readCommunityCloudOcrSettings().accessToken.trimmed().isEmpty()) {
+        report(QCoreApplication::translate("ScreenshotOcrController",
+                                            "Configure the PaddleOCR Access Token in Settings before online OCR."));
+        return;
+    }
+    auto& storage = snow_shot::storage::ApplicationStorage::instance();
+    if (!storage.isInitialized() || !ensureRecognitionFeature()) {
+        report(QCoreApplication::translate("HistoryEntryWidget", "Screenshot history is unavailable"));
+        return;
+    }
+    const auto records = storage.captureHistory().records();
+    const auto found = std::find_if(records.cbegin(), records.cend(), [&recordId](const auto& record) {
+        return record.id == recordId;
+    });
+    if (found == records.cend() || !found->result) {
+        report(QCoreApplication::translate("HistoryEntryWidget", "Unable to read the history screenshot"));
+        return;
+    }
+    const auto record = *found;
+    const auto publication = ScreenshotClipboardService::reservePublication();
+    const QPointer<ScreenshotController> receiver(&owner);
+    const auto& resultRecord = *record.result;
+    const qint64 pixels = qint64(resultRecord.imageSize.width()) * resultRecord.imageSize.height();
+    constexpr qint64 headroom = 8 * 1024 * 1024;
+    constexpr qint64 bytesPerPixel = 3 * 4;
+    qint64 workingBytes = std::numeric_limits<qint64>::max();
+    if (!resultRecord.imageSize.isEmpty() && resultRecord.encodedBytes >= 0 &&
+        resultRecord.encodedBytes <= workingBytes - headroom &&
+        pixels <= (workingBytes - headroom - resultRecord.encodedBytes) / bytesPerPixel)
+        workingBytes = resultRecord.encodedBytes + pixels * bytesPerPixel + headroom;
+    const bool queued = m_historyOnlineOcrQueue.enqueue(
+        ScreenshotExportCoordinator::Priority::Foreground,
+        [record](const ScreenshotExportCancellation& cancellation) {
+            ScreenshotExportTaskResult result;
+            if (cancellation.isCancellationRequested())
+                return ScreenshotExportTaskResult::failure(ScreenshotExportFailureStage::Cancelled, {});
+            auto& storage = snow_shot::storage::ApplicationStorage::instance();
+            if (storage.isInitialized()) {
+                auto image = storage.captureHistory().loadResultImage(record);
+                if (image)
+                    result.image = std::move(*image);
+            }
+            return result;
+        },
+        [receiver, publication](ScreenshotExportTaskResult result) {
+            if (!receiver || !receiver->m_impl ||
+                result.failureStage == ScreenshotExportFailureStage::Cancelled)
+                return;
+            auto& impl = *receiver->m_impl;
+            if (impl.m_ocrController)
+                static_cast<void>(impl.m_ocrController->startBackgroundOnlineOcrImage(
+                    std::move(result.image), publication, false));
+        },
+        workingBytes);
+    if (!queued)
+        report(QCoreApplication::translate("HistoryEntryWidget", "Unable to read the history screenshot"));
 }
 
 void ScreenshotController::Impl::pinHistoryRecord(const QString& recordId) {
@@ -6753,6 +6824,7 @@ void ScreenshotController::Impl::shutdown() {
     cancelContentPin();
     m_filePinQueue.cancel();
     cancelHistoryPins();
+    m_historyOnlineOcrQueue.cancel();
     ++m_imageExportGeneration;
     m_activeImageExports.clear();
     m_imageExportCaptureEpochs.clear();
@@ -6877,8 +6949,11 @@ void ScreenshotController::setCaptureSuspended(bool suspended) {
 }
 
 bool ScreenshotController::blocksApplicationUpdate(bool includeCaptureSuspension) const {
-    return !m_impl->canBeginCapture(includeCaptureSuspension) || m_impl->m_filePinQueue.active() ||
+    return !m_impl->canBeginCapture(includeCaptureSuspension) ||
+           (m_impl->m_ocrController && m_impl->m_ocrController->backgroundOnlineOcrBusy()) ||
+           m_impl->m_filePinQueue.active() ||
            m_impl->clipboardPinPending() || m_impl->m_historyPinQueue.active() ||
+           m_impl->m_historyOnlineOcrQueue.active() ||
            (m_impl->m_selectionExportUiServices &&
             m_impl->m_selectionExportUiServices->restoringWindows()) ||
            !m_impl->m_activeImageExports.isEmpty() ||
@@ -6891,10 +6966,12 @@ bool ScreenshotController::blocksApplicationUpdate(bool includeCaptureSuspension
 
 bool ScreenshotController::blocksMemoryTrimming(bool includeCaptureSuspension) const {
     const auto& state = *m_impl;
-    return !state.canBeginCapture(includeCaptureSuspension) || state.m_recaptureBusy ||
+    return !state.canBeginCapture(includeCaptureSuspension) ||
+           (state.m_ocrController && state.m_ocrController->backgroundOnlineOcrBusy()) ||
+           state.m_recaptureBusy ||
            state.m_globalMouseDrag.active() || state.clipboardPinPending() ||
            state.m_filePinBatch.active() || state.m_filePinQueue.active() ||
-           state.m_historyPinQueue.active() ||
+           state.m_historyPinQueue.active() || state.m_historyOnlineOcrQueue.active() ||
            (state.m_selectionExportUiServices &&
             state.m_selectionExportUiServices->restoringWindows()) ||
            !state.m_activeImageExports.isEmpty() || static_cast<bool>(state.m_cancelSaveDialog) ||
@@ -7215,6 +7292,10 @@ void ScreenshotController::pinDirectCapture(const QImage& image, const QRect& lo
         static_cast<void>(m_impl->m_selectionExportUiServices->presentPinnedImageArtifact(
             std::make_shared<ScreenshotExportArtifact>(ScreenshotExportSource::fromImage(image)),
             screen, fit.nativeGeometry, fit.initialWindowSize));
+}
+
+void ScreenshotController::recognizeHistoryRecordOnline(const QString& recordId) {
+    m_impl->recognizeHistoryRecordOnline(recordId);
 }
 
 void ScreenshotController::pinHistoryRecord(const QString& recordId) {

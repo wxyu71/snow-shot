@@ -85,8 +85,26 @@ class ClassifierTests(unittest.TestCase):
             sync.parse_metadata("GitHub text without bot section")
 
 
-    def test_community_updater_has_no_trusted_remote_signer(self):
-        sync.assert_community_update_signers_disabled()
+    def test_community_updater_trusts_its_pinned_release_signer(self):
+        sync.assert_community_update_signer_trust()
+        document = json.loads(sync.COMMUNITY_UPDATE_KEYS.read_text(encoding="utf-8"))
+        self.assertEqual([key["id"] for key in document["keys"]], ["community-release-v1"])
+
+    def test_community_updater_rejects_foreign_and_additional_signers(self):
+        document = json.loads(sync.COMMUNITY_UPDATE_KEYS.read_text(encoding="utf-8"))
+        pinned = document["keys"][0]
+        cases = [
+            [{**pinned, "id": "upstream-release"}],
+            [pinned, {**pinned, "id": "community-release-v2"}],
+        ]
+        for keys in cases:
+            with self.subTest(key_count=len(keys), key_ids=[key["id"] for key in keys]):
+                with tempfile.TemporaryDirectory() as temp:
+                    path = pathlib.Path(temp) / "update-trusted-keys.json"
+                    path.write_text(json.dumps({"keys": keys}), encoding="utf-8")
+                    with patch.object(sync, "COMMUNITY_UPDATE_KEYS", path):
+                        with self.assertRaisesRegex(SystemExit, "signer"):
+                            sync.assert_community_update_signer_trust()
 
     def test_external_source_dependency_parser_rejects_mutable_refs(self):
         pinned = {

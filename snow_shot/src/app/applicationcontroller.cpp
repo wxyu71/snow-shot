@@ -116,8 +116,6 @@ const QString kScreenshotDelaySecondsKey = QStringLiteral("screenshot/delay_seco
 const QString kFullscreenSuppressionKey =
     QStringLiteral("global_shortcuts/disable_on_focused_fullscreen_window");
 const QString kOcrModelTypeKey = QStringLiteral("text_recognition/model_type");
-const QString kOcrDetectorResizePolicyKey =
-    QStringLiteral("text_recognition/detector_resize_policy");
 const QString kOcrTextDetectionProcessingKey =
     QStringLiteral("text_recognition/text_detection_processing");
 const QString kMcpEnabledKey = QStringLiteral("mcp/enabled");
@@ -383,8 +381,6 @@ class ApplicationController::Impl {
             applicationStorage.configuration()
                 .value(QStringLiteral("text_recognition/model_type"))
                 .toString());
-        ocrOptions.detectorResizePolicy = screenshotOcrDetectorResizePolicyFromValue(
-            applicationStorage.configuration().value(kOcrDetectorResizePolicyKey).toString());
         ocrOptions.textDetectionProcessing = screenshotOcrTextDetectionProcessingFromValue(
             applicationStorage.configuration().value(kOcrTextDetectionProcessingKey).toString());
         ocrRecognition = std::make_unique<ScreenshotOcrRecognitionService>(ocrOptions, &q);
@@ -399,7 +395,12 @@ class ApplicationController::Impl {
                 updateService->setProgressAppearance(
                     presentation::styles::ThemeManager::instance().updateProgressAppearance());
             });
+#ifdef Q_OS_WIN
+        // Community users explicitly check, download, and approve every update.
+        updates->setMode(QStringLiteral("manual"));
+#else
         updates->setMode(configuration.value(QStringLiteral("updates/mode")).toString());
+#endif
         updates->setProxyConfiguration(
             configuration.value(QStringLiteral("network/proxy")).toString(),
             configuration.value(QStringLiteral("network/http_proxy")).toString());
@@ -423,6 +424,11 @@ class ApplicationController::Impl {
             });
 #ifndef Q_OS_MACOS
         QObject::connect(updates, &update::UpdateService::updateReady, &q, [this] {
+#ifdef Q_OS_WIN
+            // The About page already exposes Ready; no duplicate toast for manual download.
+            if (!distribution::isStoreManaged())
+                return;
+#endif
             systemTray.showUpdateMessage(
                 (edition::isMini
                      ? ApplicationController::tr(
@@ -1003,8 +1009,6 @@ class ApplicationController::Impl {
         const auto& configuration = storage::ApplicationStorage::instance().configuration();
         ocrRecognition->setRuntimeConfiguration(
             {screenshotOcrModelTypeFromValue(configuration.value(kOcrModelTypeKey).toString()),
-             screenshotOcrDetectorResizePolicyFromValue(
-                 configuration.value(kOcrDetectorResizePolicyKey).toString()),
              configuration.value(QStringLiteral("text_recognition/resident_process")).toBool(),
              configuration.value(QStringLiteral("text_recognition/model_hot_start")).toBool(),
              screenshotOcrTextDetectionProcessingFromValue(
@@ -1357,14 +1361,8 @@ class ApplicationController::Impl {
 
     void finishStartup(std::function<void()> maintenance) {
         deferredStartup.start({[this] {
-#ifdef Q_OS_WIN
-                                   // Community Windows downloads are opened on GitHub.
-                                   // Never launch the legacy signed-update helper automatically.
-                                   if (distribution::isStoreManaged())
-                                       updates->start();
-#else
+                                   // In manual mode this is only a local cache/state probe.
                                    updates->start();
-#endif
                                }, std::move(maintenance),
                                [this] {
                                    if (auto* controller = ensureScreenshotController())
@@ -1499,7 +1497,11 @@ class ApplicationController::Impl {
         }
 #endif
         if (key == u"updates/mode" && updates != nullptr) {
+#ifdef Q_OS_WIN
+            updates->setMode(QStringLiteral("manual"));
+#else
             updates->setMode(value.toString());
+#endif
         } else if ((key == u"network/proxy" || key == u"network/http_proxy") &&
                    updates != nullptr) {
             const auto& configuration = storage::ApplicationStorage::instance().configuration();
@@ -1556,8 +1558,7 @@ class ApplicationController::Impl {
             systemTray.setQuickActionChecked(
                 presentation::GlobalShortcutAction::ToggleDisableOnFocusedFullscreenWindow,
                 value.toBool());
-        } else if (key == kOcrModelTypeKey || key == kOcrDetectorResizePolicyKey ||
-                   key == kOcrTextDetectionProcessingKey ||
+        } else if (key == kOcrModelTypeKey || key == kOcrTextDetectionProcessingKey ||
                    key == QStringLiteral("text_recognition/resident_process") ||
                    key == QStringLiteral("text_recognition/model_hot_start") ||
                    key == QStringLiteral("text_recognition/hardware_acceleration")) {
@@ -1621,6 +1622,13 @@ class ApplicationController::Impl {
                              [this](const QString& recordId) {
                                  static_cast<void>(actionGate.dispatch(
                                      [this, recordId]() { editHistoryRecord(recordId); }));
+                             });
+            QObject::connect(mainWindow, &MainWindow::screenshotHistoryOnlineOcrRequested, &q,
+                             [this](const QString& recordId) {
+                                 static_cast<void>(actionGate.dispatch([this, recordId] {
+                                     if (ScreenshotController* controller = ensureScreenshotController())
+                                         controller->recognizeHistoryRecordOnline(recordId);
+                                 }));
                              });
             QObject::connect(mainWindow, &MainWindow::screenshotHistoryPinRequested, &q,
                              [this](const QString& recordId) {

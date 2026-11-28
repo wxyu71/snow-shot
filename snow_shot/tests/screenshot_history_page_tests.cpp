@@ -24,6 +24,7 @@
 #include "widgets/context_menu.h"
 #include "widgets/popconfirm.h"
 #include "widgets/message.h"
+#include "snow_shot/app/editionfeatures.h"
 #include "widgets/scroll_area.h"
 #include "history_sticky_selection_test_support.h"
 #include "history_viewport_test_support.h"
@@ -1599,14 +1600,15 @@ void moreMenuOffersPinStitchAndDelete() {
     hover(more);
     flushEvents();
     QPointer<adqt::widgets::AdContextMenu> menu = visibleMenu(pinnableEntry);
-    require(menu != nullptr && menu->actions().size() == 8 && !menu->nativeMenuEnabled(),
+    const bool onlineOcr = snow_shot::app::editionActionToolAvailable(QStringLiteral("convert-to-markdown"));
+    require(menu != nullptr && menu->actions().size() == (onlineOcr ? 9 : 8) && !menu->nativeMenuEnabled(),
             "hovering More must show the shared widget action menu");
     QAction* pin = menu->actions().at(0);
     QAction* stitch = menu->actions().at(1);
     QAction* split = menu->actions().at(2);
     QAction* copyImagePath = menu->actions().at(5);
     QAction* reveal = menu->actions().at(6);
-    QAction* remove = menu->actions().at(7);
+    QAction* remove = menu->actions().last();
     require(copyImagePath->objectName() == QStringLiteral("screenshotHistoryEntryCopyImagePath") &&
                 copyImagePath->text() == QStringLiteral("Copy image path") &&
                 copyImagePath->toolTip() == copyImagePath->text() && copyImagePath->isEnabled() &&
@@ -1648,6 +1650,23 @@ void moreMenuOffersPinStitchAndDelete() {
     require(pinnedId == QStringLiteral("record-0") && !menu,
             "Pin to screen must request that history entry and close the menu");
 
+    if (onlineOcr) {
+        QStringList recognizedIds;
+        const auto connection = QObject::connect(&page, &ScreenshotHistoryPageWidget::onlineOcrRequested,
+            &page, [&](const QString& id) { recognizedIds.append(id); });
+        more->click();
+        flushEvents();
+        auto* ocrMenu = visibleMenu(pinnableEntry);
+        require(ocrMenu, "reopen More for online OCR");
+        auto* action = ocrMenu->findChild<QAction*>(QStringLiteral("screenshotHistoryEntryOnlineOcr"));
+        require(action && action->isEnabled() && action->text() == QStringLiteral("Online OCR") &&
+                    !action->icon().isNull(), "history online OCR reuses the shared action menu");
+        activateMenuAction(ocrMenu, action);
+        flushEvents();
+        require(recognizedIds == QStringList{records[0].id} && dataSource.removedIds.isEmpty(),
+                "online OCR dispatches only the explicitly selected record");
+        QObject::disconnect(connection);
+    }
     QVector<storage::CaptureHistoryRecord> editingRequests;
     QVector<storage::CaptureHistoryRecord> compressionRequests;
     const QVector<storage::CaptureHistoryRecord> expectedRequests{records[0]};
@@ -1700,6 +1719,10 @@ void moreMenuOffersPinStitchAndDelete() {
                 plainMenu->actions().at(0)->toolTip() ==
                     QStringLiteral("This screenshot cannot be pinned"),
             "Pin to screen must stay unavailable when the history entry has no image");
+    if (onlineOcr) {
+        auto* action = plainMenu->findChild<QAction*>(QStringLiteral("screenshotHistoryEntryOnlineOcr"));
+        require(action && !action->isEnabled(), "history without a result cannot be sent to online OCR");
+    }
     require(!plainMenu->actions().at(5)->isEnabled(),
             "a missing result keeps Copy image path visible and disabled");
     require(plainMenu->actions().at(6)->isEnabled(),

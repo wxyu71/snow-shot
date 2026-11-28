@@ -93,8 +93,6 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Current version: %1</source>
             <translation>Current version: %1</translation>
         </message>
-        
-        
         <message>
             <source>Download update</source>
             <translation>Download update</translation>
@@ -143,7 +141,6 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Make the next experience better</source>
             <translation>Make the next experience better</translation>
         </message>
-        
         <message>
             <source>Open Microsoft Store</source>
             <translation>Open Microsoft Store</translation>
@@ -164,7 +161,6 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Privacy policy</source>
             <translation>Privacy policy</translation>
         </message>
-        
         <message>
             <source>Ready to install %1</source>
             <translation>Ready to install %1</translation>
@@ -767,9 +763,6 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>No translation services are available</source>
             <translation>No translation services are available</translation>
         </message>
-        
-        
-        
         <message>
             <source>Table recognition failed</source>
             <translation>Table recognition failed</translation>
@@ -838,7 +831,6 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>The translation response is too large</source>
             <translation>The translation response is too large</translation>
         </message>
-        
         <message>
             <source>This service does not support the selected language combination</source>
             <translation>This service does not support the selected language combination</translation>
@@ -863,10 +855,6 @@ so every moment on screen can be expressed clearly and shared easily</translatio
             <source>Translation stream ended unexpectedly</source>
             <translation>Translation stream ended unexpectedly</translation>
         </message>
-        
-        
-        
-        
         <message>
             <source>Your daily free allowance is exhausted. Try again after it resets</source>
             <translation>Your daily free allowance is exhausted. Try again after it resets</translation>

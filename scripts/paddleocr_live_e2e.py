@@ -56,9 +56,11 @@ def error_hint(status: int, payload: dict) -> str:
     code = payload.get("code", -1)
     if status == 401 or code == 401:
         return "Access Token invalid (401)"
-    if status == 429 or code == 12002:
+    if code == 10010:
+        return "AI Studio job submission queue is full (10010)"
+    if code == 12002:
         return "AI Studio rate limited this request (12002/429)"
-    if status == 403 or code == 12001:
+    if code == 12001:
         return "AI Studio daily quota exhausted (12001/403)"
     return f"AI Studio error HTTP {status} code {code}"
 
@@ -78,6 +80,7 @@ def test_contract() -> None:
     except ValueError as exc:
         assert "Invalid" in str(exc)
     assert "401" in error_hint(401, {})
+    assert "10010" in error_hint(400, {"code": 10010})
     assert "12002" in error_hint(429, {"code": 12002})
     assert "12001" in error_hint(403, {"code": 12001})
     print("AI Studio JSONL/parser/auth/quota/rate-limit offline contract: PASS")
@@ -151,13 +154,12 @@ def test_auth(base: str) -> None:
 def run_model(base: str, token: str, model: str, png: bytes) -> dict:
     import requests
     options = (
-        {"useTableRecognition": True, "useFormulaRecognition": True, "prettifyMarkdown": True}
-        if model == "PP-StructureV3" else
-        {"useLayoutDetection": True, "prettifyMarkdown": True}
-        if model == "PaddleOCR-VL-1.6" else
-        {"useDocOrientationClassify": False}
+        {"useDocOrientationClassify": False, "useDocUnwarping": False,
+         "useTextlineOrientation": False} if model == "PP-OCRv6" else
+        {"useDocOrientationClassify": False, "useDocUnwarping": False,
+         "useChartRecognition": False}
     )
-    auth = {"Authorization": "Bearer " + token}
+    auth = {"Authorization": "bearer " + token}
     response = requests.post(base, headers=auth,
                              data={"model": model, "optionalPayload": json.dumps(options)},
                              files={"file": ("community-e2e.png", png, "image/png")},

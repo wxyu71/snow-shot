@@ -87,6 +87,10 @@
             <translation>更多操作</translation>
         </message>
         <message>
+            <source>Online OCR</source>
+            <translation>在线识别</translation>
+        </message>
+        <message>
             <source>Pin this screenshot to the screen</source>
             <translation>将此截图固定到屏幕</translation>
         </message>
@@ -111,6 +115,10 @@
             <translation>截图显示器</translation>
         </message>
         <message>
+            <source>Screenshot history is unavailable</source>
+            <translation>截图历史不可用</translation>
+        </message>
+        <message>
             <source>Screenshot result</source>
             <translation>截图结果</translation>
         </message>
@@ -125,6 +133,10 @@
         <message>
             <source>This screenshot cannot be pinned</source>
             <translation>此截图无法固定到屏幕</translation>
+        </message>
+        <message>
+            <source>Unable to read the history screenshot</source>
+            <translation>无法读取历史截图</translation>
         </message>
     </context>
     <context>
@@ -694,6 +706,10 @@
             <translation>将图像文件拖到此处，或选择“添加图像”</translation>
         </message>
         <message>
+            <source>Drag to move an image. Hold %1 to snap to other images. Drag a handle to resize around the center.</source>
+            <translation>拖动图像可移动它。按住 %1 可吸附到其他图像。拖动控制点可围绕中心缩放。</translation>
+        </message>
+        <message>
             <source>Drop images to stitch</source>
             <translation>松开鼠标，将图像添加到图像拼接</translation>
         </message>
@@ -708,6 +724,10 @@
         <message>
             <source>Flip vertically</source>
             <translation>垂直翻转</translation>
+        </message>
+        <message>
+            <source>Free</source>
+            <translation>自由</translation>
         </message>
         <message>
             <source>Gray</source>
@@ -788,6 +808,14 @@
         <message>
             <source>Percentage</source>
             <translation>百分比</translation>
+        </message>
+        <message>
+            <source>Percentage of the first image’s original height after rotation</source>
+            <translation>第一张图像旋转后原始高度的百分比</translation>
+        </message>
+        <message>
+            <source>Percentage of the greatest original image height after rotation</source>
+            <translation>所有图像旋转后最大原始高度的百分比</translation>
         </message>
         <message>
             <source>Percentage of the grid cell width</source>

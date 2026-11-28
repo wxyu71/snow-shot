@@ -497,8 +497,6 @@ constexpr SchemaString kSchemaStrings12[] = {u"none", u"system", u"manual"};
 constexpr SchemaAllowedValues kSchemaAllowed10 = {kSchemaStrings12, std::size(kSchemaStrings12)};
 constexpr SchemaString kSchemaStrings13[] = {u"extra_small", u"small", u"medium"};
 constexpr SchemaAllowedValues kSchemaAllowed11 = {kSchemaStrings13, std::size(kSchemaStrings13)};
-constexpr SchemaString kSchemaStrings14[] = {u"max", u"min"};
-constexpr SchemaAllowedValues kSchemaAllowed12 = {kSchemaStrings14, std::size(kSchemaStrings14)};
 constexpr SchemaString kSchemaStrings15[] = {u"accuracy_first", u"speed_first"};
 constexpr SchemaAllowedValues kSchemaAllowed13 = {kSchemaStrings15, std::size(kSchemaStrings15)};
 constexpr SchemaString kSchemaStrings16[] = {u"auto", u"ar", u"de", u"en",      u"es",     u"fr",
@@ -829,7 +827,7 @@ constexpr SchemaString kSchemaStrings129[] = {u"png", u"jpeg", u"bmp",  u"webp",
 constexpr SchemaAllowedValues kSchemaAllowed60 = {kSchemaStrings129, std::size(kSchemaStrings129)};
 constexpr SchemaString kSchemaStrings130[] = {u"system", u"snow_shot"};
 constexpr SchemaAllowedValues kSchemaAllowed61 = {kSchemaStrings130, std::size(kSchemaStrings130)};
-constexpr SchemaString kSchemaStrings131[] = {u"vertical", u"horizontal", u"custom"};
+constexpr SchemaString kSchemaStrings131[] = {u"vertical", u"horizontal", u"free", u"custom"};
 constexpr SchemaAllowedValues kSchemaAllowed62 = {kSchemaStrings131, std::size(kSchemaStrings131)};
 constexpr ConfigurationIntegerRange kSchemaRange22{1, std::numeric_limits<int>::max(), 1};
 constexpr SchemaString kSchemaStrings132[] = {u"original", u"uniform"};
@@ -959,8 +957,6 @@ constexpr SchemaEntryDescriptor kEntryDescriptors[] = {
      ConfigurationValueKind::Boolean},
     {u"text_recognition/model_type", stringDefault(u"small"), ConfigurationValueKind::String,
      nullptr, &kSchemaAllowed11},
-    {u"text_recognition/detector_resize_policy", stringDefault(u"max"),
-     ConfigurationValueKind::String, nullptr, &kSchemaAllowed12},
     {u"text_recognition/text_detection_processing", stringDefault(u"accuracy_first"),
      ConfigurationValueKind::String, nullptr, &kSchemaAllowed13},
 #if SNOW_SHOT_ENABLE_TEXT_TRANSLATION

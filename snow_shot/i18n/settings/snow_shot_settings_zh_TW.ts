@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_TW" sourcelanguage="en_US">
-    
-    
     <context>
         <name>AdministratorLaunch</name>
         <message>
@@ -150,6 +148,101 @@
         <message>
             <source>Windows startup settings are unavailable</source>
             <translation>Windows 啟動設定無法使用</translation>
+        </message>
+    </context>
+    <context>
+        <name>CloudOcrSettingsWidget</name>
+        <message>
+            <source>Access Token</source>
+            <translation>存取權杖</translation>
+        </message>
+        <message>
+            <source>Automatic</source>
+            <translation>自動選擇</translation>
+        </message>
+        <message>
+            <source>Automatic selects a compatible model and switches on daily quota exhaustion.</source>
+            <translation>自動選擇相容模型，達到每日配額後切換。</translation>
+        </message>
+        <message>
+            <source>Baidu PaddleOCR (AI Studio)</source>
+            <translation>百度 PaddleOCR（AI Studio）</translation>
+        </message>
+        <message>
+            <source>Connection failed: %1</source>
+            <translation>連線失敗：%1</translation>
+        </message>
+        <message>
+            <source>Connection successful. Model: %1</source>
+            <translation>連線成功，辨識模型：%1</translation>
+        </message>
+        <message>
+            <source>Could not securely save PaddleOCR configuration.</source>
+            <translation>無法安全儲存 PaddleOCR 設定。</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token before testing.</source>
+            <translation>請先輸入有效的 HTTPS 位址和存取權杖。</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>
+            <translation>請輸入有效的 PaddleOCR HTTPS 位址和存取權杖。</translation>
+        </message>
+        <message>
+            <source>Get Access Token</source>
+            <translation>取得存取權杖</translation>
+        </message>
+        <message>
+            <source>HTML (local conversion)</source>
+            <translation>HTML（本機轉換）</translation>
+        </message>
+        <message>
+            <source>OCR engine</source>
+            <translation>辨識引擎</translation>
+        </message>
+        <message>
+            <source>Open the official AI Studio Access Token page</source>
+            <translation>開啟 AI Studio 官方存取權杖頁面</translation>
+        </message>
+        <message>
+            <source>Output format</source>
+            <translation>輸出格式</translation>
+        </message>
+        <message>
+            <source>PaddleOCR AI Studio API URL</source>
+            <translation>PaddleOCR AI Studio API 位址</translation>
+        </message>
+        <message>
+            <source>PaddleOCR configuration saved.</source>
+            <translation>PaddleOCR 設定已儲存。</translation>
+        </message>
+        <message>
+            <source>PaddleOCR model</source>
+            <translation>PaddleOCR 模型</translation>
+        </message>
+        <message>
+            <source>Plain text</source>
+            <translation>純文字</translation>
+        </message>
+        <message>
+            <source>Save</source>
+            <translation>儲存</translation>
+        </message>
+        <message>
+            <source>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</source>
+            <translation>將一張小型測試影像直接傳送至 PaddleOCR，可能消耗 API 額度。</translation>
+        </message>
+        <message>
+            <source>Test connection</source>
+            <translation>測試連線</translation>
+        </message>
+        <message>
+            <source>Testing the OCR service...</source>
+            <translation>正在測試辨識服務…</translation>
+        </message>
+        <message>
+            <source>The OCR service returned an empty result.</source>
+            <translation>辨識服務傳回空結果。</translation>
         </message>
     </context>
     <context>
@@ -1205,7 +1298,6 @@
             <source>Accessibility</source>
             <translation>輔助使用</translation>
         </message>
-        
         <message>
             <source>Accuracy first</source>
             <translation>準確優先</translation>
@@ -1701,10 +1793,6 @@
         <message>
             <source>Choose how network requests connect through a proxy</source>
             <translation>選擇網路請求連線代理的方式</translation>
-        </message>
-        <message>
-            <source>Choose how text detection resizes images. Limiting the long side is faster; enlarging the short side may find smaller text</source>
-            <translation>選擇文字偵測時的影像縮放方式。限制長邊可提高速度；放大短邊可能辨識出更小的文字</translation>
         </message>
         <message>
             <source>Choose how the area behind recognized text is filled</source>
@@ -2451,10 +2539,6 @@
             <translation>結束螢幕錄製</translation>
         </message>
         <message>
-            <source>Enlarge short side (more detail)</source>
-            <translation>放大短邊（更多細節）</translation>
-        </message>
-        <message>
             <source>Enter an HTTP or HTTPS address. Changes apply immediately. Clear to use the default server</source>
             <translation>輸入 HTTP 或 HTTPS 位址。變更立即生效。清空可使用預設伺服器</translation>
         </message>
@@ -2991,10 +3075,6 @@
             <translation>限制截圖歷史可使用的磁碟空間</translation>
         </message>
         <message>
-            <source>Limit long side (faster)</source>
-            <translation>限制長邊（更快）</translation>
-        </message>
-        <message>
             <source>Limit the width of pinned text, including padding</source>
             <translation>限制固定到螢幕的文字寬度，包括內距</translation>
         </message>
@@ -3106,7 +3186,6 @@
             <source>Medium V6</source>
             <translation>中型 V6</translation>
         </message>
-        
         <message>
             <source>Memory optimization policy</source>
             <translation>記憶體最佳化策略</translation>
@@ -4668,10 +4747,6 @@
             <translation>文字偵測處理</translation>
         </message>
         <message>
-            <source>Text detection scaling</source>
-            <translation>文字偵測縮放</translation>
-        </message>
-        <message>
             <source>Text recognition</source>
             <translation>文字辨識</translation>
         </message>
@@ -5769,7 +5844,6 @@ Unavailable: %2</source>
             <translation>有道</translation>
         </message>
     </context>
-    
     <context>
         <name>snow_shot::presentation::GlobalMouseManager</name>
         <message>

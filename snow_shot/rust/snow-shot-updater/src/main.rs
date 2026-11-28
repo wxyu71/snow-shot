@@ -88,6 +88,16 @@ fn run() -> Result<i32> {
             transaction::uninstall(&root, !args.iter().any(|argument| argument == "--upgrade"))?;
             Ok(0)
         }
+        #[cfg(windows)]
+        "--apply-local-installer" => {
+            transaction::apply_local_installer(
+                &path_option(&args, "--target")?,
+                &path_option(&args, "--archive")?,
+                &path_option(&args, "--manifest")?,
+                &option(&args, "--manifest-sha256")?,
+            )?;
+            Ok(0)
+        }
         "--prepare-installer-upgrade" => {
             transaction::prepare_installer_upgrade(
                 &path_option(&args, "--target")?,
@@ -173,7 +183,11 @@ fn main() {
             } else {
                 eprintln!("{} [{}]", error.message, error.code);
             }
-            std::process::exit(1);
+            std::process::exit(if error.code == "installer_application_running" {
+                10
+            } else {
+                1
+            });
         }
     }
 }

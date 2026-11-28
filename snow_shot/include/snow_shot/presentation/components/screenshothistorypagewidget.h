@@ -110,6 +110,7 @@ class ScreenshotHistoryPageWidget final : public QWidget {
     void imageDragRequested(QObject* gesture, const QImage& image);
     void editRequested(const QString& recordId);
     void pinRequested(const QString& recordId);
+    void onlineOcrRequested(const QString& recordId);
     void stitchImagesRequested(const QVector<snow_shot::storage::CaptureHistoryRecord>& records);
     void splitRequested(const snow_shot::storage::CaptureHistoryRecord& record);
     void imageEditingRequested(const snow_shot::storage::CaptureHistoryRecord& record);

@@ -1,4 +1,5 @@
 #include "snow_shot/runtime/runtimeactivitytracker.h"
+#include "snow_shot/app/editionfeatures.h"
 #include "snow_shot/platform/applicationqos.h"
 #include "snow_shot/platform/filemanager.h"
 #include "snow_shot/presentation/components/screenshothistorypagewidget.h"
@@ -578,6 +579,7 @@ class HistoryEntryWidget final : public HistoryEntryCard {
                        std::function<void()> splitRequested,
                        std::function<void()> imageEditingRequested,
                        std::function<void()> imageCompressionRequested,
+                       std::function<void()> onlineOcrRequested,
                        std::function<void()> copyImagePathRequested,
                        std::function<void()> revealRequested,
                        std::function<void(QWidget*)> deleteRequested, QWidget* parent = nullptr)
@@ -588,6 +590,7 @@ class HistoryEntryWidget final : public HistoryEntryCard {
           m_splitRequested(std::move(splitRequested)),
           m_imageEditingRequested(std::move(imageEditingRequested)),
           m_imageCompressionRequested(std::move(imageCompressionRequested)),
+          m_onlineOcrRequested(std::move(onlineOcrRequested)),
           m_copyImagePathRequested(std::move(copyImagePathRequested)),
           m_revealRequested(std::move(revealRequested)),
           m_deleteRequested(std::move(deleteRequested)) {
@@ -875,6 +878,10 @@ class HistoryEntryWidget final : public HistoryEntryCard {
             m_splitAction->setText(label);
             m_splitAction->setToolTip(label);
         }
+        if (m_onlineOcrAction != nullptr) {
+            m_onlineOcrAction->setText(HistoryEntryWidget::tr("Online OCR"));
+            m_onlineOcrAction->setToolTip(m_onlineOcrAction->text());
+        }
         if (m_deleteAction != nullptr) {
             m_deleteAction->setText(HistoryEntryWidget::tr("Delete"));
             m_deleteAction->setToolTip(HistoryEntryWidget::tr("Delete history entry"));
@@ -923,6 +930,16 @@ class HistoryEntryWidget final : public HistoryEntryCard {
         auto* reveal = menu->addItem(QString(), custom_outlined_icons::RevealInFolder());
         reveal->setObjectName(QStringLiteral("screenshotHistoryEntryReveal"));
         m_revealAction = reveal;
+        if (snow_shot::app::editionActionToolAvailable(QStringLiteral("convert-to-markdown"))) {
+            m_onlineOcrAction = menu->addItem(HistoryEntryWidget::tr("Online OCR"),
+                                              custom_outlined_icons::Markdown());
+            m_onlineOcrAction->setObjectName(QStringLiteral("screenshotHistoryEntryOnlineOcr"));
+            m_onlineOcrAction->setEnabled(m_record.result.has_value());
+            connect(m_onlineOcrAction, &QAction::triggered, this, [this] {
+                if (m_onlineOcrRequested && m_record.result.has_value())
+                    m_onlineOcrRequested();
+            });
+        }
         auto* remove = menu->addItem(QString(), outlined_icons::IconDelete());
         remove->setObjectName(QStringLiteral("screenshotHistoryEntryDelete"));
         m_deleteAction = remove;
@@ -966,6 +983,8 @@ class HistoryEntryWidget final : public HistoryEntryCard {
     std::function<void()> m_splitRequested;
     std::function<void()> m_imageEditingRequested;
     std::function<void()> m_imageCompressionRequested;
+    std::function<void()> m_onlineOcrRequested;
+    QPointer<QAction> m_onlineOcrAction;
     QPointer<QAction> m_imageEditingAction;
     QPointer<QAction> m_imageCompressionAction;
     std::function<void()> m_copyImagePathRequested;
@@ -1577,6 +1596,7 @@ void ScreenshotHistoryPageWidget::rebuildEntries() {
                 [this, record]() { emit splitRequested(record); },
                 [this, record]() { emit imageEditingRequested(record); },
                 [this, record]() { emit imageCompressionRequested(record); },
+                [this, id = record.id]() { emit onlineOcrRequested(id); },
                 [this, record]() {
                     const auto resolvedAssets =
                         m_dataSource ? m_dataSource->displayAssets(record) : std::nullopt;

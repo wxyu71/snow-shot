@@ -46,17 +46,35 @@ QString unprotect(const QString& value) {
 }
 #endif
 
+QString normalizedModel(const QString& value) {
+    if (value == QStringLiteral("PaddleOCR-VL-1.6") ||
+        value == QStringLiteral("PP-StructureV3") ||
+        value == QStringLiteral("PP-OCRv6"))
+        return value;
+    return QStringLiteral("auto");
+}
+
+QString normalizedOutput(const QString& value, const QString& model) {
+    if (value == QStringLiteral("text") || value == QStringLiteral("jsonl"))
+        return value;
+    if (model == QStringLiteral("PP-OCRv6"))
+        return QStringLiteral("text");
+    return value == QStringLiteral("html") ? value : QStringLiteral("markdown");
+}
+
 } // namespace
 
 CommunityCloudOcrSettings readCommunityCloudOcrSettings() {
     auto settings = store();
     CommunityCloudOcrSettings result;
     result.apiUrl = settings.value(QStringLiteral("api_url"), result.apiUrl).toString();
-    result.model = settings.value(QStringLiteral("model"), result.model).toString();
-    // Old opt-in Vision configurations must not re-enable an unsupported
-    // provider. The Community Online OCR action is PaddleOCR + Markdown only.
+    result.model = normalizedModel(settings.value(QStringLiteral("model"), result.model).toString());
+    // Legacy Vision preferences are not PaddleOCR preferences. The versioned
+    // output key prevents an old HTML/LaTeX selection from changing the new route.
     result.engine = QStringLiteral("paddleocr");
-    result.outputFormat = QStringLiteral("markdown");
+    result.outputFormat = normalizedOutput(
+        settings.value(QStringLiteral("paddle_output_format_v2"), result.outputFormat).toString(),
+        result.model);
 #ifdef Q_OS_WIN
     const QString secured = settings.value(QStringLiteral("access_token_dpapi_v1")).toString();
     if (!secured.isEmpty())
@@ -79,11 +97,12 @@ bool writeCommunityCloudOcrSettings(const CommunityCloudOcrSettings& values) {
     settings.setValue(QStringLiteral("access_token"), values.accessToken);
 #endif
     settings.setValue(QStringLiteral("api_url"), values.apiUrl);
-    settings.setValue(QStringLiteral("model"), values.model);
-    // Retain the two compatibility keys while overwriting old Vision/HTML/LaTeX
-    // preferences. This must not touch the user's separate upstream AI models.
+    const QString model = normalizedModel(values.model);
+    const QString output = normalizedOutput(values.outputFormat, model);
+    settings.setValue(QStringLiteral("model"), model);
     settings.setValue(QStringLiteral("engine"), QStringLiteral("paddleocr"));
-    settings.setValue(QStringLiteral("output_format"), QStringLiteral("markdown"));
+    settings.setValue(QStringLiteral("output_format"), output);
+    settings.setValue(QStringLiteral("paddle_output_format_v2"), output);
     settings.sync();
     return settings.status() == QSettings::NoError;
 }

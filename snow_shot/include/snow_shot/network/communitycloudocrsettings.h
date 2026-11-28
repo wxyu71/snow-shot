@@ -7,7 +7,7 @@ namespace snow_shot::network {
 struct CommunityCloudOcrSettings {
     QString apiUrl = QStringLiteral("https://paddleocr.aistudio-app.com");
     QString accessToken;
-    QString model = QStringLiteral("PaddleOCR-VL-1.6");
+    QString model = QStringLiteral("auto");
     // Stable community values. Keep the provider choice outside the upstream API client so
     // upstream OCR code can be merged without re-introducing hosted-service coupling.
     QString engine = QStringLiteral("paddleocr");

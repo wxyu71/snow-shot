@@ -1,8 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!DOCTYPE TS>
 <TS version="2.1" language="zh_CN" sourcelanguage="en_US">
-    
-    
     <context>
         <name>AdministratorLaunch</name>
         <message>
@@ -150,6 +148,101 @@
         <message>
             <source>Windows startup settings are unavailable</source>
             <translation>Windows 启动设置不可用</translation>
+        </message>
+    </context>
+    <context>
+        <name>CloudOcrSettingsWidget</name>
+        <message>
+            <source>Access Token</source>
+            <translation>访问令牌</translation>
+        </message>
+        <message>
+            <source>Automatic</source>
+            <translation>自动选择</translation>
+        </message>
+        <message>
+            <source>Automatic selects a compatible model and switches on daily quota exhaustion.</source>
+            <translation>自动选择兼容模型，达到每日配额后切换。</translation>
+        </message>
+        <message>
+            <source>Baidu PaddleOCR (AI Studio)</source>
+            <translation>百度 PaddleOCR（AI Studio）</translation>
+        </message>
+        <message>
+            <source>Connection failed: %1</source>
+            <translation>连接失败：%1</translation>
+        </message>
+        <message>
+            <source>Connection successful. Model: %1</source>
+            <translation>连接成功，识别模型：%1</translation>
+        </message>
+        <message>
+            <source>Could not securely save PaddleOCR configuration.</source>
+            <translation>无法安全保存 PaddleOCR 配置。</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token before testing.</source>
+            <translation>请先输入有效的 HTTPS 地址和访问令牌。</translation>
+        </message>
+        <message>
+            <source>Enter a valid HTTPS URL and Access Token for PaddleOCR.</source>
+            <translation>请输入有效的 PaddleOCR HTTPS 地址和访问令牌。</translation>
+        </message>
+        <message>
+            <source>Get Access Token</source>
+            <translation>获取访问令牌</translation>
+        </message>
+        <message>
+            <source>HTML (local conversion)</source>
+            <translation>HTML（本地转换）</translation>
+        </message>
+        <message>
+            <source>OCR engine</source>
+            <translation>识别引擎</translation>
+        </message>
+        <message>
+            <source>Open the official AI Studio Access Token page</source>
+            <translation>打开 AI Studio 官方访问令牌页面</translation>
+        </message>
+        <message>
+            <source>Output format</source>
+            <translation>输出格式</translation>
+        </message>
+        <message>
+            <source>PaddleOCR AI Studio API URL</source>
+            <translation>PaddleOCR AI Studio API 地址</translation>
+        </message>
+        <message>
+            <source>PaddleOCR configuration saved.</source>
+            <translation>PaddleOCR 配置已保存。</translation>
+        </message>
+        <message>
+            <source>PaddleOCR model</source>
+            <translation>PaddleOCR 模型</translation>
+        </message>
+        <message>
+            <source>Plain text</source>
+            <translation>纯文本</translation>
+        </message>
+        <message>
+            <source>Save</source>
+            <translation>保存</translation>
+        </message>
+        <message>
+            <source>Sends a small OCR sample directly to the selected PaddleOCR provider; this can consume API quota.</source>
+            <translation>将一张小型测试图像直接发送至 PaddleOCR，可能消耗 API 额度。</translation>
+        </message>
+        <message>
+            <source>Test connection</source>
+            <translation>测试连接</translation>
+        </message>
+        <message>
+            <source>Testing the OCR service...</source>
+            <translation>正在测试识别服务…</translation>
+        </message>
+        <message>
+            <source>The OCR service returned an empty result.</source>
+            <translation>识别服务返回空结果。</translation>
         </message>
     </context>
     <context>
@@ -1205,7 +1298,6 @@
             <source>Accessibility</source>
             <translation>辅助功能</translation>
         </message>
-        
         <message>
             <source>Accuracy first</source>
             <translation>准确优先</translation>
@@ -1701,10 +1793,6 @@
         <message>
             <source>Choose how network requests connect through a proxy</source>
             <translation>选择网络请求连接代理的方式</translation>
-        </message>
-        <message>
-            <source>Choose how text detection resizes images. Limiting the long side is faster; enlarging the short side may find smaller text</source>
-            <translation>选择文字检测时的图像缩放方式。限制长边可提高速度；放大短边可能识别出更小的文字</translation>
         </message>
         <message>
             <source>Choose how the area behind recognized text is filled</source>
@@ -2451,10 +2539,6 @@
             <translation>结束屏幕录制</translation>
         </message>
         <message>
-            <source>Enlarge short side (more detail)</source>
-            <translation>放大短边（更多细节）</translation>
-        </message>
-        <message>
             <source>Enter an HTTP or HTTPS address. Changes apply immediately. Clear to use the default server</source>
             <translation>输入 HTTP 或 HTTPS 地址。更改立即生效。清空可使用默认服务器</translation>
         </message>
@@ -2991,10 +3075,6 @@
             <translation>限制截图历史可使用的磁盘空间</translation>
         </message>
         <message>
-            <source>Limit long side (faster)</source>
-            <translation>限制长边（更快）</translation>
-        </message>
-        <message>
             <source>Limit the width of pinned text, including padding</source>
             <translation>限制固定到屏幕的文本宽度，包括内边距</translation>
         </message>
@@ -3106,7 +3186,6 @@
             <source>Medium V6</source>
             <translation>中型 V6</translation>
         </message>
-        
         <message>
             <source>Memory optimization policy</source>
             <translation>内存优化策略</translation>
@@ -4668,10 +4747,6 @@
             <translation>文字检测处理</translation>
         </message>
         <message>
-            <source>Text detection scaling</source>
-            <translation>文字检测缩放</translation>
-        </message>
-        <message>
             <source>Text recognition</source>
             <translation>文本识别</translation>
         </message>
@@ -5769,7 +5844,6 @@ Unavailable: %2</source>
             <translation>有道</translation>
         </message>
     </context>
-    
     <context>
         <name>snow_shot::presentation::GlobalMouseManager</name>
         <message>

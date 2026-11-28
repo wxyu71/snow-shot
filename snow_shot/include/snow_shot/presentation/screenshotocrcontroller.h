@@ -33,6 +33,10 @@ class ScreenshotSelectionModel;
 class SnowCanvasWidget;
 class QWidget;
 class QUrl;
+class QScreen;
+namespace snow_shot::network {
+class BaiduPaddleOcrClient;
+}
 class QTextDocument;
 struct ScreenshotCaptureState;
 struct ScreenshotTableCommandState;
@@ -84,6 +88,12 @@ class ScreenshotOcrController final : public QObject {
     void activateLatex();
     void setRecognitionModel(const QString& selection);
     void activateImageConversion(SnowShotImageConversionFormat format);
+    // Explicit interactive Online OCR transfers the selected image out of the capture session.
+    // Returns false only when the caller should use the ordinary conversion workflow.
+    [[nodiscard]] bool startBackgroundOnlineOcr();
+    [[nodiscard]] bool startBackgroundOnlineOcrImage(QImage source, quint64 publication,
+                                                     bool closeCapture);
+    [[nodiscard]] bool backgroundOnlineOcrBusy() const;
     // Retires the recognition input surface while retaining completed results in the cache.
     void deactivate();
     // Keeps the window alive as the mouse event receiver until the resize gesture finishes.
@@ -164,6 +174,9 @@ class ScreenshotOcrController final : public QObject {
     void deactivateImpl(bool preserveRecognitionWindow);
     void restorePreviousToolAfterFailure();
     void showStatus(const QString& message, bool error) const;
+    enum class BackgroundMessageKind { Info, Success, Warning, Error };
+    void showBackgroundOcrMessage(const QString& message, BackgroundMessageKind kind,
+                                  QScreen* screen);
     [[nodiscard]] bool ensureRecognitionWindow();
     void updateRecognitionWindowGeometry();
     void destroyRecognitionWindow();
@@ -176,6 +189,9 @@ class ScreenshotOcrController final : public QObject {
     std::unique_ptr<ScreenshotMessageService> m_messages;
     std::unique_ptr<ScreenshotRecognitionSessionController> m_session;
     QPointer<ScreenshotRecognitionWindow> m_recognitionWindow;
+    // Deliberately not owned by m_session: cancelCapture() must not cancel Online OCR.
+    QPointer<snow_shot::network::BaiduPaddleOcrClient> m_backgroundOcr;
+    QPointer<QWidget> m_backgroundMessageHost;
     QString m_surfaceKey;
     QString m_importedTargetKey;
     std::shared_ptr<QTextDocument> m_importedFormattedDocument;
