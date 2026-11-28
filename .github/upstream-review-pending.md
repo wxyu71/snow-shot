@@ -699,3 +699,7 @@ The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64
 
 - `snow_shot/resources/icons.manifest.json`: retained 1 Community groups, applied 1 disjoint upstream groups; account service removal preserved. Native tests pending.
 - `snow_shot/src/app/main.cpp`: retained 5 Community groups, applied 13 disjoint upstream groups; account service removal preserved. Native tests pending.
+
+## Applied conflict resolutions — API and About page
+
+- `snow_shot/src/network/snowshotapiclient.cpp`: retained 26 Community groups, applied 8 disjoint upstream groups. Native tests pending.
