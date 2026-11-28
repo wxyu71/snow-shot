@@ -16,6 +16,7 @@
 #include <QColor>
 #include <QPoint>
 #include <QByteArray>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QMap>
@@ -189,6 +190,8 @@ class ShortcutSettings final {
     bool setScreenshotSave(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList screenshotQuickSave() const;
     bool setScreenshotQuickSave(const shortcuts::ShortcutBindingList& bindings) const;
+    shortcuts::ShortcutBindingList screenshotPinWindowToScreen() const;
+    bool setScreenshotPinWindowToScreen(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList screenshotFullScreen() const;
     bool setScreenshotFullScreen(const shortcuts::ShortcutBindingList& bindings) const;
     [[nodiscard]] shortcuts::ShortcutBindingList screenshotFocusedWindow() const;
@@ -288,7 +291,10 @@ class ScreenshotSettings final {
     bool setHiDpiImageScaling(const QString& mode) const;
     [[nodiscard]] QString selectionResizeMode() const;
     bool setSelectionResizeMode(const QString& mode) const;
-    [[nodiscard]] ExportTasks exportTasks(ExportTrigger trigger) const;
+    [[nodiscard]] QStringList selectedExportTaskIds(ExportTrigger trigger) const;
+    bool setSelectedExportTaskIds(ExportTrigger trigger, const QStringList& ids) const;
+    [[nodiscard]] ExportTasks exportTasks(ExportTrigger trigger,
+                                          ScreenshotType type = ScreenshotType::All) const;
     bool setExportTasks(ExportTrigger trigger, ExportTasks tasks) const;
     [[nodiscard]] bool copyImageFileToClipboard() const;
     bool setCopyImageFileToClipboard(bool enabled) const;
@@ -346,6 +352,9 @@ class DrawingSettings final {
 // Applies partial updates across local shortcut scopes in one commit. Each affected
 // scope is validated against its complete resulting assignment before any values change.
 [[nodiscard]] bool setLocalShortcutValuesAtomic(const QMap<QString, QJsonValue>& values);
+[[nodiscard]] bool localShortcutChangesValid(const QMap<QString, QJsonValue>& current,
+                                             const QMap<QString, QJsonValue>& changes,
+                                             bool validateUnchanged = false);
 
 // Keeps the shared color and per-tool appearance preferences consistent in one commit.
 // Also accepts drawing section reset values; disabling materializes the current color.
@@ -353,7 +362,8 @@ class DrawingSettings final {
 
 class ScreenshotShortcutSettings final {
   public:
-    [[nodiscard]] static bool isReservedShortcut(const shortcuts::ShortcutBinding& shortcut);
+    [[nodiscard]] static bool isReservedShortcut(const shortcuts::ShortcutBinding& shortcut,
+                                                 const QString& actionId = {});
     [[nodiscard]] static bool isReservedShortcutAllowed(const QString& actionId,
                                                         const shortcuts::ShortcutBinding& shortcut);
 
@@ -411,7 +421,9 @@ class DrawingShortcutSettings final {
 
 class PinToScreenShortcutSettings final {
   public:
+    [[nodiscard]] static bool isReservedShortcut(const shortcuts::ShortcutBinding& shortcut);
     [[nodiscard]] static bool actionsMayConflict(const QString& first, const QString& second);
+    [[nodiscard]] shortcuts::ShortcutBindingList screenshotShortcuts(const QString& actionId) const;
     [[nodiscard]] shortcuts::ShortcutBindingList shortcuts(const QString& actionId) const;
     bool setShortcuts(const QString& actionId,
                       const shortcuts::ShortcutBindingList& bindings) const;
@@ -516,6 +528,8 @@ class ScreenshotUiSettings final {
     bool setCursorGuideLineColor(const QColor& color) const;
     [[nodiscard]] QColor selectionCenterGuideLineColor() const;
     bool setSelectionCenterGuideLineColor(const QColor& color) const;
+    [[nodiscard]] QColor selectionGridGuideLineColor() const;
+    bool setSelectionGridGuideLineColor(const QColor& color) const;
     [[nodiscard]] QColor monitorCenterGuideLineColor() const;
     bool setMonitorCenterGuideLineColor(const QColor& color) const;
     [[nodiscard]] QColor colorPickerCenterGuideLineColor() const;
@@ -686,8 +700,12 @@ struct DrawTemplate {
 
 class DrawTemplateSettings final {
   public:
+    [[nodiscard]] QJsonArray encodedTemplates() const;
+    [[nodiscard]] static QByteArray decodePayload(const QJsonObject& record);
     [[nodiscard]] QVector<DrawTemplate> templates() const;
     bool setTemplates(const QVector<DrawTemplate>& templates) const;
+    bool appendTemplate(const DrawTemplate& drawTemplate) const;
+    bool removeTemplate(qsizetype index, const QJsonObject& expected) const;
 };
 
 class PinToScreenSettings final {
@@ -775,8 +793,6 @@ class TraySettings final {
 
 class SystemSettings final {
   public:
-    [[nodiscard]] bool annotationModeWhenOpeningForEditing() const;
-    [[nodiscard]] bool setAnnotationModeWhenOpeningForEditing(bool enabled) const;
     [[nodiscard]] bool autoStartAtBoot() const;
     [[nodiscard]] bool launchAsAdministrator() const;
     [[nodiscard]] bool setLaunchAsAdministrator(bool enabled) const;
