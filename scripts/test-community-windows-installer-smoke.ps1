@@ -13,7 +13,7 @@ $registration = 'Software\Snow Shot Community\SnowShot'
 $upstreamRegistration = 'Software\Snow Apps\SnowShot'
 $uninstall = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\SnowShot'
 $keys = @($registration, $upstreamRegistration, $uninstall, ($uninstall + '_is1'))
-function Get-RegistryValues([string]$SubKey, [string]$Name) {
+function Get-RegistrationValue([string]$SubKey, [string]$Name) {
     foreach ($hive in @('CurrentUser','LocalMachine')) {
         foreach ($view in @('Registry64','Registry32')) {
             $baseKey = [Microsoft.Win32.RegistryKey]::OpenBaseKey(
@@ -30,7 +30,7 @@ function Get-RegistryValues([string]$SubKey, [string]$Name) {
 }
 function Assert-CleanRegistration {
     foreach ($subKey in $keys) {
-        if (@(Get-RegistryValues $subKey '').Count -ne 0) {
+        if (@(Get-RegistrationValue $subKey '').Count -ne 0) {
             throw "Refusing to test over an existing Snow Shot registration: $subKey"
         }
     }
@@ -63,8 +63,10 @@ function Assert-Installed([string]$Directory, [string]$Variant) {
         ($Variant -eq 'offline' -and $ocr.Count -le 1)) {
         throw 'Installed OCR payload does not match the selected variant'
     }
-    $versions = @((Get-RegistryValues $uninstall 'DisplayVersion'), (Get-RegistryValues ($uninstall + '_is1') 'DisplayVersion')) |
-        Where-Object { $null -ne $_ }
+    $versions = @(
+        Get-RegistrationValue $uninstall 'DisplayVersion'
+        Get-RegistrationValue ($uninstall + '_is1') 'DisplayVersion'
+    )
     if (@($versions).Count -eq 0 -or @($versions | Where-Object { $_.Value -cne $version }).Count -ne 0) {
         throw 'Installed registry version did not match release'
     }
@@ -114,7 +116,7 @@ try {
         $oldHash = (Get-FileHash -LiteralPath $oldUninstaller -Algorithm SHA256).Hash
         $sentinel = Join-Path $installed 'community-user-data-sentinel.txt'
         'must survive upgrade' | Set-Content -LiteralPath $sentinel
-        $registrations = @(Get-RegistryValues $registration '' | Where-Object { $_.Value -eq $installed })
+        $registrations = @(Get-RegistrationValue $registration '' | Where-Object { $_.Value -eq $installed })
         $hives = @($registrations.Hive | Sort-Object -Unique)
         if ($hives.Count -ne 1) { throw 'Cannot determine legacy installation scope' }
         $scope = if ($hives[0] -eq 'LocalMachine') { '/ALLUSERS' } else { '/CURRENTUSER' }
@@ -133,7 +135,7 @@ try {
 } finally {
     # Runner teardown removes the isolated sandbox if an installer is still registered.
     # Never forcibly remove registry entries or installation files to disguise failure.
-    $remaining = @($keys | ForEach-Object { Get-RegistryValues $_ '' })
+    $remaining = @($keys | ForEach-Object { Get-RegistrationValue $_ '' })
     if ($remaining.Count -eq 0 -and (Test-Path -LiteralPath $root)) {
         Remove-Item -LiteralPath $root -Recurse -Force
     }

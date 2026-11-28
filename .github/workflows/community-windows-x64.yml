@@ -367,6 +367,16 @@ jobs:
           python3 scripts/community_release.py validate-tag --tag "$(python3 scripts/community_release.py tag)"
           [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] || exit 1
           python3 scripts/community_installer_signing.py --validate-source
+          # A complete, reviewed upstream merge is required for this release.
+          # This is an ancestry gate, not a version-name exemption.
+          git merge-base --is-ancestor 'cf87c82639588f5b9b9c03cd16129b7d578406d6' "$GITHUB_SHA" || {
+            echo "::error::The reviewed upstream 1.6.7/main integration is not yet in the release source."
+            exit 1
+          }
+          [[ ! -e .github/upstream-review-pending.md ]] || {
+            echo "::error::Upstream conflict review is incomplete."
+            exit 1
+          }
           # Never republish the historical unsigned Beta 1 via the new pipeline.
           [[ "$(python3 scripts/community_release.py version)" != '1.6.3-beta.1' ]] || {
             echo "::error::The published Beta 1 is immutable; use a new beta version."
