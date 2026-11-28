@@ -215,6 +215,10 @@ class SettingsBackend : public QObject {
     [[nodiscard]] virtual bool
     applyLocalShortcuts(SettingsLocalShortcutScope scope, const QString& shortcutId,
                         const shortcuts::ShortcutBindingList& shortcuts) = 0;
+    [[nodiscard]] virtual bool
+    applyContextMenuShortcutBatch(const QMap<QString, QJsonValue>&) {
+        return false;
+    }
     [[nodiscard]] virtual quint64 suspendGlobalShortcuts() {
         return 0;
     }
@@ -230,6 +234,13 @@ class SettingsBackend : public QObject {
                                 const SettingsGlobalMouseCombination& combination) {
         Q_UNUSED(action);
         Q_UNUSED(combination);
+        return false;
+    }
+
+    virtual mouse::Bindings mouseBindings() const {
+        return mouse::Bindings{};
+    }
+    virtual bool applyMouseOperation(mouse::Action, mouse::Binding) {
         return false;
     }
 
@@ -313,6 +324,8 @@ class BuiltInSettingsBackend final : public SettingsBackend {
         return m_permissions;
     }
 
+    mouse::Bindings mouseBindings() const override;
+    bool applyMouseOperation(mouse::Action action, mouse::Binding binding) override;
     GlobalMousePermissionState globalMousePermissionState() const override;
     void requestGlobalMousePermission() override;
     void openGlobalMousePermissionSettings() override;
@@ -374,6 +387,8 @@ class BuiltInSettingsBackend final : public SettingsBackend {
     [[nodiscard]] bool
     applyLocalShortcuts(SettingsLocalShortcutScope scope, const QString& shortcutId,
                         const shortcuts::ShortcutBindingList& shortcuts) override;
+    [[nodiscard]] bool
+    applyContextMenuShortcutBatch(const QMap<QString, QJsonValue>& changes) override;
     [[nodiscard]] quint64 suspendGlobalShortcuts() override;
     void resumeGlobalShortcuts(quint64 handle) override;
     [[nodiscard]] SettingsGlobalMouseCombination
@@ -411,8 +426,7 @@ class BuiltInSettingsBackend final : public SettingsBackend {
   private:
     void observeAppearanceChanges();
     void connectSkinControllerIfNeeded();
-    [[nodiscard]] bool applyContextMenuSettings(const QJsonValue& mode,
-                                                const QJsonValue& shortcuts);
+    [[nodiscard]] bool applyContextMenuSettings(const QMap<QString, QJsonValue>& changes);
     [[nodiscard]] platform::windows::AdministratorResult
     applyStartupSettings(bool enabled, bool elevated, bool reportError = true,
                          bool restartOnElevation = false);
