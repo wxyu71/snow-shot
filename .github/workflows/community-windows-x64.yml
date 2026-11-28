@@ -365,10 +365,11 @@ jobs:
             exit 1
           }
           python3 scripts/community_release.py validate-tag --tag "$(python3 scripts/community_release.py tag)"
-          # Beta 2 draft cannot publish until the signed transactional release
-          # pipeline and modern installer migration gates are wired and verified.
-          [[ "$(python3 scripts/community_release.py version)" == '1.6.3-beta.1' ]] || {
-            echo "::error::New release requires signed transactional update and installer acceptance gates."
+          [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' ]] || exit 1
+          python3 scripts/community_installer_signing.py --validate-source
+          # Never republish the historical unsigned Beta 1 via the new pipeline.
+          [[ "$(python3 scripts/community_release.py version)" != '1.6.3-beta.1' ]] || {
+            echo "::error::The published Beta 1 is immutable; use a new beta version."
             exit 1
           }
 
@@ -566,25 +567,10 @@ jobs:
           submodules: recursive
           persist-credentials: false
 
-      - name: Restore hash-pinned NSIS installer
-        id: nsis-cache
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/nsis-3.12-setup.exe
-          key: nsis-3.12-3bc2b06253a7e4957111be152ac6a536e0c7478a706e19da814038db5d706495
-
-      - name: Bootstrap NSIS and smoke-test CPack
-        id: nsis-bootstrap
+      - name: Bootstrap hash-pinned production Inno 7.1.1
         shell: pwsh
         timeout-minutes: 15
-        run: pwsh -NoProfile -NonInteractive -File ./scripts/bootstrap-community-nsis.ps1
-
-      - name: Save verified NSIS installer immediately
-        if: steps.nsis-bootstrap.outputs.cacheable == 'true' && steps.nsis-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ${{ runner.temp }}/nsis-3.12-setup.exe
-          key: ${{ steps.nsis-cache.outputs.cache-primary-key }}
+        run: ./scripts/bootstrap-community-inno.ps1
 
       # Test scripts deliberately exercise failing native commands. Run each
       # in a separate PowerShell process so the step receives the suite's exit
@@ -734,15 +720,20 @@ jobs:
           }
       - name: Package production installers
         shell: pwsh
-        run: ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly
-      - name: Verify installer assets
+        run: |
+          if (-not $env:SNOW_INNO_COMPILER) { throw 'Missing pinned Inno compiler' }
+          ./scripts/package-snow-shot.ps1 -Architecture x64 -SkipBuild -FullOnly -InnoCompiler $env:SNOW_INNO_COMPILER
+      - name: Stage exact verified Inno EXEs and transactional ZIPs
         shell: pwsh
-        run: python scripts/community_release.py verify-assets --directory build/snow-shot-msvc-release --allow-build-intermediates
+        run: python scripts/community_installer_signing.py --stage-candidate --directory build/snow-shot-msvc-release --output community-dist
 
-      - name: Smoke-test real Windows installers and in-place upgrade
-        timeout-minutes: 20
+      - name: Smoke-test real Inno installers and pinned Beta 1 migration
+        timeout-minutes: 40
         shell: pwsh
-        run: ./scripts/test-community-windows-installer-smoke.ps1 -BuildDirectory build/snow-shot-msvc-release
+        run: ./scripts/test-community-windows-installer-smoke.ps1 -BuildDirectory community-dist
+      - name: Reverify accepted candidate assets
+        shell: pwsh
+        run: python scripts/community_installer_signing.py --verify-candidate --directory community-dist
 
       - name: Upload Windows native and production diagnostics on every outcome
         if: always()
@@ -767,16 +758,11 @@ jobs:
           name: community-windows-x64-${{ github.sha }}
           retention-days: 14
           if-no-files-found: error
-          path: |
-            build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.exe
-            build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.exe
-            build/snow-shot-msvc-release/snow-shot-*-windows-x64-*.exe.sha256
-            build/snow-shot-msvc-release/snow-shot-*-windows-x64-online.manifest.json
-            build/snow-shot-msvc-release/snow-shot-*-windows-x64-offline.manifest.json
+          path: community-dist/*
 
   publish-prerelease:
     needs: [preflight, windows]
-    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.preflight.outputs.release == 'true' && github.ref == 'refs/heads/main' && (needs.windows.result == 'success' || (needs.preflight.outputs.reuse == 'true' && needs.windows.result == 'skipped')) }}
+    if: ${{ !cancelled() && needs.preflight.result == 'success' && needs.preflight.outputs.release == 'true' && github.ref == 'refs/heads/main' && needs.windows.result == 'success' }}
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -789,21 +775,9 @@ jobs:
         with:
           python-version: "3.12"
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        if: needs.preflight.outputs.reuse != 'true'
         with:
           name: community-windows-x64-${{ github.sha }}
           path: dist
-      - name: Download and authenticate the exact accepted #214 archive
-        if: needs.preflight.outputs.reuse == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/14914284776/zip" > accepted.zip
-          echo 'fa03fedbc1a68041b5c90c25a311bf9e25dab6e08687352126dd3e17c2f28eb8  accepted.zip' | sha256sum --check --strict
-          python3 -m zipfile -e accepted.zip dist
-          python3 scripts/community_release.py verify-assets --directory dist
       - name: Verify release inputs
         id: release
         shell: bash
@@ -812,10 +786,26 @@ jobs:
           version="$(python3 scripts/community_release.py version)"
           tag="$(python3 scripts/community_release.py tag)"
           python3 scripts/community_release.py validate-tag --tag "$tag"
-          python3 scripts/community_release.py verify-assets --directory dist
+          python3 scripts/community_installer_signing.py --verify-candidate --directory dist
           python3 scripts/community_release.py render-notes --output release-notes.md
           echo "version=$version" >> "$GITHUB_OUTPUT"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
+      - name: Sign accepted Community assets with pinned production key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_PRIVATE_KEY: ${{ secrets.SNOW_SHOT_RELEASE_PRIVATE_KEY }}
+        run: |
+          set -euo pipefail
+          [[ "$GITHUB_REPOSITORY" == 'wxyu71/snow-shot' && "$GITHUB_REF" == refs/heads/main ]]
+          [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]]
+          [[ -n "$RELEASE_PRIVATE_KEY" ]] || { echo "::error::Missing SNOW_SHOT_RELEASE_PRIVATE_KEY (RSA-3072 private PEM)."; exit 1; }
+          umask 077
+          key="$(mktemp "$RUNNER_TEMP/snow-shot-release.XXXXXXXX")"
+          trap 'rm -f -- "$key"' EXIT
+          printf '%s\n' "$RELEASE_PRIVATE_KEY" > "$key"
+          unset RELEASE_PRIVATE_KEY
+          python3 scripts/community_installer_signing.py --directory dist --private-key "$key" --key-id community-release-v1 --output dist/latest-version.json
       - name: Stage verified draft release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -848,6 +838,7 @@ jobs:
             gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft --prerelease --latest=false --title "Snow Shot Community $RELEASE_VERSION (Windows x64)" --notes-file release-notes.md
           fi
 
+          python3 scripts/community_installer_signing.py --verify-signed --directory dist
           gh release upload "$RELEASE_TAG" dist/* --repo "$GITHUB_REPOSITORY" --clobber
       - name: Verify GitHub-hosted assets and publish
         env:
@@ -859,7 +850,7 @@ jobs:
           set -euo pipefail
           mkdir verified
           gh release download "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --dir verified
-          python3 scripts/community_release.py verify-assets --directory verified
+          python3 scripts/community_installer_signing.py --verify-signed --directory verified
           for asset in dist/*; do
             cmp -- "$asset" "verified/${asset##*/}"
           done

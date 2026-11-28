@@ -2,7 +2,7 @@
 
 Release version: **@VERSION@**
 
-Windows x64 full edition. Select the online or offline installer; the accompanying SHA-256 files and manifests describe the verified release assets.
+Windows x64 full edition. Select the online or offline installer; the accompanying SHA-256 files and manifests describe the verified release assets. The two transaction update ZIPs and RSA-PSS signed latest-version.json are for the application updater, not portable editions.
 
 ## Changes in Beta 2
 
@@ -13,6 +13,6 @@ Windows x64 full edition. Select the online or offline installer; the accompanyi
 
 ## Upgrade
 
-Close the running application before upgrading and back up important settings and history. Download only from this repository. Automatic unsigned executable updates are disabled.
+Close the running application before upgrading and back up important settings and history. Download only from this repository. Automatic unsigned executable updates are disabled. Beta 1 users must first migrate using the matching Inno installer; subsequent updates use the signed transaction feed. Never install an update that cannot be verified.
 
 This personal fork preserves local capture, editing, history and independent PaddleOCR configuration. Upstream source and Community changes are recorded in Git history.

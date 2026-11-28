@@ -11,6 +11,7 @@ import subprocess
 import tempfile
 import zipfile
 import stat
+import shutil
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -21,6 +22,7 @@ MAX_BYTES = 4 * 1024**3
 MAX_FILES = 20_000
 RECORD = "snow-shot-installation.json"
 TRUST = release.ROOT / "snow_shot/resources/update-trusted-keys.json"
+PRODUCTION_KEY_ID = "community-release-v1"
 
 
 def encoded(value: bytes) -> str:
@@ -231,6 +233,77 @@ def sign(payload: bytes, private_key: Path, key_id: str, trust: Path) -> bytes:
                        "signature": encoded(signature)}, separators=(",", ":")).encode("utf-8") + b"\n"
 
 
+def candidate_names(version: str) -> set[str]:
+    return release.filenames(version) | {
+        f"snow-shot-{version}-windows-x64-{variant}-update.zip"
+        for variant in ("online", "offline")
+    }
+
+
+def validate_production_trust() -> None:
+    keys = json.loads(TRUST.read_text(encoding="utf-8"))["keys"]
+    selected = [key for key in keys if key["id"] == PRODUCTION_KEY_ID]
+    if len(selected) != 1:
+        raise ValueError("Production release verification key is missing or ambiguous")
+    public_der(selected[0])
+
+
+def verify_candidate(directory: Path, version: str, *, signed: bool = False,
+                     allow_build_intermediates: bool = False) -> None:
+    expected = candidate_names(version) | ({FEED} if signed else set())
+    actual = {p.name for p in directory.iterdir()}
+    if (not expected <= actual or
+            (not allow_build_intermediates and actual != expected)):
+        raise ValueError(f"Invalid Community release inventory: missing={sorted(expected-actual)}, unexpected={sorted(actual-expected)}")
+    for name in expected:
+        file_digest(directory / name)
+    for variant in ("online", "offline"):
+        stem = f"snow-shot-{version}-windows-x64-{variant}"
+        manifest = json.loads((directory / f"{stem}.manifest.json").read_text(encoding="utf-8-sig"))
+        engine = manifest.get("InstallerPayload", {})
+        if (engine.get("Engine") != "Inno Setup" or engine.get("Version") != "7.1.1"
+                or engine.get("UpdateArchiveSha256") != file_digest(directory / f"{stem}-update.zip")):
+            raise ValueError(f"Missing verified Inno 7.1.1 packaging evidence: {variant}")
+    payload_for(directory, version, "2000-01-01T00:00:00Z")
+
+
+def verify_signed(directory: Path, version: str, key_id: str, trust: Path) -> None:
+    verify_candidate(directory, version, signed=True)
+    envelope = json.loads((directory / FEED).read_bytes())
+    if envelope.get("schema") != 1 or envelope.get("keyId") != key_id:
+        raise ValueError("Unexpected signed feed schema or signing key")
+    payload = base64.b64decode(envelope["payload"], validate=True)
+    signature = base64.b64decode(envelope["signature"], validate=True)
+    if len(signature) != 384:
+        raise ValueError("Invalid RSA signature length")
+    keys = json.loads(trust.read_text(encoding="utf-8"))["keys"]
+    selected = [key for key in keys if key["id"] == key_id]
+    if len(selected) != 1:
+        raise ValueError("Feed signing key is not independently trusted")
+    with tempfile.TemporaryDirectory() as temp:
+        key = Path(temp) / "public.der"
+        sig = Path(temp) / "signature.bin"
+        key.write_bytes(public_der(selected[0]))
+        sig.write_bytes(signature)
+        openssl("dgst", "-sha256", "-verify", str(key), "-keyform", "DER",
+                "-signature", str(sig), "-sigopt", "rsa_padding_mode:pss",
+                "-sigopt", "rsa_pss_saltlen:32", "-sigopt", "rsa_mgf1_md:sha256", payload=payload)
+    published_at = json.loads(payload)["publishedAt"]
+    if not isinstance(published_at, str) or not re.fullmatch(r"\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}Z", published_at):
+        raise ValueError("Invalid publication timestamp")
+    datetime.fromisoformat(published_at.replace("Z", "+00:00"))
+    if payload != payload_for(directory, version, published_at):
+        raise ValueError("Signed feed and actual EXEs/ZIPs disagree")
+
+
+def stage_candidate(directory: Path, output: Path, version: str) -> None:
+    verify_candidate(directory, version, allow_build_intermediates=True)
+    output.mkdir(parents=True, exist_ok=False)
+    for name in sorted(candidate_names(version)):
+        shutil.copyfile(directory / name, output / name)
+    verify_candidate(output, version)
+
+
 def selftest() -> None:
     with tempfile.TemporaryDirectory() as temp:
         root = Path(temp)
@@ -259,6 +332,8 @@ def selftest() -> None:
                 "NativeValidation": {"Passed": True},
                 "Installer": {"Sha256": digest, "Path": binary.name},
                 "InstallFiles": files,
+                "InstallerPayload": {"Engine": "Inno Setup", "Version": "7.1.1",
+                                     "UpdateArchiveSha256": file_digest(dist / f"{stem}-update.zip")},
             }))
         payload = payload_for(dist, version, "2026-11-24T12:00:00Z")
         assert len(json.loads(payload)["packages"]) == 4
@@ -282,7 +357,23 @@ def selftest() -> None:
         trust.write_text(json.dumps({"keys": [{"id": "test-only",
             "modulus": encoded(bytes.fromhex(modulus.decode().split("=", 1)[1])),
             "exponent": encoded(b"\x01\x00\x01")}]}))
-        assert json.loads(sign(payload, key, "test-only", trust))["keyId"] == "test-only"
+        verify_candidate(dist, version)
+        envelope = sign(payload, key, "test-only", trust)
+        assert json.loads(envelope)["keyId"] == "test-only"
+        (dist / FEED).write_bytes(envelope)
+        verify_signed(dist, version, "test-only", trust)
+        forged = json.loads(envelope)
+        bad_signature = bytearray(base64.b64decode(forged["signature"]))
+        bad_signature[0] ^= 1
+        forged["signature"] = encoded(bytes(bad_signature))
+        (dist / FEED).write_text(json.dumps(forged))
+        try:
+            verify_signed(dist, version, "test-only", trust)
+        except subprocess.CalledProcessError:
+            pass
+        else:
+            raise AssertionError("Forged signature accepted")
+        (dist / FEED).unlink()
         public_pem = root / "public.pem"
         public_pem.write_bytes(openssl("pkey", "-in", str(key), "-pubout"))
         assert export_public_key(public_pem, "test-only") == json.loads(trust.read_text())["keys"][0]
@@ -312,6 +403,10 @@ def selftest() -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--selftest", action="store_true")
+    parser.add_argument("--validate-source", action="store_true")
+    parser.add_argument("--verify-candidate", action="store_true")
+    parser.add_argument("--verify-signed", action="store_true")
+    parser.add_argument("--stage-candidate", action="store_true")
     parser.add_argument("--local-variant", choices=("online", "offline"))
     parser.add_argument("--directory", type=Path)
     parser.add_argument("--private-key", type=Path)
@@ -322,6 +417,24 @@ def main() -> None:
     args = parser.parse_args()
     if args.selftest:
         selftest()
+        return
+    if args.validate_source:
+        validate_production_trust()
+        release.release_tag(release.source_version())
+        return
+    if args.verify_candidate or args.verify_signed or args.stage_candidate:
+        if not args.directory:
+            parser.error("Candidate validation requires --directory")
+        version = release.source_version()
+        if args.verify_signed:
+            validate_production_trust()
+            verify_signed(args.directory, version, PRODUCTION_KEY_ID, TRUST)
+        elif args.stage_candidate:
+            if not args.output:
+                parser.error("Staging requires a fresh --output directory")
+            stage_candidate(args.directory, args.output, version)
+        else:
+            verify_candidate(args.directory, version)
         return
     if args.export_public_key:
         if not args.key_id or args.private_key or args.local_variant or args.directory:
@@ -344,11 +457,18 @@ def main() -> None:
         parser.error("Signing requires --directory, --private-key, --key-id and --output")
     if args.output.name != FEED:
         parser.error(f"Output must be named {FEED}")
+    validate_production_trust()
+    if args.key_id != PRODUCTION_KEY_ID:
+        parser.error("Unexpected production signing key id")
+    verify_candidate(args.directory, release.source_version())
     payload = payload_for(args.directory, release.source_version(),
                           datetime.now(timezone.utc).isoformat(timespec="seconds").replace("+00:00", "Z"))
     envelope = sign(payload, args.private_key, args.key_id, TRUST)
+    if args.output.parent.resolve() != args.directory.resolve():
+        parser.error("Signed feed must be written inside the verified release directory")
     with args.output.open("xb") as stream:
         stream.write(envelope)
+    verify_signed(args.directory, release.source_version(), PRODUCTION_KEY_ID, TRUST)
 
 
 if __name__ == "__main__":
