@@ -17,7 +17,7 @@ QVariant normalizeSelectValue(const QVariant& value) {
 
   if (value.typeId() == QMetaType::QString) {
     const QString text = value.toString().trimmed();
-    // Equal empty strings must share a key: QDataStream distinguishes null from empty.
+    // Equal empty strings must share a key.
     return text.isEmpty() ? QStringLiteral("") : text;
   }
 
@@ -28,6 +28,13 @@ QString selectValueKey(const QVariant& value) {
   const QVariant normalized = normalizeSelectValue(value);
   if (!normalized.isValid() || normalized.isNull()) {
     return QString();
+  }
+
+  // Static Qt builds can disable QVariant data-stream support for QString.
+  // Keep string option identities independent of QVariant serialization so
+  // distinct choices cannot collapse to the same key in those builds.
+  if (normalized.typeId() == QMetaType::QString) {
+    return QStringLiteral("%1:").arg(normalized.typeId()) + normalized.toString();
   }
 
   QByteArray payload;
