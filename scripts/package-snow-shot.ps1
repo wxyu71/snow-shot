@@ -7,6 +7,7 @@ param(
     [ValidateRange(1, 256)][int]$Parallelism = 4,
     [switch]$SkipBuild,
     [switch]$FullOnly,
+    [string]$InnoCompiler,
     [ValidateSet('standalone', 'store')][string]$DistributionChannel = 'standalone',
     [switch]$StageOnly,
     [switch]$PrepareOcrRuntimeOnly
@@ -14,6 +15,10 @@ param(
 
 $ErrorActionPreference = "Stop"
 $store = $DistributionChannel -eq 'store'
+$communityInno = -not [string]::IsNullOrWhiteSpace($InnoCompiler)
+if ($communityInno -and ($store -or $StageOnly -or $Architecture -ne 'x64' -or -not $FullOnly)) {
+    throw 'Community Inno packaging requires the standalone full x64 installer build.'
+}
 # Full-only community releases must never require or build the Mini target.
 # Keep the release cache contract and the selected native targets aligned.
 $miniEnabled = -not ($store -or $FullOnly)
@@ -125,7 +130,7 @@ function Assert-SnowNativeStartup {
     }
 }
 
-if (-not $store -and -not $StageOnly) {
+if (-not $store -and -not $StageOnly -and -not $communityInno) {
     $nsisCommand = Get-Command makensis -ErrorAction SilentlyContinue
     if (-not $nsisCommand) {
         $nsisCandidates = @(
@@ -1439,9 +1444,25 @@ foreach ($variant in @('online', 'offline')) {
 }
 # NSIS still uses MAX_PATH for payload input, including long third-party license names.
 $nsisWorkDirectory = Join-Path $repoRoot "build\nsis-$Architecture"
-New-Item -ItemType Directory -Path $nsisWorkDirectory -Force | Out-Null
+if (-not $communityInno) { New-Item -ItemType Directory -Path $nsisWorkDirectory -Force | Out-Null }
 foreach ($variant in @("online", "offline")) {
     $packageBaseName = "snow-shot-$packageVersion-$ocrPlatform-$variant"
+    $packagePath = Join-Path $buildDirectory "$packageBaseName.exe"
+    if ($communityInno) {
+        $work = Join-Path $buildDirectory ("inno-" + $variant + "-" + [Guid]::NewGuid().ToString("N"))
+        try {
+            & (Join-Path $PSScriptRoot "build-community-inno-candidate.ps1") `
+                -Compiler $InnoCompiler -BuildDirectory $buildDirectory `
+                -StageDirectory $variantStages[$variant] -Variant $variant -OutputDirectory $work
+            Move-Item -LiteralPath (Join-Path $work "$packageBaseName.exe") -Destination $packagePath -Force
+            $hash = (Get-FileHash -LiteralPath $packagePath -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $packageBaseName.exe" | Set-Content -LiteralPath "$packagePath.sha256" -Encoding ascii
+            $installerPayloadReport = [ordered]@{ Engine = "Inno Setup"; Version = "7.1.1";
+                UpdateArchiveSha256 = (Get-FileHash -LiteralPath (Join-Path $buildDirectory "$packageBaseName-update.zip") -Algorithm SHA256).Hash.ToLowerInvariant() }
+        } finally {
+            if (Test-Path -LiteralPath $work) { Remove-Item -LiteralPath $work -Recurse -Force }
+        }
+    } else {
     $variantConfig = Join-Path $buildDirectory "CPackConfig-$variant.cmake"
     $baseConfigPath = $cpackConfig.Replace('\', '/')
     $stagePath = $variantStages[$variant].Replace('\', '/')
@@ -1473,6 +1494,8 @@ string(REPLACE "snow-shot-$packageVersion-$ocrPlatform.exe" "$packageBaseName.ex
     if ($LASTEXITCODE -ne 0 -or -not (Test-Path -LiteralPath $packagePath -PathType Leaf)) {
         throw "NSIS $variant packaging failed."
     }
+    $installerPayloadReport = $nsisPayload.Report
+    }
     $installerVersionInfo = (Get-Item -LiteralPath $packagePath).VersionInfo
     $expectedInstallerMetadata = @{
         CompanyName = "Snow Shot Community"
@@ -1484,6 +1507,7 @@ string(REPLACE "snow-shot-$packageVersion-$ocrPlatform.exe" "$packageBaseName.ex
         ProductName = "Snow Shot"
         ProductVersion = $packageVersion
     }
+    if ($communityInno) { $expectedInstallerMetadata.Remove("InternalName") }
     foreach ($property in $expectedInstallerMetadata.Keys) {
         if ($installerVersionInfo.$property -ne $expectedInstallerMetadata[$property]) {
             throw "Snow Shot $variant installer metadata '$property' is '$($installerVersionInfo.$property)'; expected '$($expectedInstallerMetadata[$property])'."
@@ -1515,7 +1539,7 @@ string(REPLACE "snow-shot-$packageVersion-$ocrPlatform.exe" "$packageBaseName.ex
         Qt = $qtStamp
         InstallTreeBytes = [long](($stageFileManifest | Measure-Object -Property Bytes -Sum).Sum)
         InstallFiles = $stageFileManifest
-        InstallerPayload = $nsisPayload.Report
+        InstallerPayload = $installerPayloadReport
         Installer = [ordered]@{
             Path = (Split-Path -Leaf $packagePath)
             Bytes = (Get-Item -LiteralPath $packagePath).Length

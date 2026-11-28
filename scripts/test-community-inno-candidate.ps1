@@ -37,7 +37,7 @@ try {
     $repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
     $iss = Join-Path $repoRoot 'snow_shot/packaging/community/SnowShot.iss'
     $icon = Join-Path $repoRoot 'snow_shot/resources/app-icon.ico'
-    & $env:SNOW_INNO_COMPILER /O- "/DStageDir=$syntaxStage" "/DUpdateZip=$syntaxZip" "/DLocalManifest=$syntaxManifest" "/DManifestSha=$syntaxSha" '/DAppVersion=1.6.3-beta.2' '/DVariant=online' "/DOutputDir=$syntaxOutput" "/DAppIcon=$icon" $iss
+    & $env:SNOW_INNO_COMPILER /O- "/DStageDir=$syntaxStage" "/DUpdateZip=$syntaxZip" "/DLocalManifest=$syntaxManifest" "/DManifestSha=$syntaxSha" '/DAppVersion=1.6.3-beta.2' '/DAppVersionNumeric=1.6.3' '/DVariant=online' "/DOutputDir=$syntaxOutput" "/DAppIcon=$icon" $iss
     if ($LASTEXITCODE -ne 0) { throw 'Inno candidate syntax compilation failed before Rust build.' }
     if (@(Get-ChildItem -LiteralPath $syntaxOutput -File -Recurse).Count -ne 0) { throw 'Syntax-only compilation unexpectedly produced an artifact.' }
     Write-Output 'Inno candidate syntax compilation passed; building the real Rust fixture.'

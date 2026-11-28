@@ -45,8 +45,8 @@ foreach ($entry in $expected) {
 $hash = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash.ToLowerInvariant()
 $iss = Join-Path $root 'snow_shot/packaging/community/SnowShot.iss'
 $icon = Join-Path $root 'snow_shot/resources/app-icon.ico'
-& $compilerPath "/DStageDir=$stage" "/DUpdateZip=$archive" "/DLocalManifest=$manifest" "/DManifestSha=$hash" "/DAppVersion=$version" "/DVariant=$Variant" "/DOutputDir=$output" "/DAppIcon=$icon" $iss
+& $compilerPath "/DStageDir=$stage" "/DUpdateZip=$archive" "/DLocalManifest=$manifest" "/DManifestSha=$hash" "/DAppVersion=$version" "/DAppVersionNumeric=$(($version -split '-', 2)[0])" "/DVariant=$Variant" "/DOutputDir=$output" "/DAppIcon=$icon" $iss
 if ($LASTEXITCODE -ne 0) { throw 'Inno candidate compilation failed.' }
 $exe = Join-Path $output "snow-shot-$version-windows-x64-$Variant.exe"
 if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { throw 'Missing candidate installer' }
-Write-Output "Unaccepted Inno installer candidate: $exe"
+Write-Output "Inno installer (requires production smoke acceptance): $exe"
