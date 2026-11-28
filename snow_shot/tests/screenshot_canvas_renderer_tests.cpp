@@ -2042,6 +2042,7 @@ void screenshotUiPreferencesNormalizeAndApplyPickerVisibilityPolicies() {
     preferences.shortcutHintOpacity = 1.5;
     preferences.cursorGuideLineColor = QColor();
     preferences.selectionCenterGuideLineColor = QColor();
+    preferences.selectionGridGuideLineColor = QColor();
     preferences.monitorCenterGuideLineColor = QColor();
     preferences.colorPickerCenterGuideLineColor = QColor();
     const ScreenshotUiPreferences normalized = preferences.normalized();
@@ -2054,6 +2055,7 @@ void screenshotUiPreferencesNormalizeAndApplyPickerVisibilityPolicies() {
             "shortcut hint opacity must normalize to its maximum");
     require(!normalized.showGuidesByDefault && normalized.cursorGuideLineColor == QColor(0, 0, 0) &&
                 normalized.selectionCenterGuideLineColor == QColor(0x40, 0x96, 0xff) &&
+                normalized.selectionGridGuideLineColor == QColor(0x40, 0x96, 0xff, 0) &&
                 normalized.monitorCenterGuideLineColor == QColor(255, 0, 0) &&
                 normalized.colorPickerCenterGuideLineColor == QColor(0, 0, 0, 0),
             "invalid screenshot guide colors must normalize to their configured defaults");
@@ -2630,6 +2632,108 @@ void incrementalGuideMovementMatchesFreshCompositedFrames() {
             }
         }
     }
+}
+
+void selectionGridGuideDrawsClippedPhysicalPixels() {
+    const QRectF viewport(4.0, 8.0, 88.0, 60.0);
+    const QColor color(255, 0, 255, 127);
+    for (qreal dpr : {1.0, 1.25, 1.5, 1.75, 2.0}) {
+        for (const QRectF& selection :
+             {QRectF(18.25, 24.5, 28.5, 21.25), QRectF(-9.0, 24.5, 101.0, 21.25)}) {
+            QImage image(QSize(qCeil(100 * dpr), qCeil(76 * dpr)),
+                         QImage::Format_ARGB32_Premultiplied);
+            image.setDevicePixelRatio(dpr);
+            image.fill(Qt::transparent);
+            {
+                QPainter painter(&image);
+                paintScreenshotSelectionGridGuide(painter, viewport, selection, color);
+            }
+            for (int y = 0; y < image.height(); ++y) {
+                for (int x = 0; x < image.width(); ++x) {
+                    const bool inside = x >= viewport.left() * dpr && x < viewport.right() * dpr &&
+                                        y >= viewport.top() * dpr && y < viewport.bottom() * dpr;
+                    const bool vertical =
+                        x == qFloor(selection.left() * dpr) || x == qFloor(selection.right() * dpr);
+                    const bool horizontal =
+                        y == qFloor(selection.top() * dpr) || y == qFloor(selection.bottom() * dpr);
+                    const QColor pixel = image.pixelColor(x, y);
+                    if (!inside || (!vertical && !horizontal)) {
+                        require(pixel.alpha() == 0, "grid strokes must be one pixel and clipped");
+                    } else if (vertical && horizontal) {
+                        require(pixel.alpha() > color.alpha() && pixel.alpha() < 255,
+                                "translucent grid strokes must blend at crossings");
+                    } else {
+                        require(pixel == color, "each solid grid stroke must reach both edges");
+                    }
+                }
+            }
+        }
+    }
+}
+
+void selectionGridGuideDamageMatchesFreshFrames() {
+    SnowCanvasWidget canvas;
+    canvas.resize(128, 104);
+    canvas.setClearBackgroundEnabled(false);
+    require(canvas.setViewportCamera(0.0, 0.0, 1.0), "grid damage needs a stable camera");
+    ScreenshotCanvasRenderer renderer(canvas);
+    canvas.setCustomRenderer(&renderer);
+    canvas.show();
+    QApplication::processEvents();
+    CanvasPaintRegionObserver observer;
+    canvas.installEventFilter(&observer);
+
+    const QRect viewport = canvas.rect();
+    const QTransform transform = canvas.canvasToViewTransform();
+    const QColor color(255, 0, 255, 127);
+    const QRectF selection(-20.25, -19.0, 38.5, 34.5);
+    for (qreal dpr : {1.0, 1.25, 1.5, 1.75, 2.0}) {
+        const auto paint = [&](QImage& image, const QRegion& exposure) {
+            QPainter painter(&image);
+            painter.translate(3.25, 4.125);
+            painter.setClipRegion(exposure);
+            painter.setCompositionMode(QPainter::CompositionMode_Source);
+            painter.fillRect(viewport, Qt::transparent);
+            painter.setCompositionMode(QPainter::CompositionMode_SourceOver);
+            renderer.renderAfterCanvas(painter, {viewport, exposure, transform, dpr});
+        };
+        const auto fresh = [&]() {
+            QImage image(QSize(qCeil(144 * dpr), qCeil(120 * dpr)),
+                         QImage::Format_ARGB32_Premultiplied);
+            image.setDevicePixelRatio(dpr);
+            image.fill(Qt::transparent);
+            paint(image, QRegion(viewport));
+            return image;
+        };
+
+        renderer.setSelectionGridGuide(selection, color);
+        QApplication::processEvents();
+        QImage incremental = fresh();
+        const auto changeGrid = [&](const QRectF& bounds, const QColor& nextColor) {
+            observer.begin();
+            renderer.setSelectionGridGuide(bounds, nextColor);
+            QApplication::processEvents();
+            const QRegion damage = observer.region();
+            require(damage != QRegion(viewport), "changing the grid must use a partial repaint");
+            paint(incremental, damage);
+            require(incremental == fresh(),
+                    "grid damage must restore the old strokes and redraw translucent crossings");
+            return damage;
+        };
+        require(changeGrid(selection, color).isEmpty(), "an unchanged grid must not repaint");
+        const QRectF moved = selection.translated(3.0, 0.0);
+        const QRegion moveDamage = changeGrid(moved, color);
+        require(moveDamage.contains(QPoint(43, 5)) && moveDamage.contains(QPoint(46, 5)) &&
+                    !moveDamage.contains(QPoint(5, 33)),
+                "horizontal grid motion must invalidate just the moved vertical strips");
+        const QRectF resized = moved.adjusted(0.25, -0.5, 5.5, 8.25);
+        changeGrid(resized, color);
+        changeGrid(resized, QColor(0, 255, 0, 204));
+        changeGrid(resized, Qt::transparent);
+        require(!renderer.guideLinesVisible(), "a zero-alpha grid must leave guides idle");
+    }
+    canvas.removeEventFilter(&observer);
+    canvas.setCustomRenderer(nullptr);
 }
 
 void selectionCenterGuideTracksSelectionAndRemainsOverlayOnly() {
@@ -5309,6 +5413,12 @@ void ocrGlyphDeviceCachesMatchDirectPaintingAndInvalidate() {
         require(layer.glyphRasterBuildCount() == previewBuilds,
                 "entering and leaving a box preview must reuse cached committed glyph pixels");
 
+        // A whole-line highlight can cover the same quad after text replacement.
+        // Select a prefix so its changed width is visible in SelectionOnly as well.
+        presentation->beginTextSelection(ScreenshotOcrTextPosition{0, 0});
+        presentation->updateTextSelection(ScreenshotOcrTextPosition{1, 5});
+        presentation->finishTextSelection();
+        layer.updateSelection();
         const QImage beforeTextReplacement = renderOcrSelectionLayer(layer, 1.5);
         const auto textBuilds = layer.glyphRasterBuildCount();
         const auto textGeometry = layer.geometrySynchronizationCount();
@@ -5322,8 +5432,9 @@ void ocrGlyphDeviceCachesMatchDirectPaintingAndInvalidate() {
                 "pixels before painting");
         compareWithDirect(1.5);
         require(renderOcrSelectionLayer(layer, 1.5) != beforeTextReplacement,
-                "a streaming replacement must display changed glyph pixels even when its new "
-                "geometry requires direct painting");
+                "streaming replacement must update visible glyphs and partial selection geometry");
+        presentation->selectAll();
+        layer.updateSelection();
         presentation->setLineText(
             0, QStringLiteral("A long original OCR line constrained by the source box width"));
         const auto sourceLines = presentation->lines;
@@ -6106,16 +6217,16 @@ void ocrPresentationRendersWhileCanvasContentIsHidden() {
     const QRect paintedTextBounds = paintedInkBounds(output, QRect(24, 32, 32, 16), 80);
     require(!paintedTextBounds.isEmpty(),
             "OCR graphics items should render text over the region fill");
-    require(paintedTextBounds.width() < 30 && paintedTextBounds.height() >= 13,
-            "short OCR text must retain natural spacing while using the full estimated height");
+    require(paintedTextBounds.width() >= 30 && paintedTextBounds.height() >= 13,
+            "source OCR text must fill the detected width at its fitted height");
     require(std::abs(paintedTextBounds.left() - 24) <= 1,
-            "naturally spaced OCR text must remain left-aligned");
+            "fitted source OCR text must remain left-aligned");
     auto* textLayer = canvas.findChild<QGraphicsView*>(QStringLiteral("snowShotOcrTextLayer"));
     require(textLayer != nullptr && textLayer->isVisible(),
             "OCR text widgets should live in a visible layer above the canvas");
     require(!textLayer->scene()->items().isEmpty() &&
                 textLayer->scene()->items().constFirst()->sceneBoundingRect().width() >= 31.0,
-            "natural glyph spacing must preserve the original recognition region for hit testing");
+            "fitted source glyphs must preserve the original recognition region for hit testing");
 
     const ScreenshotOcrTextPosition lineStart = renderer.ocrTextPositionAt(QPointF(-15.5, 0.0));
     const ScreenshotOcrTextPosition lineMiddle =
@@ -7636,8 +7747,11 @@ void regionEventsRemainOwnedByOverlay() {
             ++doubles;
             return true;
         }
-        void handleUnhandledLeftDoubleClick() override {
+        std::optional<snow_shot::mouse::Action> lastAction;
+        void handleMouseCompletion(snow_shot::mouse::Action action, ScreenshotOverlayWindow*,
+                                   const QPointF&) override {
             ++completions;
+            lastAction = action;
         }
     } sink;
     auto* canvas = new SnowCanvasWidget;
@@ -7655,6 +7769,34 @@ void regionEventsRemainOwnedByOverlay() {
     }
     require(sink.presses == 1 && sink.releases == 2 && sink.doubles == 1 && sink.completions == 0,
             "Qt double-click sequence must reach region handling without invoking completion");
+    {
+        namespace mouse = snow_shot::mouse;
+        auto& config = snow_shot::storage::ApplicationStorage::instance().configuration();
+        const auto key = mouse::definition(mouse::Action::ShotPin).key();
+        const auto previous = config.value(key);
+        const auto restore = qScopeGuard([&] { config.setValue(key, previous); });
+        require(config.setValue(key, mouse::encode({mouse::Kind::Click, Qt::BackButton})),
+                "rebind Pin to side button 1");
+        const auto send = [&](QEvent::Type type, Qt::MouseButton button, Qt::MouseButtons held,
+                              QPointF local, Qt::KeyboardModifiers keys = {}) {
+            QMouseEvent event(type, local, canvas->mapToGlobal(local), button, held, keys);
+            QApplication::sendEvent(canvas, &event);
+        };
+        for (auto button : {Qt::MiddleButton, Qt::BackButton}) {
+            send(QEvent::MouseButtonPress, button, button, point);
+            require(sink.completions == 0, "no action is dispatched on press");
+            send(QEvent::MouseButtonRelease, button, {}, point);
+        }
+        require(sink.completions == 1 && sink.lastAction == mouse::Action::ShotPin,
+                "only the rebound side button completes Pin");
+        send(QEvent::MouseButtonPress, Qt::BackButton, Qt::BackButton, point);
+        send(QEvent::MouseMove, Qt::NoButton, Qt::BackButton, point + QPointF(40, 0));
+        send(QEvent::MouseButtonRelease, Qt::BackButton, {}, point);
+        send(QEvent::MouseButtonPress, Qt::BackButton, Qt::BackButton, point, Qt::ShiftModifier);
+        send(QEvent::MouseButtonRelease, Qt::BackButton, {}, point, Qt::ShiftModifier);
+        require(sink.completions == 1,
+                "crossing the drag threshold and extra modifiers suppress completion");
+    }
     overlay.setRegionTypeControlVisible(true, ScreenshotRegionType::Polyline);
     QApplication::processEvents();
     auto* control = overlay.findChild<QWidget*>(QStringLiteral("screenshotRegionTypeControl"));
@@ -8632,10 +8774,21 @@ void overlayRightQuickSelection() {
     actions.cancelCapture = [&] { ++cancellations; };
     ScreenshotOverlayInputHandler handler(
         {capture, interaction, selection, intelligent, geometry, displays, actions});
-    NoopOverlayEventSink sink;
-    sink.rightClick = [&](ScreenshotOverlayWindow* window, const QPointF& point) {
-        return handler.handleRightClick(window, point);
-    };
+    class Sink final : public NoopOverlayEventSink {
+      public:
+        explicit Sink(ScreenshotOverlayInputHandler& handler) : m_handler(handler) {
+            rightClick = [&](ScreenshotOverlayWindow* window, const QPointF& point) {
+                return m_handler.handleRightClick(window, point);
+            };
+        }
+        bool backTakesPriority(ScreenshotOverlayWindow* window,
+                               const QPointF& point) const override {
+            return m_handler.backTakesPriority(window, point);
+        }
+
+      private:
+        ScreenshotOverlayInputHandler& m_handler;
+    } sink(handler);
     SnowCanvasRuntime runtime;
     require(runtime.setQuickSelectionDisabledTools({SnowCanvasTool::FreeDraw}),
             "disable left stroke selection in overlay");
@@ -9049,14 +9202,25 @@ void overlayRightClickClosesOnRelease(bool native = false) {
     Q_UNUSED(native)
 #endif
     auto* canvas = overlay.canvas();
-    QMouseEvent press(QEvent::MouseButtonPress, QPointF(50, 50), QPointF(200, 200), Qt::RightButton,
-                      Qt::RightButton, Qt::NoModifier);
-    QApplication::sendEvent(canvas, &press);
+    const QPointF start(1, 50);
+    const auto press = [&] {
+        QMouseEvent event(QEvent::MouseButtonPress, start, canvas->mapToGlobal(start),
+                          Qt::RightButton, Qt::RightButton, Qt::NoModifier);
+        QApplication::sendEvent(canvas, &event);
+        QApplication::processEvents();
+        require(overlay.isVisible(), "right press must leave screenshot overlay visible");
+    };
+    const auto release = [&](const QPointF& position) {
+        QMouseEvent event(QEvent::MouseButtonRelease, position, overlay.mapToGlobal(position),
+                          Qt::RightButton, Qt::NoButton, Qt::NoModifier);
+        QApplication::sendEvent(&overlay, &event);
+    };
+    press();
+    release(start + QPointF(50, 50));
     QApplication::processEvents();
-    require(overlay.isVisible(), "right press must leave screenshot overlay visible");
-    QMouseEvent release(QEvent::MouseButtonRelease, QPointF(-10, -10), QPointF(140, 140),
-                        Qt::RightButton, Qt::NoButton, Qt::NoModifier);
-    QApplication::sendEvent(&overlay, &release);
+    require(overlay.isVisible(), "right drag must leave screenshot overlay visible");
+    press();
+    release(QPointF(-1, start.y()));
     require(overlay.isVisible(), "close must wait until release dispatch finishes");
     QApplication::processEvents();
     require(!overlay.isVisible(), "right release must close screenshot overlay");
@@ -9070,6 +9234,8 @@ void runGuideRenderingTests() {
     incrementalGuideMovementMatchesFreshCompositedFrames();
     selectionCenterGuideTracksSelectionAndRemainsOverlayOnly();
     selectionCenterGuideDamageTracksOnlyVisualChanges();
+    selectionGridGuideDrawsClippedPhysicalPixels();
+    selectionGridGuideDamageMatchesFreshFrames();
     cursorGuideFollowsCanvasPointerDuringDrawingInput();
     cursorGuideLineMovementInvalidatesOnlyChangedAxes();
     hiddenAndSamePixelCursorMovementDoesNotRepaintGuideLines();

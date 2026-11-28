@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
+#include "saturated_export_queue.h"
 #include "snow_shot/presentation/collagewindow.h"
 #include "snow_shot/presentation/collagewindowcoordinator.h"
 #include "snow_shot/presentation/collagesettingsstore.h"
@@ -129,7 +130,8 @@ AdMessageHandle* statusMessage(ImageStitchingWindow& window) {
     auto* service = AdMessageService::instance(window.editor()->window());
     require(service != nullptr, "collage message service belongs to its window");
     for (auto* handle : service->findChildren<AdMessageHandle*>()) {
-        if (handle->key() == QStringLiteral("collageStatus") && handle->isOpen())
+        if (handle->isOpen() && (handle->key() == QStringLiteral("collageStatus") ||
+                                 handle->key() == QStringLiteral("collageExportResult")))
             return handle;
     }
     return nullptr;
@@ -241,6 +243,73 @@ void toolbarDropsAppendFilesAndInlineImage() {
                 items[1].image.pixelColor(0, 0) == QColor(Qt::green) &&
                 items[2].image.pixelColor(0, 0) == QColor(Qt::blue),
             "the existing stitching workspace appends each drop in order");
+}
+
+void unreadableShellImportsRetireWithoutBuildingUi() {
+    QTemporaryDir directory;
+    require(directory.isValid(), "isolate unreadable shell paths");
+    const auto missing = directory.filePath(QStringLiteral("missing.png"));
+    ImageStitchingWindowCoordinator coordinator;
+    for (int i = 0; i < 2; ++i) {
+        coordinator.presentFiles({missing}, true);
+        const QPointer<ImageStitchingWindow> pending(coordinator.window());
+        require(pending && pending->loading() && !pending->isOpen() && !pending->editor() &&
+                    !pending->modal(),
+                "an unreadable shell batch starts without allocating the modal or editor");
+        waitUntil([&] { return !pending && !coordinator.window(); },
+                  "an all-unreadable shell batch releases its hidden session");
+    }
+
+    SaturatedExportQueue occupied(coordinator);
+    coordinator.presentFiles({missing}, true);
+    const QPointer<ImageStitchingWindow> pending(coordinator.window());
+    require(pending && pending->loading() && !pending->findChild<AdModal*>(),
+            "a queued shell batch has no editor to close");
+    coordinator.shutdown();
+    require(!coordinator.window(), "shutdown immediately clears hidden session ownership");
+    flushEvents();
+    require(!pending, "shutdown deletes the hidden session while export workers are occupied");
+}
+
+void explorerBatchesWaitForExport() {
+    QTemporaryDir directory;
+    const auto file = directory.filePath(QStringLiteral("image.png"));
+    const auto missing = directory.filePath(QStringLiteral("missing.png"));
+    require(image({8, 6}, Qt::red).save(file), "save Explorer selection fixture");
+    Ports ports;
+    ImageStitchingWindowCoordinator coordinator(nullptr, ports.services());
+    SaturatedExportQueue occupied(coordinator);
+    coordinator.presentFiles({missing}, true);
+    auto* window = coordinator.window();
+    coordinator.presentFiles({file}, true);
+    require(window && coordinator.window() == window && !window->findChild<AdModal*>(),
+            "a readable batch can join a pending unreadable batch before any UI is built");
+    occupied.release();
+    waitUntil([&] { return !window->loading(); }, "first Explorer batch finishes");
+    require(window->modal()->isOpen() && window->document()->items().size() == 1,
+            "the stitching window opens on the first readable image");
+    auto* frame = window->editor()->window();
+    frame->showMinimized();
+    coordinator.presentFiles({missing}, true);
+    waitUntil([&] { return !window->loading(); }, "unreadable selection finishes");
+    require(frame->isMinimized(), "unreadable Explorer selections leave the window minimized");
+    window->copy();
+    waitUntil([&] { return !ports.copies.isEmpty(); }, "hold a stitching export");
+    coordinator.presentFiles({file, file}, true);
+    ports.copies.last().complete(true, {});
+    waitUntil([&] { return !window->loading(); }, "queued selection finishes after export");
+    require(coordinator.window() == window && window->modal()->isOpen() &&
+                window->document()->items().size() == 3,
+            "a second Explorer selection appends in the same window after successful export");
+    require(!frame->isMinimized(), "the first accepted image restores the existing window");
+    window->save();
+    waitUntil([&] { return !ports.saves.isEmpty(); }, "hold a stitching save");
+    coordinator.presentFiles({file}, true);
+    ports.saves.last().complete(false, QStringLiteral("disk full"));
+    waitUntil([&] { return !window->loading(); }, "selection finishes after failed export");
+    require(window->document()->items().size() == 4 &&
+                messageError(*window) == QStringLiteral("disk full"),
+            "deferred imports preserve the failed export report");
 }
 
 void selectedFilesOpenAndAppendInOrder() {
@@ -2794,6 +2863,9 @@ int main(int argc, char* argv[]) {
         return 0;
     }
     if (arguments.contains(QStringLiteral("--selected-files-only"))) {
+        timed("Unopened Explorer imports release their session",
+              unreadableShellImportsRetireWithoutBuildingUi);
+        timed("Explorer selection during export", explorerBatchesWaitForExport);
         timed("Toolbar drop imports", toolbarDropsAppendFilesAndInlineImage);
         timed("Selected-file ordered imports", selectedFilesOpenAndAppendInOrder);
         timed("Empty selections and query failures", emptySelectionsAndFailuresKeepWindowOpen);

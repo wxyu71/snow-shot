@@ -1,6 +1,7 @@
 #include "snow_shot/presentation/screenshotcursorimagesource.h"
 #include "snow_shot/presentation/screenshotoverlaycanvaspresenter.h"
 
+#include "snow_shot/platform/screenshotnative.h"
 #include "snow_shot/presentation/screenshotcanvastoolstyles.h"
 #include "snow_shot/presentation/screenshotcanvasrenderer.h"
 #include "snow_draw_engine_qt/snow_canvas_widget.h"
@@ -37,6 +38,9 @@ void ScreenshotOverlayCanvasPresenter::clearOverlayCanvas(ScreenshotOverlayWindo
     }
 
     overlay->resetScreenshotRendering();
+    if (m_selectionGridGuideOwner == overlay) {
+        m_selectionGridGuideOwner.clear();
+    }
     overlay->canvas()->cancelActiveTextEditing();
     overlay->canvas()->clearRenderState();
     overlay->canvas()->clearCursorForLayer(SnowCanvasCursorLayer::Host);
@@ -234,9 +238,18 @@ void showCapturedImageOverlayNow(ScreenshotOverlayWindow& overlay, bool framePac
     if (!showOverlayWindow(overlay, framePaced, generation)) {
         return;
     }
+    const QPointer<ScreenshotOverlayWindow> currentOverlay(&overlay);
     raiseOverlayWindow(overlay);
+#ifdef Q_OS_MACOS
+    // The initial image and selection have been painted. Submit the Cocoa
+    // transaction now so WindowServer can present the overlay this turn.
+    if (!framePaced && currentOverlay && currentOverlay->isPresentationCurrent(generation) &&
+        currentOverlay->isVisible()) {
+        snow_shot::platform::flushScreenshotPresentationTransactions(*currentOverlay);
+    }
+#endif
     // Cursor ownership follows the live pointer, independently of keyboard ownership.
-    commitInitialSelectionCursorOn(&overlay, generation);
+    commitInitialSelectionCursorOn(currentOverlay.data(), generation);
 }
 
 void showCapturedImageOverlayDeferred(ScreenshotOverlayWindow* overlay, bool framePaced,
@@ -506,6 +519,7 @@ void ScreenshotOverlayCanvasPresenter::updateGuideLinesAtGlobalPosition(
 
 void ScreenshotOverlayCanvasPresenter::clearGuideLines(
     const ScreenshotDisplaySession& displaySession) const {
+    updateSelectionGridGuide(nullptr, {}, Qt::transparent);
     const QPointer<ScreenshotOverlayWindow> previousOwner = m_guideLineOwner;
     m_guideLineOwner = nullptr;
     if (previousOwner != nullptr) {
@@ -519,6 +533,18 @@ void ScreenshotOverlayCanvasPresenter::clearGuideLines(
             overlay->canvas()->setCanvasSnapGuideTargets({});
         }
     });
+}
+
+void ScreenshotOverlayCanvasPresenter::updateSelectionGridGuide(ScreenshotOverlayWindow* owner,
+                                                                const QRectF& bounds,
+                                                                const QColor& color) const {
+    if (m_selectionGridGuideOwner && m_selectionGridGuideOwner != owner) {
+        m_selectionGridGuideOwner->setSelectionGridGuide({}, Qt::transparent);
+    }
+    m_selectionGridGuideOwner = owner;
+    if (owner != nullptr) {
+        owner->setSelectionGridGuide(bounds, color);
+    }
 }
 
 void ScreenshotOverlayCanvasPresenter::setOverlayCursor(

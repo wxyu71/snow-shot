@@ -60,14 +60,10 @@ qint64 clipboardExportWorkingBytes(const screenshot_save_export::Encoded& encode
     return std::max(bytes, screenshot_export_memory::previewWorkingBytes(size));
 }
 
-struct ClipboardExport {
-    ScreenshotClipboardPayload payload;
-    std::unique_ptr<FileCache::ExportDirectory> directory;
-};
 ScreenshotExportTaskResult prepareClipboardExport(const screenshot_save_export::Encoded& encoded,
                                                   bool includeFile, const QString& filename,
                                                   const ScreenshotExportCancellation& cancellation,
-                                                  ClipboardExport& output) {
+                                                  ScreenshotClipboardPayload& output) {
     auto cancelled = [&] { return cancellation.isCancellationRequested(); };
     ScreenshotExportTaskResult result;
     auto rows = encoded.pixels->rows;
@@ -86,27 +82,39 @@ ScreenshotExportTaskResult prepareClipboardExport(const screenshot_save_export::
         if (png.open(QIODevice::ReadOnly)) {
             const auto bytes = png.readAll();
             if (bytes.size() == encoded.fileBytes)
-                output.payload = ScreenshotClipboardService::prepareEncoded(rows, bytes);
+                output = ScreenshotClipboardService::prepareEncoded(rows, bytes);
         }
     } else
-        output.payload = ScreenshotClipboardService::prepare(rows);
-    if (!output.payload.isValid())
+        output = ScreenshotClipboardService::prepare(rows);
+    if (!output.isValid())
         return ScreenshotExportTaskResult::failure(
             ScreenshotExportFailureStage::Render,
             QCoreApplication::translate("ImageCompressionWindow", "The image could not be copied"));
     if (includeFile) {
-        output.directory = FileCache::shared().createDirectory(&result.error);
-        if (!output.directory)
+        auto directory = FileCache::shared().createDirectory(&result.error);
+        if (!directory)
             return ScreenshotExportTaskResult::failure(ScreenshotExportFailureStage::File,
                                                        result.error);
-        const auto file = QDir(output.directory->path()).filePath(filename);
+        const auto file = QDir(directory->path()).filePath(filename);
         if (!screenshot_export_file_transfer::publishExclusive(encoded.path, file, cancelled,
                                                                &result.error))
             return ScreenshotExportTaskResult::failure(ScreenshotExportFailureStage::File,
                                                        result.error);
-        output.payload = ScreenshotClipboardService::withFile(std::move(output.payload), file);
+        output = ScreenshotClipboardService::withFile(
+            std::move(output), file,
+            [directory = std::shared_ptr(std::move(directory))] { directory->retain(); });
     }
     return result;
+}
+
+QImage readCompressionFile(const QString& path, ImageStitchingImportReservation& budget,
+                           const ScreenshotExportCancellation& cancellation) {
+    auto image = readImageImportFile(
+        path, {}, [&] { return cancellation.isCancellationRequested(); },
+        [&](qint64 bytes) { return budget.resize(bytes); });
+    if (!image.isNull() && !budget.resize(image.sizeInBytes()))
+        return {};
+    return image;
 }
 
 class ImageCompressionWindow final : public ImageExportEditor {
@@ -228,7 +236,11 @@ class ImageCompressionWindow final : public ImageExportEditor {
             sourceFailed(tr("The image could not be loaded"));
             return;
         }
-        loadSource(std::make_shared<ScreenshotExportArtifact>(std::move(source)));
+        // The staged export already serves preview, Save and Copy. Stream PNG into that file.
+        ScreenshotExportArtifact::PngCachePolicy policy;
+        policy.maximumBytes = 0;
+        loadSource(std::make_shared<ScreenshotExportArtifact>(
+            std::move(source), ScreenshotCompressionLevel::Low, std::move(policy)));
     }
     void presentSnapshot(const ScreenshotPinnedImageSnapshot& snapshot) {
         if (!snapshot.error.isEmpty())
@@ -239,13 +251,11 @@ class ImageCompressionWindow final : public ImageExportEditor {
     void openFile(const QString& path) {
         auto budget = std::make_shared<ImageStitchingImportReservation>();
         present(ScreenshotExportSource::fromProducer([path, budget](const auto& cancellation) {
-            const auto cancelled = [&] { return cancellation.isCancellationRequested(); };
-            auto image = readImageImportFile(path, {}, cancelled,
-                                             [budget](qint64 n) { return budget->resize(n); });
-            if (!image.isNull())
-                budget->resize(image.sizeInBytes());
-            return image;
+            return readCompressionFile(path, *budget, cancellation);
         }));
+    }
+    void presentFile(screenshot_save_export::Source source) {
+        setPreparedSource({}, std::move(source));
     }
     void selectedFiles(QObject* owner, std::shared_ptr<platform::SelectedFileBackend> backend,
                        platform::SelectedFileTarget target) {
@@ -582,7 +592,7 @@ class ImageCompressionWindow final : public ImageExportEditor {
         const auto path = m_savePath;
         const bool copy = path.isEmpty();
         const bool includeFile = copy && storage::ScreenshotSettings().copyImageFileToClipboard();
-        auto output = std::make_shared<ClipboardExport>();
+        auto output = std::make_shared<ScreenshotClipboardPayload>();
         m_exportJob = ScreenshotExportCoordinator::shared().submit(
             this, ScreenshotExportCoordinator::Priority::Foreground,
             [encoded, path, replaceExisting = m_replaceExisting, includeFile, output,
@@ -623,11 +633,8 @@ class ImageCompressionWindow final : public ImageExportEditor {
                     finishExport();
                     return;
                 }
-                // Publishing can synchronously notify clipboard listeners that dismiss this window.
-                if (output->directory)
-                    output->directory->retain();
                 static_cast<void>(m_clipboard.commit(
-                    QApplication::clipboard(), this, std::move(output->payload),
+                    QApplication::clipboard(), this, std::move(*output),
                     [this](ScreenshotClipboardCommitResult committed) {
                         if (closed())
                             return;
@@ -684,8 +691,42 @@ ImageCompressionWindowCoordinator::ImageCompressionWindowCoordinator(
     ScreenshotPinnedImageSnapshotRequest requestPin)
     : m_requestPin(std::move(requestPin)) {}
 void ImageCompressionWindowCoordinator::shutdown() {
+    m_fileImports.cancel();
     for (auto* window : findChildren<AdModal*>(Qt::FindDirectChildrenOnly))
         window->reject();
+}
+void ImageCompressionWindowCoordinator::presentFiles(const QStringList& paths) {
+    for (const auto& path : paths) {
+        auto source = std::make_shared<screenshot_save_export::Source>();
+        if (!m_fileImports.enqueue(
+                ScreenshotExportCoordinator::Priority::Foreground,
+                [path, source](const ScreenshotExportCancellation& cancellation) {
+                    ScreenshotExportTaskResult result;
+                    auto budget = std::make_shared<ImageStitchingImportReservation>();
+                    auto image = readCompressionFile(path, *budget, cancellation);
+                    if (!image.isNull()) {
+                        auto rows = image_codec::srgbRowSource(image);
+                        // Copies of the row source retain the file's pixels. The pipeline
+                        // reserves and releases its own preview and working storage.
+                        rows.reserveResources = [budget](qint64 retained, qint64 scratch,
+                                                         QString* error) -> std::shared_ptr<void> {
+                            if (!screenshot_pinned_render::addBytes(retained, scratch))
+                                return {};
+                            return reserveImageStitchingImport(retained, error);
+                        };
+                        *source =
+                            screenshot_save_export::prepare(rows, cancellation, &result.error);
+                    }
+                    if (!source->rows.isValid())
+                        result.failureStage = ScreenshotExportFailureStage::Source;
+                    return result;
+                },
+                [this, source](ScreenshotExportTaskResult result) {
+                    if (result.succeeded())
+                        (new ImageCompressionWindow(this))->presentFile(std::move(*source));
+                }))
+            break;
+    }
 }
 void ImageCompressionWindowCoordinator::presentSelectedFiles(
     std::shared_ptr<platform::SelectedFileBackend> backend, platform::SelectedFileTarget target) {

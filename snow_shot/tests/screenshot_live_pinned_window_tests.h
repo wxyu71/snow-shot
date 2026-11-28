@@ -89,7 +89,7 @@ class ScreenshotLivePinnedWindowTestAccess {
         return window.m_staticAutomaticTextRecognition;
     }
     static void recognize(ScreenshotPinnedWindow& window) {
-        window.activateRecognitionMode(0, false);
+        window.activateRecognitionMode(0, std::nullopt);
     }
     static void copy(ScreenshotPinnedWindow& window) {
         window.copyCurrentViewport();
@@ -363,6 +363,45 @@ void present(ScreenshotPinnedWindow& window, const ScreenshotPinnedWindow::Confi
     require(succeeded && window.isLiveWindow() && window.liveFrameAvailable(),
             "an initialized source must be a live pin after its first frame");
 }
+
+#ifdef Q_OS_WIN
+void nativePreviewAttachesBeforeFirstPaintFlush() {
+    auto source = std::make_shared<FakeSource>();
+    source->nativePresentation = true;
+    ScreenshotPinnedWindow window;
+    auto* platform = ScreenshotPinnedWindowTestAccess::installObservedPlatform(window);
+    bool activated = false;
+    bool completed = false;
+    bool flushed = false;
+
+    platform->onActivate = [&] { activated = true; };
+    platform->onInvalidate = [&] {
+        auto* canvas = window.findChild<SnowCanvasWidget*>();
+        require(canvas != nullptr, "the live pin must have a canvas for the initial image");
+        static_cast<void>(renderWidget(*canvas));
+    };
+    platform->onFlush = [&] {
+        require(completed && !source->presentations.isEmpty(),
+                "the live preview and completion must precede the first native paint flush");
+        flushed = true;
+    };
+    require(
+        window.present(
+            config(source),
+            [&](bool success, const QImage& image) {
+                require(
+                    success && activated && window.liveFrameAvailable() && image == source->frame &&
+                        !source->presentations.isEmpty(),
+                    "the live pin must activate and attach its preview with the captured image");
+                completed = true;
+            }),
+        "the live pin must start presentation");
+    require(flushed && source->initialFrameReleases == 1,
+            "the live pin must flush its first content paint and release the initial frame");
+    window.setAttribute(Qt::WA_DeleteOnClose, false);
+    window.closeLiveWindow();
+}
+#endif
 
 QImage image(const std::shared_ptr<ScreenshotExportArtifact>& artifact, QObject* receiver) {
     require(bool(artifact), "current live frame must provide an export artifact");
@@ -947,6 +986,33 @@ void statusAndCapabilityGates() {
     auto source = std::make_shared<FakeSource>();
     ScreenshotPinnedWindow window;
     present(window, config(source));
+    const snow_shot::storage::PinToScreenShortcutSettings shortcuts;
+    const QString splitId = QStringLiteral("split_image");
+    const QString editId = QStringLiteral("image_editing");
+    const QString compressId = QStringLiteral("image_compression");
+    const auto clearShortcuts = qScopeGuard([&] {
+        for (const auto& id : {splitId, editId, compressId})
+            shortcuts.setShortcuts(id, {});
+    });
+    require(shortcuts.setShortcuts(splitId, {QStringLiteral("F6")}) &&
+                shortcuts.setShortcuts(editId, {QStringLiteral("F7")}) &&
+                shortcuts.setShortcuts(compressId, {QStringLiteral("F8")}),
+            "assign live image shortcuts");
+    int splits = 0, edits = 0, compressions = 0;
+    QObject observer;
+    QObject::connect(&window, &ScreenshotPinnedWindow::splitRequested, &observer,
+                     [&](const auto&) { ++splits; });
+    QObject::connect(&window, &ScreenshotPinnedWindow::imageEditingSnapshotRequested, &observer,
+                     [&](const auto&) { ++edits; });
+    QObject::connect(&window, &ScreenshotPinnedWindow::imageCompressionRequested, &observer,
+                     [&](const auto&) { ++compressions; });
+    const auto sendImageShortcuts = [&] {
+        for (const auto key : {Qt::Key_F6, Qt::Key_F7, Qt::Key_F8})
+            sendShortcut(window, key);
+    };
+    window.activateWindow();
+    window.setFocus();
+    waitForUi(10);
     const QStringList frameCommands{
         QStringLiteral("copy_to_clipboard"), QStringLiteral("save_as_file"),
         QStringLiteral("convert_to_image"),  QStringLiteral("split_image"),
@@ -991,12 +1057,17 @@ void statusAndCapabilityGates() {
                 "closed sources show the specified message");
         const int requests = source->requests;
         Access::convert(window);
+        sendImageShortcuts();
+        require(!splits && !edits && !compressions, "inactive live frames reject image shortcuts");
         Access::split(window);
         Access::edit(window);
         require(source->requests == requests && window.isLiveWindow(),
                 "disabled image operations cannot execute through direct handlers");
     }
     source->setState(State::Live);
+    sendImageShortcuts();
+    wait([&] { return splits == 1 && edits == 1 && compressions == 1; },
+         "live frame recovery restores all image shortcuts");
     for (const QString& command : frameCommands)
         require(Access::allowed(window, command),
                 "restored source reenables every frame operation");
@@ -1373,8 +1444,12 @@ void configuredShortcutsRespectCapabilities() {
         std::optional<ScreenshotClipboardContentSnapshot> snapshot(qreal) override {
             return {};
         }
-        void setMimeData(std::unique_ptr<QMimeData>) override {
+        ScreenshotClipboardCommitHandle
+        publish(QObject*, std::unique_ptr<QMimeData>, ScreenshotClipboardService::PublicationId,
+                ScreenshotClipboardService::CommitCompletion done) override {
             ++writes;
+            done({});
+            return {};
         }
     };
     auto source = std::make_shared<FakeSource>();
@@ -1406,6 +1481,24 @@ void configuredShortcutsRespectCapabilities() {
                 "configured forbidden shortcuts cannot close, thumbnail, hide, copy original, or "
                 "edit live pins");
     }
+    auto& store = snow_shot::storage::ApplicationStorage::instance().configuration();
+    const auto destroyKey = snow_shot::mouse::definition(snow_shot::mouse::Action::Destroy).key();
+    const auto restoreMouse =
+        qScopeGuard([&, old = store.value(destroyKey)] { store.setValue(destroyKey, old); });
+    require(store.setValue(destroyKey, snow_shot::mouse::encode(
+                                           {snow_shot::mouse::Kind::Click, Qt::BackButton})),
+            "bind a mouse button to Destroy");
+    const QPoint local = window.rect().center();
+    for (auto type : {QEvent::MouseButtonPress, QEvent::MouseButtonRelease}) {
+        QMouseEvent event(type, local, window.mapToGlobal(local), Qt::BackButton,
+                          type == QEvent::MouseButtonPress ? Qt::BackButton : Qt::NoButton,
+                          Qt::NoModifier);
+        QApplication::sendEvent(&window, &event);
+    }
+    QApplication::processEvents();
+    require(window.isVisible() && source->shutdowns == 0 &&
+                !window.findChild<QObject*>(QStringLiteral("screenshotPinnedDestroyConfirmation")),
+            "the bound Destroy click respects live pin capabilities");
     source->setState(State::Minimized);
     const int requests = source->requests;
     key(Qt::Key_F19);
@@ -1723,6 +1816,9 @@ void batchAndShakeRespectLiveCapabilities() {
 } // namespace live_pinned_tests
 
 void pinnedLiveWindowTests() {
+#ifdef Q_OS_WIN
+    live_pinned_tests::nativePreviewAttachesBeforeFirstPaintFlush();
+#endif
     live_pinned_tests::liveFramesPaintTransforms();
     live_pinned_tests::rotatedLiveSaveOpensDialog();
     live_pinned_tests::liveFramesReplacePixelsWithoutEditingSetup();
