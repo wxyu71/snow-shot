@@ -599,3 +599,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/rust/snow-shot-updater/src/transaction.rs`: retained 4 Community edit groups and applied 5 disjoint upstream groups. Preserve Community registration and transaction guards; adopt Explorer DLL retirement/unique reboot cleanup and autostart relaunch fixture. Native Windows test pending.
 - `snow_shot/src/update/startupupdate.cpp`: retained 0 Community edit groups and applied 3 disjoint upstream groups. Preserve Community registration and transaction guards; adopt Explorer DLL retirement/unique reboot cleanup and autostart relaunch fixture. Native Windows test pending.
 - `snow_shot/tests/update_helper_fixture.cpp`: retained 3 Community edit groups and applied 1 disjoint upstream groups. Preserve Community registration and transaction guards; adopt Explorer DLL retirement/unique reboot cleanup and autostart relaunch fixture. Native Windows test pending.
+
+## Applied conflict resolutions — OCR controllers and session headers
+
+- `snow_shot/include/snow_shot/presentation/screenshotocrcontroller.h`: retained 5 Community edit groups and applied 5 disjoint upstream groups; independent PaddleOCR jobs and publication guards remain. Caller adaptation and native testing pending.
+- `snow_shot/include/snow_shot/presentation/screenshotrecognitionsessioncontroller.h`: retained 2 Community edit groups and applied 15 disjoint upstream groups; independent PaddleOCR jobs and publication guards remain. Caller adaptation and native testing pending.
+- `snow_shot/src/presentation/ocr/screenshotocrcontroller.cpp`: retained 8 Community edit groups and applied 13 disjoint upstream groups; independent PaddleOCR jobs and publication guards remain. Caller adaptation and native testing pending.
+- `snow_shot/src/presentation/ocr/screenshotrecognitionsessioncontroller.cpp`: retained 10 Community edit groups and applied 30 disjoint upstream groups; independent PaddleOCR jobs and publication guards remain. Caller adaptation and native testing pending.
