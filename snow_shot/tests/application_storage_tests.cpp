@@ -162,6 +162,98 @@ void ocrHardwareAccelerationPersistsAndDefaultsOff() {
             "older configurations must restore acceleration to off");
 }
 
+void sharedRecognitionShortcutSurvivesUpgrade() {
+    QTemporaryDir directory;
+    const auto path = directory.filePath(QStringLiteral("config.json"));
+    const auto shared = QStringLiteral("screenshot_shortcuts/text_recognition");
+    const auto retired = QStringLiteral("pin_to_screen_shortcuts/show_text_recognition_results");
+    const auto saveAs = QStringLiteral("pin_to_screen_shortcuts/save_as_file");
+    const auto defaultOcr = storage::ConfigurationSchema::defaultValue(shared);
+    const QJsonArray custom{QStringLiteral("F8")};
+    const QJsonArray other{QStringLiteral("F9")};
+    const QJsonArray quickSave{QStringLiteral("F7")};
+    struct Case {
+        QJsonValue screenshot;
+        QJsonArray pinned;
+        QJsonValue expected;
+    };
+    const QList<Case> cases{
+        {defaultOcr, custom, custom},
+        {QJsonValue(QJsonValue::Undefined), custom, custom},
+        {other, custom, other},
+        {QJsonArray{}, custom, QJsonArray{}},
+        {defaultOcr, defaultOcr.toArray(), defaultOcr},
+        {defaultOcr, QJsonArray{}, defaultOcr},
+        {defaultOcr, QJsonArray{QStringLiteral("Escape"), QStringLiteral("F7")}, defaultOcr},
+        {defaultOcr, QJsonArray{QStringLiteral("F7"), QStringLiteral("F8")}, custom},
+    };
+    for (const auto& test : cases) {
+        auto document = storage::ConfigurationSchema::completeDefaultDocument();
+        auto recognition = document.value(QStringLiteral("screenshot_shortcuts")).toObject();
+        recognition.insert(QStringLiteral("text_recognition"), test.screenshot);
+        recognition.insert(QStringLiteral("quick_save"), quickSave);
+        recognition.remove(QStringLiteral("text_recognition_copy"));
+        document.insert(QStringLiteral("screenshot_shortcuts"), recognition);
+        auto pinned = document.value(QStringLiteral("pin_to_screen_shortcuts")).toObject();
+        pinned.insert(QStringLiteral("show_text_recognition_results"), test.pinned);
+        pinned.insert(QStringLiteral("save_as_file"), other);
+        document.insert(QStringLiteral("pin_to_screen_shortcuts"), pinned);
+        writeBytes(path, QJsonDocument(document).toJson());
+        storage::ConfigurationStore upgraded(path, true, true, 60000);
+        const auto expected = storage::ConfigurationSchema::normalize(shared, test.expected).value;
+        require(upgraded.value(shared) == expected &&
+                    upgraded.value(saveAs) ==
+                        storage::ConfigurationSchema::normalize(saveAs, other).value &&
+                    !upgraded.snapshot().contains(retired) &&
+                    upgraded.value(QStringLiteral("screenshot_shortcuts/text_recognition_copy"))
+                        .toArray()
+                        .isEmpty(),
+                "upgrade preserves compatible pin OCR bindings and explicit screenshot choices");
+        require(upgraded.flushNow().success &&
+                    !QJsonDocument::fromJson(readBytes(path))
+                         .object()
+                         .value(QStringLiteral("pin_to_screen_shortcuts"))
+                         .toObject()
+                         .contains(QStringLiteral("show_text_recognition_results")),
+                "the obsolete pinned binding is removed from saved settings");
+        storage::ConfigurationStore reloaded(path, true, true, 60000);
+        require(reloaded.value(shared) == expected, "the shared binding must survive reload");
+    }
+
+    auto document = storage::ConfigurationSchema::completeDefaultDocument();
+    auto recognition = document.value(QStringLiteral("screenshot_shortcuts")).toObject();
+    recognition.remove(QStringLiteral("text_recognition"));
+    document.insert(QStringLiteral("screenshot_shortcuts"), recognition);
+    auto pinned = document.value(QStringLiteral("pin_to_screen_shortcuts")).toObject();
+    pinned.insert(QStringLiteral("save_as_file"), defaultOcr);
+    document.insert(QStringLiteral("pin_to_screen_shortcuts"), pinned);
+    writeBytes(path, QJsonDocument(document).toJson());
+    storage::ConfigurationStore upgraded(path, true, true, 60000);
+    require(!defaultOcr.toArray().isEmpty() && upgraded.value(shared).toArray().isEmpty() &&
+                upgraded.value(saveAs) ==
+                    storage::ConfigurationSchema::normalize(saveAs, defaultOcr).value,
+            "a new shared OCR default preserves a pre-existing dedicated pin binding");
+}
+
+void shadowedOcrCopyShortcutIsRemovedOnLoad() {
+    QTemporaryDir directory;
+    const auto path = directory.filePath(QStringLiteral("config.json"));
+    const auto key = QStringLiteral("screenshot_shortcuts/text_recognition_copy");
+    auto document = storage::ConfigurationSchema::completeDefaultDocument();
+    auto screenshot = document.value(QStringLiteral("screenshot_shortcuts")).toObject();
+    screenshot.insert(QStringLiteral("text_recognition_copy"),
+                      QJsonArray{QStringLiteral("Ctrl+A"), QStringLiteral("F8")});
+    document.insert(QStringLiteral("screenshot_shortcuts"), screenshot);
+    writeBytes(path, QJsonDocument(document).toJson());
+    storage::ConfigurationStore store(path, true, true, 60000);
+    const auto expected =
+        storage::ConfigurationSchema::normalize(key, QJsonArray{QStringLiteral("F8")}).value;
+    require(store.value(key) == expected && store.isDirty() && store.flushNow().success,
+            "loading repairs the shadowed OCR copy shortcut and keeps its valid alternative");
+    storage::ConfigurationStore reloaded(path, true, true, 60000);
+    require(reloaded.value(key) == expected, "the repaired OCR copy shortcut survives reload");
+}
+
 void ocrHighlightingSettingsPersistAndValidate() {
     QTemporaryDir temporary;
     require(temporary.isValid(), "OCR highlighting requires isolated storage");
@@ -499,9 +591,36 @@ void autoSaveAfterExecutionSettingsMigrateAndPersist() {
     using storage::ExportTask;
     using storage::ExportTrigger;
     const auto copy = storage::exportTaskRow(ExportTrigger::ScreenshotCopy).key.toString();
+    const auto scopedCopy = storage::exportTaskScopedKey(ExportTrigger::ScreenshotCopy);
     const auto pinned = storage::exportTaskRow(ExportTrigger::PinnedCopy).key.toString();
     const auto pin = storage::exportTaskRow(ExportTrigger::ScreenshotPin).key.toString();
     const QJsonArray save{QStringLiteral("auto_save")};
+    const int schemaVersion = storage::ConfigurationSchema::currentVersion();
+    require(schemaVersion > 10,
+            "scoped tasks must trigger read-only storage in version 10 readers");
+    const auto upgradePath = temporary.filePath(QStringLiteral("upgrade-export-tasks.json"));
+    const QJsonObject oldVersion{{QStringLiteral("schema_version"), 10}};
+    const QJsonArray mixed{QStringLiteral("auto_save"), QStringLiteral("pin_to_screen.normal")};
+    const QJsonObject oldTasks{{QStringLiteral("screenshot_copy"), mixed}};
+    writeBytes(upgradePath, QJsonDocument(QJsonObject{{QStringLiteral("storage"), oldVersion},
+                                                      {QStringLiteral("export_tasks"), oldTasks}})
+                                .toJson());
+    {
+        storage::ConfigurationStore store(upgradePath, true, true, 60000);
+        require(store.value(copy) == save &&
+                    store.value(scopedCopy) == QJsonArray{QStringLiteral("pin_to_screen.normal")} &&
+                    store.flushNow().success,
+                "upgrade separates scoped choices from the legacy export list");
+        const auto saved = readObject(upgradePath);
+        const auto tasks = saved.value(QStringLiteral("export_tasks")).toObject();
+        require(saved.value(QStringLiteral("storage"))
+                            .toObject()
+                            .value(QStringLiteral("schema_version")) == schemaVersion &&
+                    tasks.value(QStringLiteral("screenshot_copy")) == save &&
+                    tasks.value(QStringLiteral("screenshot_copy_scoped")) ==
+                        QJsonArray{QStringLiteral("pin_to_screen.normal")},
+                "upgrading persists both task records and marks the new schema for older readers");
+    }
     const QStringList legacyCopies{
         QStringLiteral("copy_screenshot"), QStringLiteral("copy_scrolling_screenshot"),
         QStringLiteral("capture_current_monitor"), QStringLiteral("capture_focused_window")};
@@ -558,6 +677,12 @@ void autoSaveAfterExecutionSettingsMigrateAndPersist() {
                     settings.exportTasks(row.trigger) == row.allowed,
                 "each action has an independent empty default");
     }
+    require(!settings.exportTasks(ExportTrigger::ScreenshotSave,
+                                  storage::ScreenshotType::FocusedWindow) &&
+                settings.exportTasks(ExportTrigger::ScreenshotCopy,
+                                     storage::ScreenshotType::CurrentMonitor) ==
+                    storage::exportTaskRow(ExportTrigger::ScreenshotCopy).allowed,
+            "all-types selections run only on the capture types covered by the row");
     require(appStorage.flushNow().success, "flush export tasks");
     appStorage.shutdown();
     static_cast<void>(initialize(executable, temporary.filePath(QStringLiteral("data"))));
@@ -565,6 +690,23 @@ void autoSaveAfterExecutionSettingsMigrateAndPersist() {
         require(settings.exportTasks(row.trigger) == row.allowed &&
                     settings.setExportTasks(row.trigger, {}),
                 "task selections survive reload and can be cleared");
+    using storage::ScreenshotType;
+    const auto trigger = ExportTrigger::ScreenshotCopy;
+    const QStringList selected{
+        QStringLiteral("auto_save.normal"), QStringLiteral("pin_to_screen.scrolling"),
+        QStringLiteral("auto_save.focused_window"), QStringLiteral("pin_to_screen.focused_window"),
+        QStringLiteral("upload_to_cloud.current_monitor")};
+    require(settings.setSelectedExportTaskIds(trigger, selected) && appStorage.flushNow().success,
+            "store independent copy options");
+    appStorage.shutdown();
+    static_cast<void>(initialize(executable, temporary.filePath(QStringLiteral("data"))));
+    require(settings.selectedExportTaskIds(trigger) == selected &&
+                settings.exportTasks(trigger, ScreenshotType::Normal) == ExportTask::AutoSave &&
+                settings.exportTasks(trigger, ScreenshotType::Scrolling) == ExportTask::Pin &&
+                settings.exportTasks(trigger, ScreenshotType::FocusedWindow) ==
+                    (ExportTask::AutoSave | ExportTask::Pin) &&
+                settings.exportTasks(trigger, ScreenshotType::CurrentMonitor) == ExportTask::Upload,
+            "reloaded copy options match each type independently");
     appStorage.shutdown();
 }
 
@@ -1118,6 +1260,7 @@ void settingsSchemaDefaultsAndValidationAreComplete() {
         {QStringLiteral("qr_code_recognition"), QJsonArray{QStringLiteral("Ctrl+Q")}},
         {QStringLiteral("video_recording"), QJsonArray{QStringLiteral("Ctrl+R")}},
         {QStringLiteral("text_recognition"), QJsonArray{QStringLiteral("Ctrl+D")}},
+        {QStringLiteral("text_recognition_copy"), QJsonArray{}},
         {QStringLiteral("text_translation"), QJsonArray{QStringLiteral("Ctrl+T")}},
         {QStringLiteral("scrolling_screenshot"), QJsonArray{QStringLiteral("L")}},
         {QStringLiteral("print"), QJsonArray{QStringLiteral("Ctrl+P")}},
@@ -1156,7 +1299,6 @@ void settingsSchemaDefaultsAndValidationAreComplete() {
         {QStringLiteral("copy_original_content"), QJsonArray{QStringLiteral("Ctrl+Shift+C")}},
         {QStringLiteral("print"), QJsonArray{QStringLiteral("Ctrl+P")}},
         {QStringLiteral("save_as_file"), QJsonArray{QStringLiteral("Ctrl+S")}},
-        {QStringLiteral("show_text_recognition_results"), QJsonArray{QStringLiteral("Ctrl+D")}},
         {QStringLiteral("drawing_mode"), QJsonArray{QStringLiteral("Space")}},
         {QStringLiteral("toggle_playback"), QJsonArray{QStringLiteral("Space")}},
         {QStringLiteral("next_frame"), QJsonArray{}},
@@ -1347,6 +1489,7 @@ void settingsSchemaDefaultsAndValidationAreComplete() {
 
 void globalMouseCombinationSchemaIsStrictAndPersistent() {
     const QStringList keys{
+        QStringLiteral("global_mouse/screenshot"),
         QStringLiteral("global_mouse/screenshot_copy"),
         QStringLiteral("global_mouse/screenshot_fixed"),
         QStringLiteral("global_mouse/screenshot_ocr"),
@@ -1912,8 +2055,8 @@ void screenshotTranslationSettingsRoundTripSupportedValues() {
             "layout processing should default to Smart Merge for existing configurations");
     require(translation.originalImageTranslationEnabled(),
             "original image translation should default to enabled for existing configurations");
-    require(!translation.copyTranslationResultsAsImage(), "translation image copy defaults off");
-    require(translation.setCopyTranslationResultsAsImage(true), "enable translation image copy");
+    require(translation.copyTranslationResultsAsImage(), "translation image copy defaults on");
+    require(translation.setCopyTranslationResultsAsImage(false), "save disabled image copy");
     require(translation.configuration() ==
                 storage::ScreenshotTranslationConfiguration{
                     QStringLiteral("auto"), {}, QStringLiteral("free-translation")},
@@ -1935,8 +2078,8 @@ void screenshotTranslationSettingsRoundTripSupportedValues() {
     require(!translation.originalImageTranslationEnabled() &&
                 translation.configuration() == selected,
             "an explicitly disabled display toggle must survive restart");
-    require(translation.copyTranslationResultsAsImage(),
-            "translation image copy survives restart independently of display mode");
+    require(!translation.copyTranslationResultsAsImage(),
+            "an explicitly disabled image copy preference survives restart");
     require(conversion.visionModel() == QStringLiteral("vision-model"),
             "vision model survives storage restart independently of translation settings");
 
@@ -2083,7 +2226,7 @@ void verifyPinToScreenShortcutSettings() {
     const storage::PinToScreenShortcutSettings shortcutSettings;
     const shortcuts::ShortcutBindingMap defaults = shortcutSettings.allShortcuts();
     require(
-        defaults.size() == 40 &&
+        defaults.size() == 46 &&
             portable(defaults.value(QStringLiteral("copy_to_clipboard"))) ==
                 QStringList{QStringLiteral("Ctrl+C")} &&
             portable(defaults.value(QStringLiteral("copy_original_content"))) ==
@@ -2094,8 +2237,7 @@ void verifyPinToScreenShortcutSettings() {
                 QStringList{QStringLiteral("Ctrl+S")} &&
             portable(defaults.value(QStringLiteral("upload_to_cloud"))) ==
                 QStringList{QStringLiteral("Ctrl+U")} &&
-            portable(defaults.value(QStringLiteral("show_text_recognition_results"))) ==
-                QStringList{QStringLiteral("Ctrl+D")} &&
+            !defaults.contains(QStringLiteral("show_text_recognition_results")) &&
             portable(defaults.value(QStringLiteral("drawing_mode"))) ==
                 QStringList{QStringLiteral("Space")} &&
             defaults.contains(QStringLiteral("toggle_playback")) &&
@@ -2658,7 +2800,94 @@ void recordingPostProcessingPreferencesPersistAndValidate() {
     applicationStorage.shutdown();
 }
 
+void configurableMouseBindings() {
+    using namespace snow_shot::mouse;
+    const Binding leftDouble{Kind::DoubleClick, Qt::LeftButton};
+    const Binding middle{Kind::Click, Qt::MiddleButton};
+    const Binding side{Kind::Click, Qt::BackButton, Qt::ShiftModifier};
+    const Binding unbound{Kind::None, Qt::NoButton, Qt::AltModifier | Qt::ShiftModifier};
+    require(!allowed(definition(Action::ShotSave), {Kind::Click, Qt::LeftButton}) &&
+                !allowed(definition(Action::ShotSave), {Kind::DoubleClick, Qt::RightButton}) &&
+                !allowed(definition(Action::Back), {}) &&
+                allowed(definition(Action::ShotSave),
+                        {Kind::Click, Qt::RightButton, Qt::ShiftModifier}),
+            "fixed gestures and their modified alternatives");
+    for (auto kind : {Kind::Click, Kind::Drag, Kind::Wheel}) {
+        for (auto binding : choices(kind)) {
+            binding.modifiers = Qt::AltModifier | Qt::ShiftModifier;
+            require(decode(encode(binding)) == binding,
+                    "all operations round-trip with canonical modifiers");
+        }
+    }
+    QTemporaryDir temp;
+    require(temp.isValid(), "temporary mouse configuration");
+    const auto path = temp.filePath(QStringLiteral("config.json"));
+    {
+        storage::ConfigurationStore store(path, true, true, 0);
+        const auto check = [&](Category category, Binding gesture, std::optional<Action> expected) {
+            require(store.mouseAction(category, gesture) == expected,
+                    "cached action matches effective configuration");
+        };
+        check(Category::Screenshot, leftDouble, Action::ShotCopy);
+        check(Category::Pinned, middle, Action::ResetZoom);
+        require(
+            store.applySnapshot(
+                {{QStringLiteral("screenshot/double_click_action"), QStringLiteral("quick_save")},
+                 {QStringLiteral("screenshot/middle_mouse_button_action"),
+                  QStringLiteral("quick_save")},
+                 {QStringLiteral("pin_to_screen/double_click_action"), QStringLiteral("none")},
+                 {QStringLiteral("pin_to_screen/middle_mouse_button_action"),
+                  QStringLiteral("hide_to_top")}},
+                9),
+            "upgrade both legacy categories");
+        check(Category::Screenshot, leftDouble, Action::ShotQuickSave);
+        check(Category::Screenshot, middle, std::nullopt);
+        check(Category::Pinned, leftDouble, std::nullopt);
+        check(Category::Pinned, middle, Action::HideAtTop);
+        require(store.setValues({{definition(Action::ShotPin).key(), encode(side)},
+                                 {definition(Action::CopyClose).key(), encode(side)}}),
+                "categories can share a binding");
+        require(!store.setValue(definition(Action::Close).key(),
+                                encode({Kind::DoubleClick, Qt::BackButton, Qt::ShiftModifier})),
+                "reject a conflicting double-click while preserving the single-click");
+        check(Category::Pinned, side, Action::CopyClose);
+        check(Category::Screenshot,
+              {Kind::Click, Qt::BackButton, Qt::ShiftModifier | Qt::ControlModifier}, std::nullopt);
+        require(store.setValues({{definition(Action::CopyClose).key(), QJsonObject{}},
+                                 {definition(Action::Close).key(), encode(side)},
+                                 {definition(Action::PanCrop).key(),
+                                  encode({Kind::Drag, Qt::BackButton, Qt::ShiftModifier})}}),
+                "atomic transfers allow a drag on the same button and modifiers");
+        require(store.setValues(factoryValues(Category::Screenshot)), "reset only Screenshots");
+        check(Category::Screenshot, leftDouble, Action::ShotCopy);
+        check(Category::Screenshot, middle, Action::ShotPin);
+        check(Category::Pinned, side, Action::Close);
+        require(store.setValues({{definition(Action::PanCrop).key(), encode(unbound)},
+                                 {definition(Action::FineZoom).key(), encode(unbound)}}),
+                "multiple unbound actions can store the same modifiers");
+        check(Category::Pinned, unbound, std::nullopt);
+        require(store.flushNow().success, "persist mouse bindings");
+    }
+    storage::ConfigurationStore reopened(path, true, true, 0);
+    require(reopened.mouseBindings().get(Action::PanCrop) == unbound &&
+                reopened.mouseBindings().get(Action::FineZoom) == unbound,
+            "modifiers for unbound actions survive a configuration restart");
+    require(reopened.mouseAction(Category::Screenshot, leftDouble) == Action::ShotCopy &&
+                reopened.mouseAction(Category::Pinned, side) == Action::Close &&
+                reopened.mouseAction(Category::Pinned, middle) == Action::HideAtTop,
+            "saved bindings take precedence on restart");
+    require(reopened.applySnapshot(
+                {{definition(Action::ShotPin).key(), encode(side)},
+                 {QStringLiteral("screenshot/double_click_action"), QStringLiteral("quick_save")},
+                 {QStringLiteral("pin_to_screen/double_click_action"), QStringLiteral("none")}},
+                9) &&
+                reopened.mouseAction(Category::Screenshot, leftDouble) == Action::ShotCopy &&
+                !reopened.mouseAction(Category::Pinned, leftDouble),
+            "presence of new keys inhibits migration only for that category");
+}
+
 void screenshotMouseActionSettingsRoundTrip() {
+    configurableMouseBindings();
     QTemporaryDir temporary;
     require(temporary.isValid(), "create isolated screenshot mouse settings storage");
     const QString executable = QDir(temporary.path()).filePath(QStringLiteral("bin"));
@@ -3038,7 +3267,7 @@ void settingsAdaptersRoundTripAndRejectInvalidValues() {
     const storage::ScreenshotShortcutSettings screenshotShortcuts;
     const shortcuts::ShortcutBindingMap screenshotDefaults = screenshotShortcuts.allShortcuts();
     require(
-        screenshotDefaults.size() == 37 &&
+        screenshotDefaults.size() == 38 &&
             portable(screenshotDefaults.value(QStringLiteral("duplicate_latest_region"))) ==
                 QStringList{QStringLiteral("R")} &&
             portable(screenshotShortcuts.moveTool()) ==
@@ -4867,6 +5096,8 @@ int main(int argc, char** argv) {
     }
     if (application.arguments().contains(QStringLiteral("--local-shortcut-migration-only"))) {
         applicationEnterBindingsMigrateAndPersist();
+        sharedRecognitionShortcutSurvivesUpgrade();
+        shadowedOcrCopyShortcutIsRemovedOnLoad();
         duplicateShortcutDefaultsSurviveUpgrade();
         localShortcutDefaultsPreserveConfiguredBindings();
         previousSelectionStorageIsRetired();

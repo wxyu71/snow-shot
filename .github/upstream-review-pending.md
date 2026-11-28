@@ -687,3 +687,10 @@ The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64
 - `snow_shot/tests/image_conversion_tests.cpp`: retained 18 Community groups, applied 5 disjoint upstream groups; preserve existing assertions and add upstream regression coverage. Native tests pending.
 - `snow_shot/tests/screen_recording_controller_tests.cpp`: retained 2 Community groups, applied 16 disjoint upstream groups; preserve existing assertions and add upstream regression coverage. Native tests pending.
 - `snow_shot/tests/screenshot_ocr_recognition_service_tests.cpp`: retained 6 Community groups, applied 8 disjoint upstream groups; preserve existing assertions and add upstream regression coverage. Native tests pending.
+
+## Applied conflict resolutions — storage and UI fixture coverage
+
+- `snow_shot/tests/application_storage_tests.cpp`: retained 8 Community groups, applied 16 disjoint upstream groups. Native tests pending.
+- `snow_shot/tests/configuration_archive_tests.cpp`: retained 2 Community groups, applied 6 disjoint upstream groups. Native tests pending.
+- `snow_shot/tests/settings_page_loading_tests.cpp`: retained 15 Community groups, applied 5 disjoint upstream groups. Native tests pending.
+- `snow_shot/tests/mcp_application_fixture_tests.py`: retained 1 Community groups, applied 4 disjoint upstream groups. Native tests pending.
