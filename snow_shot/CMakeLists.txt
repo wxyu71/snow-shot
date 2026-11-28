@@ -2391,11 +2391,10 @@ if(SNOW_SHOT_BUILD_TESTS)
                 -File "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/test-snow-shot-msix.ps1")
         set_tests_properties(snow-shot-msix-packaging-tests PROPERTIES
             LABELS "unit;windows" TIMEOUT 120)
-        add_test(NAME snow-shot-installer-running-app-tests
-            COMMAND "${SNOW_SHOT_INSTALLER_TEST_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass
-                -File "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/test-snow-shot-installer.ps1")
-        set_tests_properties(snow-shot-installer-running-app-tests PROPERTIES
-            LABELS "unit;windows;community-fast" TIMEOUT 180)
+        include(SnowShotNsisInstallerTests)
+        snow_shot_add_nsis_running_app_test(
+            "${SNOW_SHOT_INSTALLER_TEST_POWERSHELL}"
+            "${CMAKE_CURRENT_SOURCE_DIR}/../scripts/test-snow-shot-installer.ps1")
         if(TARGET snow-shot-updater-binary)
             add_test(NAME snow-shot-installer-upgrade-tests
                 COMMAND "${SNOW_SHOT_INSTALLER_TEST_POWERSHELL}" -NoProfile -ExecutionPolicy Bypass

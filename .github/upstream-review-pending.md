@@ -719,3 +719,9 @@ The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64
 ## Validation hand-off
 
 All 79 original paths have a recorded resolution or explicit Community retention decision. Keep this marker until review acceptance. The review-only draft PR can exercise the existing non-publishing CI pipeline; no release secret or publishing permission is granted to that PR. The upstream website helper is bound to the Community project URL, with absolute destinations preserved.
+
+## CI follow-up — 2026-11-29
+
+- Run [46147066851](https://github.com/wxyu71/snow-shot/actions/runs/46147066851) passed the four fast gates, static Qt build and Windows acceptance compilation. The native acceptance invocation failed only on the upstream NSIS running-application fixture (NSIS compiler not installed); the other four selected tests passed.
+- Separate the upstream NSIS registration into an explicit `installer-nsis` label, retaining the test in the full Windows unit suite. Community production uses pinned Inno 7.1.1 and must continue to pass the mandatory synthetic installer contract (running app refusal, original bytes, rollback and retry) and the production installer/real Beta 1 migration smoke tests. Added a CMake/CTest fixture for the actual registration and label selection.
+- The review marker remains active. A successful rerun, production installer acceptance and real functional/signing validation are not yet established.
