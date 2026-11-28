@@ -1020,14 +1020,14 @@ jobs:
           # The review and release PRs must have been merged with real ancestry.
           merged_head() {
             local number="$1" branch="$2" base="$3" pr merge head
-            pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")"
+            pr="$(gh api "repos/$GITHUB_REPOSITORY/pulls/$number")" || return 1
             jq -e --arg branch "$branch" --arg base "$base" --arg repo "$GITHUB_REPOSITORY" '
               .merged == true and .head.ref == $branch and .base.ref == $base and
-              .head.repo.full_name == $repo' <<< "$pr" >/dev/null
-            merge="$(jq -er '.merge_commit_sha' <<< "$pr")"
-            head="$(jq -er '.head.sha' <<< "$pr")"
-            git merge-base --is-ancestor "$merge" "$GITHUB_SHA"
-            git merge-base --is-ancestor "$head" "$GITHUB_SHA"
+              .head.repo.full_name == $repo' <<< "$pr" >/dev/null || return 1
+            merge="$(jq -er '.merge_commit_sha' <<< "$pr")" || return 1
+            head="$(jq -er '.head.sha' <<< "$pr")" || return 1
+            git merge-base --is-ancestor "$merge" "$GITHUB_SHA" || return 1
+            git merge-base --is-ancestor "$head" "$GITHUB_SHA" || return 1
             printf '%s\n' "$head"
           }
           release_head="$(merged_head 15 'release/community-1.6.3-beta.2' main)"
@@ -1045,7 +1045,44 @@ jobs:
               .head.repo.full_name == $repo and .base.ref == "main"' <<< "$tracking" >/dev/null; then
             if [[ "$(jq -r '.state' <<< "$tracking")" == open ]]; then
               [[ "$(jq -r '.draft' <<< "$tracking")" == true ]]
-              gh pr close 11 --repo "$GITHUB_REPOSITORY"
+              tracking_ref="$(git ls-remote --heads origin refs/heads/automation/upstream-sync-59a0ad778038)"
+              if [[ "$tracking_ref" == "$upstream_head"
+            fi
+          else
+            echo "::warning::Tracking PR #11 changed; preserving it and its branch."
+            upstream_head=''
+          fi
+
+          gh auth setup-git --hostname github.com
+          retire_beta2() {
+            local branch="$1" expected="$2" ref remote actual open
+            [[ -n "$expected" ]] || return 0
+            ref="refs/heads/$branch"
+            remote="$(git ls-remote --heads origin "$ref")"
+            [[ -n "$remote" ]] || return 0
+            actual="${remote%%$'\t'*}"
+            if [[ "$actual" != "$expected" ]] || ! git merge-base --is-ancestor "$actual" "$GITHUB_SHA"; then
+              echo "::warning::Preserving $branch: its head changed or is not integrated."
+              return 0
+            fi
+            open="$(gh pr list --repo "$GITHUB_REPOSITORY" --head "$branch" --state open --json number --jq 'length')"
+            if [[ "$open" != 0 ]]; then
+              echo "::warning::Preserving $branch: an open PR still references it."
+              return 0
+            fi
+            [[ "$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/main" --jq '.object.sha')" == "$GITHUB_SHA" ]]
+            git push --force-with-lease="$ref:$expected" origin ":$ref"
+          }
+          retire_beta2 'review/upstream-1.6.7-20261128' "$review_head"
+          retire_beta2 'release/community-1.6.3-beta.2' "$release_head"
+          retire_beta2 'feat/community-webdav-settings-sync' "$webdav_head"
+          retire_beta2 'automation/upstream-sync-59a0ad778038' "$upstream_head"
+\t'"refs/heads/automation/upstream-sync-59a0ad778038" ]]; then
+                gh pr close 11 --repo "$GITHUB_REPOSITORY"
+              else
+                echo "::warning::Tracking branch moved; preserving #11."
+                upstream_head=''
+              fi
             fi
           else
             echo "::warning::Tracking PR #11 changed; preserving it and its branch."
