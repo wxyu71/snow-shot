@@ -8,8 +8,8 @@
 #include <QRectF>
 #include <QString>
 #include "snow_shot/presentation/globalmousetypes.h"
-#include "snow_shot/presentation/screenshotpinnedimagesnapshot.h"
-#include "snow_shot/presentation/imagesplitwindow.h"
+Q_MOC_INCLUDE("snow_shot/presentation/screenshotpinnedimagesnapshot.h")
+Q_MOC_INCLUDE("snow_shot/presentation/imagesplitwindow.h")
 
 #include <memory>
 #include <functional>
@@ -21,6 +21,7 @@ namespace snow_shot::presentation {
 class PinnedWindowGroupManager;
 enum class GlobalShortcutAction;
 struct AppPermissionSnapshot;
+struct ImageSplitSource;
 } // namespace snow_shot::presentation
 class ScreenshotOcrRecognitionService;
 class ScreenshotQrRecognitionPort;
@@ -29,6 +30,8 @@ class ScreenshotExportArtifact;
 class ScreenshotPrintService;
 class ScreenshotAirDropService;
 class ScreenRecordingController;
+class ScreenshotExportSource;
+struct ScreenshotPinnedImageSnapshot;
 struct ScreenshotClipboardContent;
 struct ScreenshotClipboardContentSnapshot;
 struct ScreenshotHistoryEntry;
@@ -53,6 +56,7 @@ class ScreenshotController : public QObject {
         ConvertMarkdown,
         ConvertHtml,
         RecognizeTextAndCopy,
+        PinWindow,
     };
     Q_ENUM(CaptureAction)
     [[nodiscard]] bool captureForAction(CaptureAction action);
@@ -61,7 +65,8 @@ class ScreenshotController : public QObject {
     handleActiveScreenshotShortcut(snow_shot::presentation::GlobalShortcutAction action);
     void pinDroppedContent(ScreenshotClipboardContentSnapshot snapshot, QStringList paths);
     // Finishes once the first file is presented, consumed as a duplicate, or fails.
-    void pinFilesToScreen(QStringList paths, std::function<void()> firstFileFinished = {});
+    void pinFilesToScreen(QStringList paths, std::function<void()> firstFileFinished = {},
+                          bool initialAnnotationMode = false);
     explicit ScreenshotController(
         QObject* parent = nullptr,
         snow_shot::presentation::PinnedWindowGroupManager* groupManager = nullptr,
@@ -70,6 +75,8 @@ class ScreenshotController : public QObject {
     ~ScreenshotController() override;
     void pinSelectedFilesToScreen(snow_shot::platform::SelectedFileTarget target);
     [[nodiscard]] bool captureAvailable() const;
+    // Runs on the GUI thread and returns an optional wait for this capture's worker.
+    void setPrepareCaptureAcquisition(std::function<std::function<void()>()> prepare);
     void setCaptureSuspended(bool suspended);
 #ifdef Q_OS_MACOS
     void setCaptureBackgroundWindow(QWidget* window);
@@ -87,6 +94,8 @@ class ScreenshotController : public QObject {
         const QPointF& position,
         snow_shot::presentation::GlobalMouseCoordinateSpace space =
             snow_shot::presentation::GlobalMouseCoordinateSpace::PhysicalPixels);
+    void setGlobalMouseActivationModifiersQuery(std::function<Qt::KeyboardModifiers()> query);
+    void requestGlobalMouseFrame(quint64 gestureId, const QPointF& position);
     void updateGlobalMouseCapture(quint64 gestureId, const QPointF& position);
     void finishGlobalMouseCapture(quint64 gestureId, const QPointF& position);
     void cancelGlobalMouseCapture(quint64 gestureId);
@@ -172,6 +181,7 @@ class ScreenshotController : public QObject {
     void accessibilityPermissionRequested();
     void translationPageRequested(const QString& text);
     void captureAvailabilityChanged(bool available);
+    void globalMouseSampleRequested(quint64 gestureId, bool includeTerminal);
     void globalMouseCaptureEnded(quint64 gestureId);
     void mcpCapturePresented();
     void mcpCaptureTerminated();

@@ -1,6 +1,8 @@
 #ifndef SNOW_SHOT_PRESENTATION_SCREENSHOTRECOGNITIONWINDOW_H
 #define SNOW_SHOT_PRESENTATION_SCREENSHOTRECOGNITIONWINDOW_H
 
+#include "snow_shot/presentation/screenshotrecognitioncopy.h"
+#include "snow_shot/presentation/screenshotclipboardservice.h"
 #include "snow_shot/presentation/screenshotselectiongeometry.h"
 #include "snow_shot/presentation/screenshotocrtextlayer.h"
 #include "snow_shot/presentation/screenshotimageconversion.h"
@@ -88,8 +90,7 @@ struct ScreenshotRecognitionWindowActions {
     std::function<void(const QPointF&)> updateSelectionResizeAtGlobalPosition = ignoreResize;
     std::function<void(const QPointF&)> finishSelectionResizeAtGlobalPosition = ignoreResize;
     std::function<void()> selectionResizeFinished = noAction;
-    std::function<void()> handleCopy = noAction;
-    std::function<bool()> copyOcrResult{};
+    std::function<void()> resultCopied = noAction;
 };
 
 struct ScreenshotTextSelectionSnapshot {
@@ -110,6 +111,7 @@ class ScreenshotRecognitionWindow final : public QWidget {
     void setEmbeddedPointerEventHandler(std::function<bool(QObject*, QEvent*)> handler) {
         m_embeddedPointerEventHandler = std::move(handler);
     }
+    [[nodiscard]] bool activeContentOwnsContextMenu(const QObject* watched) const;
     enum class PresentationMode {
         TopLevelWindow,
         EmbeddedChild,
@@ -128,6 +130,7 @@ class ScreenshotRecognitionWindow final : public QWidget {
         PresentationMode presentationMode = PresentationMode::TopLevelWindow;
         qreal formattedTextDevicePixelRatio = 1.0;
         bool takeFocus = true;
+        QWidget* screenshotToolbar = nullptr;
     };
 
     explicit ScreenshotRecognitionWindow(
@@ -157,8 +160,10 @@ class ScreenshotRecognitionWindow final : public QWidget {
     struct SessionCallbacks {
         std::function<bool()> translationActive;
         std::function<std::unique_ptr<QMimeData>()> translationClipboard;
-        std::function<bool(QString)> copyDocument = {};
-        std::function<bool(const ScreenshotOcrPresentation*)> copySmart = {};
+        std::function<bool(ScreenshotRecognitionCopy, const ScreenshotOcrPresentation*,
+                           std::function<void()>)>
+            copy{};
+        std::function<void()> cancelCopy{};
     };
     [[nodiscard]] AttachmentToken attachSession(QObject* owner, SessionCallbacks callbacks);
     [[nodiscard]] bool ownsAttachment(const QObject* owner, AttachmentToken token) const;
@@ -239,6 +244,8 @@ class ScreenshotRecognitionWindow final : public QWidget {
     void clearRecognitionError();
 
     [[nodiscard]] bool copyVisibleContentToClipboard();
+    [[nodiscard]] std::unique_ptr<QMimeData> previewClipboardMimeData() const;
+    [[nodiscard]] std::unique_ptr<QMimeData> tableSelectionClipboardMimeData() const;
     [[nodiscard]] bool isOcrBackgroundAt(const QPointF& localPosition) const;
     [[nodiscard]] bool boxSelectionEnabled() const;
     [[nodiscard]] bool lineBoxSelectionActive() const;
@@ -269,6 +276,8 @@ class ScreenshotRecognitionWindow final : public QWidget {
     friend struct ScreenshotRecognitionWindowTestAccess;
     void populateOcrContextMenu(adqt::widgets::AdContextMenu& menu);
     void populateTextEditorContextMenu(adqt::widgets::AdContextMenu& menu);
+    [[nodiscard]] bool requestCopy(ScreenshotRecognitionCopy intent);
+    ScreenshotClipboardCommitHandle m_previewCommit;
     [[nodiscard]] bool commandAttachmentMatches(const QObject* owner, AttachmentToken token) const;
     [[nodiscard]] bool translationCopyActive() const;
     [[nodiscard]] ScreenshotRecognitionImageSnapshot ocrImageSnapshot() const;
@@ -297,7 +306,7 @@ class ScreenshotRecognitionWindow final : public QWidget {
     [[nodiscard]] QString latexPreviewStatus() const;
 #endif
     void installSelectionResizeEventFilters(QWidget* widget);
-    [[nodiscard]] bool activeContentOwnsContextMenu(const QObject* watched) const;
+
     void showOcrContextMenu(const QPoint& globalPosition);
     void showQrContextMenu(const QPoint& globalPosition);
     void showTextEditorContextMenu(const QPoint& globalPosition);
@@ -314,6 +323,9 @@ class ScreenshotRecognitionWindow final : public QWidget {
     QPointer<ScreenshotOriginalImagePreviewWindow> m_originalImagePreview;
     QPointer<QWidget> m_originalImagePreviewHost;
     QPointer<QWidget> m_originalImagePreviewTransientOwner;
+#ifdef Q_OS_WIN
+    QPointer<QWidget> m_screenshotToolbar;
+#endif
     QPointer<QWindow> m_originalImagePreviewHostHandle;
     QVector<QMetaObject::Connection> m_originalImagePreviewConnections;
     std::function<std::optional<ScreenshotOriginalImagePreviewState>()>

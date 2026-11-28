@@ -606,3 +606,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/include/snow_shot/presentation/screenshotrecognitionsessioncontroller.h`: retained 2 Community edit groups and applied 15 disjoint upstream groups; independent PaddleOCR jobs and publication guards remain. Caller adaptation and native testing pending.
 - `snow_shot/src/presentation/ocr/screenshotocrcontroller.cpp`: retained 8 Community edit groups and applied 13 disjoint upstream groups; independent PaddleOCR jobs and publication guards remain. Caller adaptation and native testing pending.
 - `snow_shot/src/presentation/ocr/screenshotrecognitionsessioncontroller.cpp`: retained 10 Community edit groups and applied 30 disjoint upstream groups; independent PaddleOCR jobs and publication guards remain. Caller adaptation and native testing pending.
+
+## Applied conflict resolutions — screenshot and recognition windows
+
+- `snow_shot/include/snow_shot/presentation/screenshotcontroller.h`: retained 2 Community edit groups and applied 8 disjoint upstream groups. Preserve asynchronous history OCR queue, Markdown signal and conversion source edits. Runtime and API consistency validation pending.
+- `snow_shot/src/presentation/services/screenshotcontroller.cpp`: retained 20 Community edit groups and applied 179 disjoint upstream groups. Preserve asynchronous history OCR queue, Markdown signal and conversion source edits. Runtime and API consistency validation pending.
+- `snow_shot/include/snow_shot/presentation/screenshotrecognitionwindow.h`: retained 1 Community edit groups and applied 9 disjoint upstream groups. Preserve asynchronous history OCR queue, Markdown signal and conversion source edits. Runtime and API consistency validation pending.
+- `snow_shot/src/presentation/ocr/screenshotrecognitionwindow.cpp`: retained 1 Community edit groups and applied 34 disjoint upstream groups. Preserve asynchronous history OCR queue, Markdown signal and conversion source edits. Runtime and API consistency validation pending.
