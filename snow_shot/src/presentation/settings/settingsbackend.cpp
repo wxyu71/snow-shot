@@ -1,5 +1,4 @@
 #include "snow_shot/app/distribution.h"
-#include "snow_shot/shortcuts/screenshotshortcutcontext.h"
 #include "snow_shot/presentation/globalmousemanager.h"
 #include "snow_shot/presentation/settings/settingsbackend.h"
 #include "snow_shot/app/edition.h"
@@ -54,15 +53,17 @@
 namespace snow_shot::presentation::settings {
 namespace {
 const QString kContextMenuModeKey = QStringLiteral("system/context_menu_mode");
-const QString kContextMenuShortcutKey =
-    QStringLiteral("context_menu_shortcuts/edit_with_snow_shot");
+const QString kContextMenuOptionsKey = QStringLiteral("system/context_menu_options");
+const QString kMenuShortcutPrefix = QStringLiteral("context_menu_shortcuts/");
 
 #ifdef Q_OS_WIN
 const QString kPowerQoSKey = QStringLiteral("system/power_qos");
 
-QString contextMenuAccessKey(const QJsonValue& value) {
-    const auto bindings = shortcuts::shortcutBindingsFromJson(value, false);
-    return bindings.isEmpty() ? QString() : bindings.first().portableText;
+QStringList menuSettingKeys() {
+    QStringList keys{kContextMenuModeKey, kContextMenuOptionsKey};
+    for (const auto id : platform::windows::shellActionIds)
+        keys.append(kMenuShortcutPrefix + QString::fromLatin1(id));
+    return keys;
 }
 #endif
 
@@ -212,6 +213,8 @@ QString localShortcutKey(SettingsLocalShortcutScope scope, const QString& shortc
 
 QString globalMouseKey(SettingsGlobalMouseAction action) {
     switch (action) {
+    case SettingsGlobalMouseAction::Screenshot:
+        return QStringLiteral("global_mouse/screenshot");
     case SettingsGlobalMouseAction::ScreenshotCopy:
         return QStringLiteral("global_mouse/screenshot_copy");
     case SettingsGlobalMouseAction::ScreenshotPinToScreen:
@@ -898,9 +901,7 @@ bool BuiltInSettingsBackend::applySelectValue(SettingsSelectBinding binding,
         return false;
 #endif
     case SettingsSelectBinding::ContextMenuMode: {
-        return applyContextMenuSettings(
-            QJsonValue::fromVariant(value),
-            storage::ApplicationStorage::instance().configuration().value(kContextMenuShortcutKey));
+        return applyContextMenuSettings({{kContextMenuModeKey, QJsonValue::fromVariant(value)}});
     }
     case SettingsSelectBinding::Proxy:
         return storage::NetworkSettings().setProxy(value.toString());
@@ -1165,8 +1166,6 @@ bool BuiltInSettingsBackend::switchValue(SettingsSwitchBinding binding) const {
     case SettingsSwitchBinding::LaunchAsAdministrator:
         return !app::distribution::isStoreManaged() &&
                storage::SystemSettings().launchAsAdministrator();
-    case SettingsSwitchBinding::AnnotationModeWhenOpeningForEditing:
-        return storage::SystemSettings().annotationModeWhenOpeningForEditing();
     case SettingsSwitchBinding::DrawingAutomaticallySelectNewlyCreatedElements:
         return storage::DrawingSettings().automaticallySelectNewlyCreatedElements();
     case SettingsSwitchBinding::DrawingDeleteTextAfterCursor:
@@ -1181,33 +1180,32 @@ bool BuiltInSettingsBackend::switchValue(SettingsSwitchBinding binding) const {
     return false;
 }
 
-bool BuiltInSettingsBackend::applyContextMenuSettings(const QJsonValue& mode,
-                                                      const QJsonValue& shortcutValue) {
+bool BuiltInSettingsBackend::applyContextMenuSettings(const QMap<QString, QJsonValue>& changes) {
 #ifdef Q_OS_WIN
-    const auto requestedMode = storage::ConfigurationSchema::normalize(kContextMenuModeKey, mode);
-    const auto requestedShortcuts =
-        storage::ConfigurationSchema::normalize(kContextMenuShortcutKey, shortcutValue);
     auto& configuration = storage::ApplicationStorage::instance().configuration();
-    if (!requestedMode.valid || !requestedShortcuts.valid || !m_shellContextMenu ||
-        !configuration.isWritable())
+    if (!m_shellContextMenu || !configuration.isWritable())
         return false;
-    const QMap<QString, QJsonValue> previous{
-        {kContextMenuModeKey, configuration.value(kContextMenuModeKey)},
-        {kContextMenuShortcutKey, configuration.value(kContextMenuShortcutKey)},
-    };
-    const QMap<QString, QJsonValue> requested{
-        {kContextMenuModeKey, requestedMode.value},
-        {kContextMenuShortcutKey, requestedShortcuts.value},
-    };
-    auto result = m_shellContextMenu->changeMode(
-        platform::windows::ShellContextMenuRegistration::modeFromValue(
-            requestedMode.value.toString()),
-        contextMenuAccessKey(requestedShortcuts.value),
-        [&] { return configuration.setValues(requested) && configuration.flushNow().success; });
+    auto merged = configuration.snapshot();
+    QMap<QString, QJsonValue> previous, requested, shortcuts;
+    for (auto it = changes.cbegin(); it != changes.cend(); ++it) {
+        const auto normalized = storage::ConfigurationSchema::normalize(it.key(), it.value());
+        if (!normalized.valid)
+            return false;
+        if (it.key().startsWith(kMenuShortcutPrefix))
+            shortcuts.insert(it.key(), normalized.value);
+        previous.insert(it.key(), merged.value(it.key()));
+        requested.insert(it.key(), normalized.value);
+        merged.insert(it.key(), normalized.value);
+    }
+    if (!storage::localShortcutChangesValid(configuration.snapshot(), shortcuts))
+        return false;
+    bool stored = false;
+    auto result = m_shellContextMenu->change(m_shellContextMenu->preferences(merged), [&] {
+        stored = configuration.setValues(requested);
+        return stored && configuration.flushNow().success;
+    });
     if (!result.success) {
-        if ((configuration.value(kContextMenuModeKey) != previous.value(kContextMenuModeKey) ||
-             configuration.value(kContextMenuShortcutKey) !=
-                 previous.value(kContextMenuShortcutKey)) &&
+        if (stored && previous != requested &&
             (!configuration.setValues(previous) || !configuration.flushNow().success)) {
             result.error +=
                 QLatin1Char(' ') +
@@ -1219,10 +1217,14 @@ bool BuiltInSettingsBackend::applyContextMenuSettings(const QJsonValue& mode,
     emit synchronized();
     return result.success;
 #else
-    Q_UNUSED(mode);
-    Q_UNUSED(shortcutValue);
+    Q_UNUSED(changes);
     return false;
 #endif
+}
+
+bool BuiltInSettingsBackend::applyContextMenuShortcutBatch(
+    const QMap<QString, QJsonValue>& changes) {
+    return applyContextMenuSettings(changes);
 }
 
 void BuiltInSettingsBackend::refreshPlatformSettings() {
@@ -1233,12 +1235,10 @@ void BuiltInSettingsBackend::refreshPlatformSettings() {
 #endif
 #ifdef Q_OS_WIN
     if (m_shellContextMenu) {
-        QString error;
-        if (!m_shellContextMenu->refreshLabels(
-                contextMenuAccessKey(storage::ApplicationStorage::instance().configuration().value(
-                    kContextMenuShortcutKey)),
-                &error))
-            qWarning().noquote() << error;
+        const auto result = m_shellContextMenu->refreshLabels(m_shellContextMenu->preferences(
+            storage::ApplicationStorage::instance().configuration().snapshot()));
+        if (!result.success)
+            qWarning().noquote() << result.error;
     }
 #endif
 }
@@ -1341,9 +1341,6 @@ bool BuiltInSettingsBackend::switchEnabled(SettingsSwitchBinding binding) const 
 }
 
 bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, bool value) {
-    if (binding == SettingsSwitchBinding::AnnotationModeWhenOpeningForEditing)
-        return switchEnabled(binding) &&
-               storage::SystemSettings().setAnnotationModeWhenOpeningForEditing(value);
     if (binding == SettingsSwitchBinding::OcrHardwareAcceleration) {
         const bool accepted = storage::ApplicationStorage::instance().configuration().setValue(
             QStringLiteral("text_recognition/hardware_acceleration"), value);
@@ -1620,7 +1617,6 @@ bool BuiltInSettingsBackend::applySwitchValue(SettingsSwitchBinding binding, boo
     case SettingsSwitchBinding::McpEnabled:
     case SettingsSwitchBinding::AutoStartAtBoot:
     case SettingsSwitchBinding::LaunchAsAdministrator:
-    case SettingsSwitchBinding::AnnotationModeWhenOpeningForEditing:
     case SettingsSwitchBinding::DrawingAutomaticallySelectNewlyCreatedElements:
     case SettingsSwitchBinding::DrawingDeleteTextAfterCursor:
     case SettingsSwitchBinding::DrawingRememberLastUsedTool:
@@ -1752,11 +1748,16 @@ QVariantList BuiltInSettingsBackend::multiSelectValue(SettingsMultiSelectBinding
             values.push_back(value);
         }
     } else if (const auto trigger = exportTriggerForBinding(binding)) {
-        for (const auto& value :
-             storage::exportTaskIds(storage::ScreenshotSettings().exportTasks(*trigger)))
+        for (const auto& value : storage::ScreenshotSettings().selectedExportTaskIds(*trigger))
             values.push_back(value);
     } else if (binding == SettingsMultiSelectBinding::ScreenshotShutterSoundNotification) {
         return QVariant(storage::ScreenshotSettings().shutterSoundTargets()).toList();
+    } else if (binding == SettingsMultiSelectBinding::ContextMenuOptions) {
+        return storage::ApplicationStorage::instance()
+            .configuration()
+            .value(kContextMenuOptionsKey)
+            .toArray()
+            .toVariantList();
     } else if (binding == SettingsMultiSelectBinding::FullscreenDisableScope) {
         for (const QString& value : storage::GlobalShortcutSettings().fullscreenDisableScope()) {
             values.push_back(value);
@@ -1782,11 +1783,13 @@ bool BuiltInSettingsBackend::applyMultiSelectValue(SettingsMultiSelectBinding bi
         return storage::TraySettings().setMenuOptions(tools);
     }
     if (const auto trigger = exportTriggerForBinding(binding))
-        return storage::ApplicationStorage::instance().configuration().setValue(
-            storage::exportTaskRow(*trigger).key.toString(), QJsonArray::fromStringList(tools));
+        return storage::ScreenshotSettings().setSelectedExportTaskIds(*trigger, tools);
     if (binding == SettingsMultiSelectBinding::ScreenshotShutterSoundNotification) {
         return storage::ScreenshotSettings().setShutterSoundTargets(tools);
     }
+    if (binding == SettingsMultiSelectBinding::ContextMenuOptions)
+        return applyContextMenuSettings(
+            {{kContextMenuOptionsKey, QJsonArray::fromStringList(tools)}});
     if (binding == SettingsMultiSelectBinding::FullscreenDisableScope) {
         return storage::GlobalShortcutSettings().setFullscreenDisableScope(tools);
     }
@@ -1894,6 +1897,8 @@ QColor BuiltInSettingsBackend::colorValue(SettingsColorBinding binding) const {
         return screenshot.cursorGuideLineColor();
     case SettingsColorBinding::SelectionCenterGuideLineColor:
         return screenshot.selectionCenterGuideLineColor();
+    case SettingsColorBinding::SelectionGridGuideLineColor:
+        return screenshot.selectionGridGuideLineColor();
     case SettingsColorBinding::MonitorCenterGuideLineColor:
         return screenshot.monitorCenterGuideLineColor();
     case SettingsColorBinding::ColorPickerCenterGuideLineColor:
@@ -1931,6 +1936,8 @@ bool BuiltInSettingsBackend::applyColorValue(SettingsColorBinding binding, const
         return screenshot.setCursorGuideLineColor(value);
     case SettingsColorBinding::SelectionCenterGuideLineColor:
         return screenshot.setSelectionCenterGuideLineColor(value);
+    case SettingsColorBinding::SelectionGridGuideLineColor:
+        return screenshot.setSelectionGridGuideLineColor(value);
     case SettingsColorBinding::MonitorCenterGuideLineColor:
         return screenshot.setMonitorCenterGuideLineColor(value);
     case SettingsColorBinding::ColorPickerCenterGuideLineColor:
@@ -2141,10 +2148,11 @@ shortcuts::ShortcutBindingList
 BuiltInSettingsBackend::localShortcuts(SettingsLocalShortcutScope scope,
                                        const QString& shortcutId) const {
     if (scope == SettingsLocalShortcutScope::WindowsContextMenu) {
-        if (shortcutId != QStringLiteral("edit_with_snow_shot"))
+        if (!storage::ConfigurationSchema::contains(kMenuShortcutPrefix + shortcutId))
             return {};
         return shortcuts::shortcutBindingsFromJson(
-            storage::ApplicationStorage::instance().configuration().value(kContextMenuShortcutKey),
+            storage::ApplicationStorage::instance().configuration().value(kMenuShortcutPrefix +
+                                                                          shortcutId),
             false);
     }
     if (scope == SettingsLocalShortcutScope::Screenshot) {
@@ -2166,8 +2174,15 @@ BuiltInSettingsBackend::validateLocalShortcut(SettingsLocalShortcutScope scope,
     if (scope == SettingsLocalShortcutScope::WindowsContextMenu) {
         const shortcuts::ShortcutBinding canonical{
             shortcuts::canonicalMenuAccessKey(shortcut.portableText)};
-        const bool valid = shortcutId == QStringLiteral("edit_with_snow_shot") &&
-                           !canonical.portableText.isEmpty();
+        const bool valid =
+            storage::ConfigurationSchema::contains(kMenuShortcutPrefix + shortcutId) &&
+            !canonical.portableText.isEmpty();
+        if (valid && !storage::localShortcutChangesValid(
+                         storage::ApplicationStorage::instance().configuration().snapshot(),
+                         {{kMenuShortcutPrefix + shortcutId,
+                           shortcuts::shortcutBindingsToJson({canonical})}}))
+            return {shortcut.portableText, false, GlobalShortcutFailureReason::AlreadyInUse,
+                    canonical};
         return {shortcut.portableText, valid,
                 valid ? GlobalShortcutFailureReason::None
                       : GlobalShortcutFailureReason::InvalidShortcut,
@@ -2183,39 +2198,25 @@ BuiltInSettingsBackend::validateLocalShortcut(SettingsLocalShortcutScope scope,
         return {shortcut.portableText, false, GlobalShortcutFailureReason::InvalidShortcut,
                 canonical};
     }
-    if (scope != SettingsLocalShortcutScope::PinToScreen &&
-        scope != SettingsLocalShortcutScope::ScreenRecording &&
-        storage::ScreenshotShortcutSettings::isReservedShortcut(canonical) &&
-        (scope == SettingsLocalShortcutScope::Screenshot
-             ? !storage::ScreenshotShortcutSettings::isReservedShortcutAllowed(shortcutId,
-                                                                               canonical)
-             : !storage::DrawingShortcutSettings::isReservedShortcutAllowed(shortcutId,
-                                                                            canonical))) {
+    const bool reserved =
+        scope == SettingsLocalShortcutScope::Screenshot
+            ? storage::ScreenshotShortcutSettings::isReservedShortcut(canonical, shortcutId) &&
+                  !storage::ScreenshotShortcutSettings::isReservedShortcutAllowed(shortcutId,
+                                                                                  canonical)
+            : scope == SettingsLocalShortcutScope::Drawing &&
+                  storage::DrawingShortcutSettings::isReservedShortcut(canonical) &&
+                  !storage::DrawingShortcutSettings::isReservedShortcutAllowed(shortcutId,
+                                                                               canonical);
+    if (reserved) {
         return {canonical.portableText, false, GlobalShortcutFailureReason::InvalidShortcut,
                 canonical};
     }
-    const auto all = scope == SettingsLocalShortcutScope::Screenshot
-                         ? storage::ScreenshotShortcutSettings().allShortcuts()
-                     : scope == SettingsLocalShortcutScope::Drawing
-                         ? storage::DrawingShortcutSettings().allShortcuts()
-                     : scope == SettingsLocalShortcutScope::ScreenRecording
-                         ? storage::ScreenRecordingShortcutSettings().allShortcuts()
-                         : storage::PinToScreenShortcutSettings().allShortcuts();
-    for (auto it = all.cbegin(); it != all.cend(); ++it) {
-        if (it.key() == shortcutId ||
-            (scope == SettingsLocalShortcutScope::Screenshot &&
-             !shortcuts::screenshotShortcutActionsMayConflict(shortcutId, it.key())) ||
-            (scope == SettingsLocalShortcutScope::PinToScreen &&
-             !storage::PinToScreenShortcutSettings::actionsMayConflict(shortcutId, it.key()))) {
-            continue;
-        }
-        for (const shortcuts::ShortcutBinding& existing : it.value()) {
-            if (shortcuts::bindingsConflict(existing, canonical,
-                                            shortcuts::ShortcutPolicy::Application)) {
-                return {canonical.portableText, false, GlobalShortcutFailureReason::AlreadyInUse,
-                        canonical};
-            }
-        }
+    const auto& configuration = storage::ApplicationStorage::instance().configuration();
+    if (!storage::localShortcutChangesValid(configuration.snapshot(),
+                                            {{key, shortcuts::shortcutBindingsToJson({canonical})}},
+                                            true)) {
+        return {canonical.portableText, false, GlobalShortcutFailureReason::AlreadyInUse,
+                canonical};
     }
     return {canonical.portableText, true, GlobalShortcutFailureReason::None, canonical};
 }
@@ -2224,14 +2225,14 @@ bool BuiltInSettingsBackend::applyLocalShortcuts(SettingsLocalShortcutScope scop
                                                  const QString& shortcutId,
                                                  const shortcuts::ShortcutBindingList& shortcuts) {
     if (scope == SettingsLocalShortcutScope::WindowsContextMenu) {
-        if (shortcutId != QStringLiteral("edit_with_snow_shot") || shortcuts.size() > 1)
+        if (!storage::ConfigurationSchema::contains(kMenuShortcutPrefix + shortcutId) ||
+            shortcuts.size() > 1)
             return false;
         for (const auto& binding : shortcuts)
             if (!validateLocalShortcut(scope, shortcutId, binding).supported)
                 return false;
         return applyContextMenuSettings(
-            storage::ApplicationStorage::instance().configuration().value(kContextMenuModeKey),
-            shortcuts::shortcutBindingsToJson(shortcuts));
+            {{kMenuShortcutPrefix + shortcutId, shortcuts::shortcutBindingsToJson(shortcuts)}});
     }
     for (const shortcuts::ShortcutBinding& shortcut : shortcuts) {
         const GlobalShortcutValidationResult validation =
@@ -2507,7 +2508,10 @@ bool BuiltInSettingsBackend::triggerAction(SettingsActionBinding binding, const 
             emit actionFinished(binding, success, error);
         };
         storage::ConfigurationArchiveReadResult read =
-            storage::ConfigurationArchive::read(filePath);
+            storage::ConfigurationArchive::read(filePath, storage::ApplicationStorage::instance()
+                                                              .configuration()
+                                                              .defaultValue(kContextMenuModeKey)
+                                                              .toString());
         if (!read.isValid()) {
             finish(false, read.error);
             return true;
@@ -2568,17 +2572,19 @@ bool BuiltInSettingsBackend::applyCloudUploadSettings(const CloudUploadSettings&
     return storage::CloudUploadConfigurationSettings().setSettings(values);
 }
 bool BuiltInSettingsBackend::importConfigurationSnapshot(
-    const QMap<QString, QJsonValue>& values, int schemaVersion,
+    const QMap<QString, QJsonValue>& inputValues, int schemaVersion,
     std::shared_future<storage::StorageResult>* completion) {
     if (completion)
         *completion = {};
     auto& storage = storage::ApplicationStorage::instance();
     auto& configuration = storage.configuration();
+    const auto values = storage::ConfigurationSchema::migrateLegacyValues(
+        inputValues, schemaVersion, configuration.defaultValue(kContextMenuModeKey).toString());
     const auto previous = configuration.snapshot();
     const QString enabledKey = QStringLiteral("system/auto_start_at_boot");
     const QString elevatedKey = QStringLiteral("system/launch_as_administrator");
 #ifdef Q_OS_WIN
-    const QString contextMenuKey = QStringLiteral("system/context_menu_mode");
+    QMap<QString, QJsonValue> menuChanges;
 #endif
     const auto importedValue = [&](const QString& key) {
         const auto fallback = configuration.defaultValue(key);
@@ -2591,8 +2597,10 @@ bool BuiltInSettingsBackend::importConfigurationSnapshot(
     const auto requestedElevated =
         app::distribution::isStoreManaged() ? QJsonValue(false) : importedValue(elevatedKey);
 #ifdef Q_OS_WIN
-    const auto requestedContextMenu = importedValue(contextMenuKey);
-    const auto requestedContextMenuShortcuts = importedValue(kContextMenuShortcutKey);
+    for (const auto& key : menuSettingKeys()) {
+        if (previous.value(key) != importedValue(key))
+            menuChanges.insert(key, importedValue(key));
+    }
     const auto requestedPowerQoS = importedValue(kPowerQoSKey);
 #endif
     // Startup preferences are committed by the native transaction. Keep its previous
@@ -2605,8 +2613,8 @@ bool BuiltInSettingsBackend::importConfigurationSnapshot(
         staged.insert(QStringLiteral("updates/mode"),
                       previous.value(QStringLiteral("updates/mode")));
 #ifdef Q_OS_WIN
-    staged.insert(contextMenuKey, previous.value(contextMenuKey));
-    staged.insert(kContextMenuShortcutKey, previous.value(kContextMenuShortcutKey));
+    for (const auto& key : menuSettingKeys())
+        staged.insert(key, previous.value(key));
     staged.insert(kPowerQoSKey, previous.value(kPowerQoSKey));
 #endif
     if (!configuration.applySnapshot(staged, schemaVersion))
@@ -2662,9 +2670,8 @@ bool BuiltInSettingsBackend::importConfigurationSnapshot(
         accepted =
             applySelectValue(SettingsSelectBinding::PowerQoS, requestedPowerQoS.toVariant()) &&
             accepted;
-    if (previous.value(contextMenuKey) != requestedContextMenu ||
-        previous.value(kContextMenuShortcutKey) != requestedContextMenuShortcuts)
-        accepted = applyContextMenuSettings(requestedContextMenu, requestedContextMenuShortcuts) &&
+    if (!menuChanges.isEmpty())
+        accepted = applyContextMenuSettings(menuChanges) &&
                    accepted;
 #endif
     bool historyChanged = false;
@@ -2708,6 +2715,15 @@ void BuiltInSettingsBackend::refreshStorageStatusIfStale() {
     storage::ApplicationStorage::instance().requestStorageUsageRefreshIfStale();
 }
 
+mouse::Bindings BuiltInSettingsBackend::mouseBindings() const {
+    return storage::ApplicationStorage::instance().configuration().mouseBindings();
+}
+bool BuiltInSettingsBackend::applyMouseOperation(mouse::Action action, mouse::Binding binding) {
+    return action != mouse::Action::Back && mouse::allowed(mouse::definition(action), binding) &&
+           storage::ApplicationStorage::instance().configuration().setValue(
+               mouse::definition(action).key(), mouse::encode(binding));
+}
+
 SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSectionReset reset) {
 #if !SNOW_SHOT_ENABLE_TEXT_TRANSLATION
     if (reset == SettingsSectionReset::Translation)
@@ -2722,12 +2738,26 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
     if (reset == SettingsSectionReset::ExtendedTranslation)
         return false;
 #endif
+    auto& resetConfiguration = storage::ApplicationStorage::instance().configuration();
+    const auto resetValues = [&resetConfiguration](const QMap<QString, QJsonValue>& values) {
+        return resetConfiguration.setValues(values);
+    };
     switch (reset) {
+    case SettingsSectionReset::ScreenshotMouse:
+        return resetValues(mouse::factoryValues(mouse::Category::Screenshot));
+    case SettingsSectionReset::PinnedMouse:
+        return resetValues(mouse::factoryValues(mouse::Category::Pinned));
     case SettingsSectionReset::WindowsContextMenuShortcuts:
-        return applyContextMenuSettings(
-            storage::ApplicationStorage::instance().configuration().value(kContextMenuModeKey),
-            storage::ConfigurationSchema::defaultValue(kContextMenuShortcutKey));
-    case SettingsSectionReset::ExportTasks:
+        return applyContextMenuSettings(sectionDefaults(reset));
+    case SettingsSectionReset::ExportTasks: {
+        auto defaults = sectionDefaults(reset);
+        for (const auto& row : storage::exportTaskRows) {
+            const auto scopedKey = storage::exportTaskScopedKey(row.trigger);
+            if (!scopedKey.isEmpty() && defaults.contains(row.key.toString()))
+                defaults.insert(scopedKey, resetConfiguration.defaultValue(scopedKey));
+        }
+        return resetValues(defaults);
+    }
     case SettingsSectionReset::ScreenshotOutput:
     case SettingsSectionReset::Translation:
     case SettingsSectionReset::Tray:
@@ -2807,6 +2837,8 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
                       QStringLiteral("global_shortcuts/screenshot_save"));
         resetShortcut(GlobalShortcutAction::ScreenshotQuickSave,
                       QStringLiteral("global_shortcuts/screenshot_quick_save"));
+        resetShortcut(GlobalShortcutAction::ScreenshotPinWindowToScreen,
+                      QStringLiteral("global_shortcuts/screenshot_pin_window_to_screen"));
         resetShortcut(GlobalShortcutAction::ScreenshotFullScreen,
                       QStringLiteral("global_shortcuts/screenshot_full_screen"));
         resetShortcut(GlobalShortcutAction::ScreenshotFocusedWindow,
@@ -2822,14 +2854,15 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
     }
     case SettingsSectionReset::GlobalMouse: {
         QMap<QString, QJsonValue> values;
-        for (const auto action : {SettingsGlobalMouseAction::ScreenshotCopy,
-                                  SettingsGlobalMouseAction::ScreenshotPinToScreen,
-                                  SettingsGlobalMouseAction::ScreenshotOcr,
-                                  SettingsGlobalMouseAction::ScreenshotOcrCopy,
-                                  SettingsGlobalMouseAction::ScreenshotTranslation,
-                                  SettingsGlobalMouseAction::ScreenshotSave,
-                                  SettingsGlobalMouseAction::ScreenshotQuickSave,
-                                  SettingsGlobalMouseAction::ScreenRecording}) {
+        for (const auto action :
+             {SettingsGlobalMouseAction::Screenshot, SettingsGlobalMouseAction::ScreenshotCopy,
+              SettingsGlobalMouseAction::ScreenshotPinToScreen,
+              SettingsGlobalMouseAction::ScreenshotOcr,
+              SettingsGlobalMouseAction::ScreenshotOcrCopy,
+              SettingsGlobalMouseAction::ScreenshotTranslation,
+              SettingsGlobalMouseAction::ScreenshotSave,
+              SettingsGlobalMouseAction::ScreenshotQuickSave,
+              SettingsGlobalMouseAction::ScreenRecording}) {
             const QString key = globalMouseKey(action);
             if (storage::ConfigurationSchema::contains(key))
                 values.insert(key, storage::ConfigurationSchema::defaultValue(key));
@@ -2945,12 +2978,6 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
                    {QStringLiteral("screenshot/auto_execute_after_text_recognition"),
                     storage::ConfigurationSchema::defaultValue(
                         QStringLiteral("screenshot/auto_execute_after_text_recognition"))},
-                   {QStringLiteral("screenshot/double_click_action"),
-                    storage::ConfigurationSchema::defaultValue(
-                        QStringLiteral("screenshot/double_click_action"))},
-                   {QStringLiteral("screenshot/middle_mouse_button_action"),
-                    storage::ConfigurationSchema::defaultValue(
-                        QStringLiteral("screenshot/middle_mouse_button_action"))},
                    {QStringLiteral("screenshot/quick_selection_modification"),
                     storage::ConfigurationSchema::defaultValue(
                         QStringLiteral("screenshot/quick_selection_modification"))},
@@ -2990,6 +3017,9 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
             {QStringLiteral("screenshot_ui/selection_center_guide_line_color"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("screenshot_ui/selection_center_guide_line_color"))},
+            {QStringLiteral("screenshot_ui/selection_grid_guide_line_color"),
+             storage::ConfigurationSchema::defaultValue(
+                 QStringLiteral("screenshot_ui/selection_grid_guide_line_color"))},
             {QStringLiteral("screenshot_ui/monitor_center_guide_line_color"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("screenshot_ui/monitor_center_guide_line_color"))},
@@ -3123,12 +3153,6 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
             {QStringLiteral("pin_to_screen/duplicate_content_action"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("pin_to_screen/duplicate_content_action"))},
-            {QStringLiteral("pin_to_screen/middle_mouse_button_action"),
-             storage::ConfigurationSchema::defaultValue(
-                 QStringLiteral("pin_to_screen/middle_mouse_button_action"))},
-            {QStringLiteral("pin_to_screen/double_click_action"),
-             storage::ConfigurationSchema::defaultValue(
-                 QStringLiteral("pin_to_screen/double_click_action"))},
             {QStringLiteral("pin_to_screen/mouse_wheel_zoom_mode"),
              storage::ConfigurationSchema::defaultValue(
                  QStringLiteral("pin_to_screen/mouse_wheel_zoom_mode"))},
@@ -3296,21 +3320,13 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
         const auto& configuration = storage::ApplicationStorage::instance().configuration();
         SettingsResetResult resetResult(true);
 #ifdef Q_OS_WIN
-        resetResult.fields.insert(
-            QStringLiteral("system.annotation-mode-when-opening-for-editing"),
-            {applySwitchValue(SettingsSwitchBinding::AnnotationModeWhenOpeningForEditing,
-                              configuration
-                                  .defaultValue(QStringLiteral(
-                                      "system/annotation_mode_when_opening_for_editing"))
-                                  .toBool()),
-             {}});
+        const bool menuReset = applyContextMenuSettings(
+            {{kContextMenuModeKey, configuration.defaultValue(kContextMenuModeKey)},
+             {kContextMenuOptionsKey, configuration.defaultValue(kContextMenuOptionsKey)}});
+        resetResult.fields.insert(QStringLiteral("system.context-menu-options"), {menuReset, {}});
+        resetResult.fields.insert(QStringLiteral("system.context-menu-mode"), {menuReset, {}});
 #endif
         if (app::distribution::isStoreManaged()) {
-            resetResult.fields.insert(
-                QStringLiteral("system.context-menu-mode"),
-                {applySelectValue(SettingsSelectBinding::ContextMenuMode,
-                                  configuration.defaultValue(kContextMenuModeKey).toVariant()),
-                 {}});
             return resetResult;
         }
         emit synchronized();
@@ -3331,13 +3347,6 @@ SettingsResetResult BuiltInSettingsBackend::resetSectionWithResults(SettingsSect
         if (!result.success)
             emit operationMessage(result.error, false);
         emit synchronized();
-#ifdef Q_OS_WIN
-        resetResult.fields.insert(
-            QStringLiteral("system.context-menu-mode"),
-            {applySelectValue(SettingsSelectBinding::ContextMenuMode,
-                              configuration.defaultValue(kContextMenuModeKey).toVariant()),
-             {}});
-#endif
         resetResult.fields.insert(
             QStringLiteral("updates.mode"),
             {applySelectValue(
