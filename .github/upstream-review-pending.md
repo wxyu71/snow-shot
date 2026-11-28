@@ -694,3 +694,8 @@ The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64
 - `snow_shot/tests/configuration_archive_tests.cpp`: retained 2 Community groups, applied 6 disjoint upstream groups. Native tests pending.
 - `snow_shot/tests/settings_page_loading_tests.cpp`: retained 15 Community groups, applied 5 disjoint upstream groups. Native tests pending.
 - `snow_shot/tests/mcp_application_fixture_tests.py`: retained 1 Community groups, applied 4 disjoint upstream groups. Native tests pending.
+
+## Applied conflict resolutions — startup and application services
+
+- `snow_shot/resources/icons.manifest.json`: retained 1 Community groups, applied 1 disjoint upstream groups; account service removal preserved. Native tests pending.
+- `snow_shot/src/app/main.cpp`: retained 5 Community groups, applied 13 disjoint upstream groups; account service removal preserved. Native tests pending.
