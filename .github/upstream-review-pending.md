@@ -680,3 +680,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/packaging/snow-shot-ocr-asset-manifest.json`: exact upstream object `9d1beab34336318898d956973f9ade8200152ec3`; adopted together with runtime 1.5.3 and protocol 8.
 - `snow_shot/packaging/snow-shot-ocr-asset-manifest-arm64.json`: exact upstream object `3bc405aa46abd73adddb9a3dcfe2c1fdaeae93ac`; adopted together with runtime 1.5.3 and protocol 8.
 The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64 and ARM64 runtime archive hashes and worker binaries changed together with the gitlink. Inno packaging now audits the Explorer DLL in standalone staging. Runtime download, native worker and offline installer acceptance are still pending.
+
+## Applied conflict resolutions — native regression suites
+
+- `snow_shot/tests/global_shortcut_manager_tests.cpp`: retained 3 Community groups, applied 4 disjoint upstream groups; preserve existing assertions and add upstream regression coverage. Native tests pending.
+- `snow_shot/tests/image_conversion_tests.cpp`: retained 18 Community groups, applied 5 disjoint upstream groups; preserve existing assertions and add upstream regression coverage. Native tests pending.
+- `snow_shot/tests/screen_recording_controller_tests.cpp`: retained 2 Community groups, applied 16 disjoint upstream groups; preserve existing assertions and add upstream regression coverage. Native tests pending.
+- `snow_shot/tests/screenshot_ocr_recognition_service_tests.cpp`: retained 6 Community groups, applied 8 disjoint upstream groups; preserve existing assertions and add upstream regression coverage. Native tests pending.

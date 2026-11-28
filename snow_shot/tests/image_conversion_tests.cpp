@@ -835,7 +835,7 @@ void recognitionWindowActionsRetainCapturesDuringRetirement() {
             *result = !weak->expired() && *value == 42;
         };
         if (copy)
-            actions.handleCopy = std::move(retire);
+            actions.resultCopied = std::move(retire);
         else
             actions.handleCancel = std::move(retire);
         capture.reset();
@@ -895,7 +895,7 @@ void recognitionWindowActionsRetainCapturesDuringRetirement() {
 void recognitionCopyStopsAfterClipboardRetirement() {
     int completionCalls = 0;
     ScreenshotRecognitionWindowActions actions;
-    actions.handleCopy = [&] { ++completionCalls; };
+    actions.resultCopied = [&] { ++completionCalls; };
     auto* window = new ScreenshotRecognitionWindow(std::move(actions));
     QPointer<ScreenshotRecognitionWindow> lifetime(window);
     auto presentation = std::make_shared<ScreenshotOcrPresentation>();
@@ -1722,7 +1722,7 @@ void conversionSessionRoutesSourceAndClearsOldViews() {
     SnowShotApiClient api(server.url());
     int captureCopies = 0;
     ScreenshotRecognitionWindowActions windowActions;
-    windowActions.handleCopy = [&]() { ++captureCopies; };
+    windowActions.resultCopied = [&]() { ++captureCopies; };
     ScreenshotRecognitionWindow window(windowActions);
     window.show();
     window.activateWindow();
@@ -1774,7 +1774,7 @@ void conversionClipboardPreservesFormats() {
     const QString markdown = QStringLiteral("# Snow \u96ea\n\n**Markdown**");
     int captureCopies = 0;
     ScreenshotRecognitionWindowActions windowActions;
-    windowActions.handleCopy = [&] { ++captureCopies; };
+    windowActions.resultCopied = [&] { ++captureCopies; };
     ScreenshotRecognitionWindow window(windowActions);
     ScreenshotRecognitionSessionActions actions;
     actions.ensureContent = [&] { return &window; };
@@ -2898,7 +2898,7 @@ void latexKeyboardHistoryRoutesToSession() {
         ++redoCallbacks;
         activeSession->redoTextEdit();
     };
-    windowActions.handleCopy = [&]() { ++copyCallbacks; };
+    windowActions.resultCopied = [&]() { ++copyCallbacks; };
     ScreenshotRecognitionWindow window(windowActions);
     ScreenshotRecognitionSessionActions actions;
     actions.ensureContent = [&]() { return &window; };
