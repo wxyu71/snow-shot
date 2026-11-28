@@ -585,3 +585,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/i18n/history/snow_shot_history_ru.ts`: {"added":2,"removed":3,"updated":12,"community":3}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
 - `snow_shot/i18n/history/snow_shot_history_zh_CN.ts`: {"added":2,"removed":3,"updated":0,"community":3}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
 - `snow_shot/i18n/history/snow_shot_history_zh_TW.ts`: {"added":2,"removed":3,"updated":0,"community":3}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+
+## Applied conflict resolutions — recognition localization
+
+- `snow_shot/i18n/recognition/snow_shot_recognition_en_US.ts`: {"added":1,"removed":0,"updated":0,"community":29}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/recognition/snow_shot_recognition_ru.ts`: {"added":1,"removed":0,"updated":0,"community":29}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/recognition/snow_shot_recognition_zh_CN.ts`: {"added":1,"removed":0,"updated":0,"community":29}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/recognition/snow_shot_recognition_zh_TW.ts`: {"added":1,"removed":0,"updated":0,"community":29}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
