@@ -314,6 +314,7 @@ jobs:
         env:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           REUSE_ACCEPTED: ${{ steps.classify.outputs.reuse }}
+          UPSTREAM_DRAFT_REVIEW: ${{ github.event_name == 'pull_request' && github.event.pull_request.draft == true && github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'review/upstream-1.6.7-20261128' && github.base_ref == 'release/community-1.6.3-beta.2' }}
         run: |
           set -euo pipefail
           # Review newly committed lines, not pre-existing whitespace in
@@ -325,7 +326,11 @@ jobs:
             git diff --check "$head^" "$head"
           fi
           python3 scripts/test-upstream-sync.py
-          python3 scripts/upstream_sync.py verify-deletions
+          if [[ "$UPSTREAM_DRAFT_REVIEW" == true ]]; then
+            python3 scripts/upstream_sync.py verify-deletions --review-only
+          else
+            python3 scripts/upstream_sync.py verify-deletions
+          fi
           python3 scripts/test-qt-cmake-contract.py
           python3 snow_shot/scripts/translation_catalogs.py check
           python3 scripts/test-test-runner-policy.py
@@ -562,7 +567,7 @@ jobs:
 
   windows:
     needs: [preflight, native-smoke, windows-contracts, installer-contracts]
-    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && needs.installer-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false)
+    if: needs.native-smoke.result == 'success' && needs.windows-contracts.result == 'success' && needs.installer-contracts.result == 'success' && (github.event_name != 'pull_request' || github.event.pull_request.draft == false || (github.event.pull_request.head.repo.full_name == github.repository && github.head_ref == 'review/upstream-1.6.7-20261128' && github.base_ref == 'release/community-1.6.3-beta.2'))
     runs-on: windows-2025-vs2026
     timeout-minutes: 360
     permissions:

@@ -5,8 +5,8 @@
 
 namespace snow_shot::presentation {
 
-// Resolve an official website page in the current application language.
-// An empty address selects the homepage. Absolute links to other sites are returned as given.
+// Resolve a Community project link without rewriting explicit absolute destinations.
+// An empty address selects the project repository.
 [[nodiscard]] QUrl localizedWebsiteUrl(const QUrl& address = {});
 
 } // namespace snow_shot::presentation

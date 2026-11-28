@@ -1,12 +1,12 @@
 # Upstream 1.6.7 integration — REVIEW ONLY, NOT MERGEABLE
 
-**This is an intentionally incomplete review tree, not a release candidate.** The marker is forbidden by the existing Community deletion policy so preflight must fail until every retained path is resolved and the marker is removed by a reviewed commit. Do not merge into #15 or main merely because upstream ancestry is present.
+**All 79 ledger paths now have code-level resolution decisions; runtime acceptance is pending. This is not a release candidate.** The marker remains forbidden on ordinary PRs, main and releases. Only an exact same-repository draft review PR targeting the Beta 2 branch can run non-publishing validation with this one marker present. Do not merge into #15 or main until all validation gates and real feature acceptance pass.
 
 - Community parent: `899dcec3edbca1c3ca3662fd89573bbc702f5881`
 - Previous real merge base: `761fb564df133648c9f8f90573060aa7e82b52c9`
 - Upstream release tag: `v1.6.7_snow-shot` → `a3537149f34ac9a5fe8e01ff52ac296dc7adffb1`
 - Upstream main parent (includes the tag and the two subsequent commits): `cf87c82639588f5b9b9c03cd16129b7d578406d6`
-- Changed upstream paths: 546; imported exact non-overlapping, non-protected Git objects: 455; already identical: 2; intentionally excluded deleted paths: 10; pending manual resolution: 79.
+- Changed upstream paths: 546; imported exact non-overlapping, non-protected Git objects: 455; already identical: 2; intentionally excluded deleted paths: 10; originally pending manual resolution: 79; code-level decisions recorded: 79; native acceptance pending.
 
 ## Conflict resolution contract
 
@@ -715,3 +715,7 @@ The 1.5.3 manifests keep the same model IDs/default and paragraph model; the x64
 
 - `snow_shot/src/presentation/components/aboutpagewidget.cpp`: intentionally retain reduced Community About UI and exact distribution privacy/terms destinations; do not resurrect upstream promotional links or route Community URLs through upstream /zh paths.
 - `snow_shot/tests/about_page_tests.cpp`: adapt upstream four-locale website test to exact legal URLs and removed website/release-note buttons; wire the upstream --website-links-only test argument. Existing Community assertions retained. Native tests pending.
+
+## Validation hand-off
+
+All 79 original paths have a recorded resolution or explicit Community retention decision. Keep this marker until review acceptance. The review-only draft PR can exercise the existing non-publishing CI pipeline; no release secret or publishing permission is granted to that PR. The upstream website helper is bound to the Community project URL, with absolute destinations preserved.

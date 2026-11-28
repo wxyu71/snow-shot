@@ -599,9 +599,31 @@ def main() -> None:
     ap.add_argument("--body-file", type=Path)
     ap.add_argument("--head")
     ap.add_argument("--base")
+    ap.add_argument("--review-only", action="store_true",
+                    help="Permit only the pending marker in the dedicated same-repository draft review CI")
     args = ap.parse_args()
+    if args.review_only and args.command != "verify-deletions":
+        ap.error("--review-only is only for verify-deletions")
     if args.command == "verify-deletions":
-        assert_deleted_files_absent()
+        if args.review_only:
+            if os.environ.get("GITHUB_EVENT_NAME") != "pull_request" or not os.environ.get("GITHUB_EVENT_PATH"):
+                raise RuntimeError("Review-only policy requires a GitHub pull request event")
+            event = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text(encoding="utf-8"))
+            pr = event["pull_request"]
+            if not (pr["draft"] is True and
+                    pr["head"]["repo"]["full_name"] == pr["base"]["repo"]["full_name"] == "wxyu71/snow-shot" and
+                    pr["head"]["ref"] == "review/upstream-1.6.7-20261128" and
+                    pr["base"]["ref"] == "release/community-1.6.3-beta.2"):
+                raise RuntimeError("Review-only policy is restricted to the dedicated draft integration PR")
+            policy = json.loads(POLICY.read_text(encoding="utf-8"))
+            marker = ".github/upstream-review-pending.md"
+            if marker not in policy["deleted_files"] or not (ROOT / marker).is_file():
+                raise RuntimeError("Review marker must remain present and protected")
+            policy["deleted_files"].remove(marker)
+            assert_deleted_files_absent(policy=policy)
+            print("Draft review only: pending marker retained; no release approval")
+        else:
+            assert_deleted_files_absent()
         assert_forbidden_runtime_content_absent()
         assert_community_update_signer_trust()
         assert_external_source_pins()
