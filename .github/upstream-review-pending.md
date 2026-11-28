@@ -578,3 +578,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `CMakeLists.txt`: retained 6 Community edit groups, applied 1 upstream edit groups; excluded upstream version number. Both source diffs were reconstructed exactly before combination. Native configure/build and semantic validation pending.
 - `cmake/SnowShotMini.cmake`: retained 2 Community edit groups, applied 1 upstream edit groups; excluded none. Both source diffs were reconstructed exactly before combination. Native configure/build and semantic validation pending.
 - `snow_shot/CMakeLists.txt`: retained 37 Community edit groups, applied 48 upstream edit groups; excluded deleted account/cloud test targets, deleted account/cloud test targets, deleted account/cloud test targets. Both source diffs were reconstructed exactly before combination. Native configure/build and semantic validation pending.
+
+## Applied conflict resolutions — history localization
+
+- `snow_shot/i18n/history/snow_shot_history_en_US.ts`: {"added":2,"removed":3,"updated":0,"community":3}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/history/snow_shot_history_ru.ts`: {"added":2,"removed":3,"updated":12,"community":3}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/history/snow_shot_history_zh_CN.ts`: {"added":2,"removed":3,"updated":0,"community":3}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+- `snow_shot/i18n/history/snow_shot_history_zh_TW.ts`: {"added":2,"removed":3,"updated":0,"community":3}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
