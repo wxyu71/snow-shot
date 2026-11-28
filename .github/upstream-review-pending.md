@@ -592,3 +592,10 @@ Each row records exact base / Community / upstream blob (or absence). No conflic
 - `snow_shot/i18n/recognition/snow_shot_recognition_ru.ts`: {"added":1,"removed":0,"updated":0,"community":29}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
 - `snow_shot/i18n/recognition/snow_shot_recognition_zh_CN.ts`: {"added":1,"removed":0,"updated":0,"community":29}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
 - `snow_shot/i18n/recognition/snow_shot_recognition_zh_TW.ts`: {"added":1,"removed":0,"updated":0,"community":29}; divergent keys retained for review: none. Locale key parity verified. Source/runtime check pending.
+
+## Applied conflict resolutions — transactional updater
+
+- `snow_shot/rust/snow-shot-updater/src/platform/windows_impl.rs`: retained 9 Community edit groups and applied 2 disjoint upstream groups. Preserve Community registration and transaction guards; adopt Explorer DLL retirement/unique reboot cleanup and autostart relaunch fixture. Native Windows test pending.
+- `snow_shot/rust/snow-shot-updater/src/transaction.rs`: retained 4 Community edit groups and applied 5 disjoint upstream groups. Preserve Community registration and transaction guards; adopt Explorer DLL retirement/unique reboot cleanup and autostart relaunch fixture. Native Windows test pending.
+- `snow_shot/src/update/startupupdate.cpp`: retained 0 Community edit groups and applied 3 disjoint upstream groups. Preserve Community registration and transaction guards; adopt Explorer DLL retirement/unique reboot cleanup and autostart relaunch fixture. Native Windows test pending.
+- `snow_shot/tests/update_helper_fixture.cpp`: retained 3 Community edit groups and applied 1 disjoint upstream groups. Preserve Community registration and transaction guards; adopt Explorer DLL retirement/unique reboot cleanup and autostart relaunch fixture. Native Windows test pending.
